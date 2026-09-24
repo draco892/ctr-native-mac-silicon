@@ -34,7 +34,10 @@
 #define GAME_DRIVER_MODEL_EXTRAS           ctr_driverModelExtras
 #define GAME_PLAYER_OBJECT_LIST            ctr_playerObjectList
 #define GAME_SONG_SEQUENCES                ctr_songSequences
+#define GAME_SONG_POOL                     ctr_songPool
 #define GAME_CHANNEL_UPDATE_FLAGS          ctr_channelUpdateFlags
+#define GAME_CHANNEL_ATTR_NEW              ctr_channelAttrNew
+#define GAME_DISTORT_CONST_OTHER_FX        ctr_distortConstOtherFX
 #define GAME_CHANNEL_TAKEN                 ctr_channelTaken
 #define GAME_CHANNEL_FREE                  ctr_channelFree
 
@@ -64,7 +67,10 @@ extern u32 ctr_doorAccessFlags asm("sdata_static+1980");
 extern DriverModelExtraSlot ctr_driverModelExtras[LOAD_DRIVER_MODEL_EXTRA_COUNT] asm("data+12400");
 extern struct Model **ctr_playerObjectList asm("sdata_static+2308");
 extern struct SongSeq ctr_songSequences[NUM_SFX_CHANNELS] asm("sdata_static+13152");
+extern struct Song ctr_songPool[2] asm("sdata_static+36376");
 extern u32 ctr_channelUpdateFlags[NUM_SFX_CHANNELS] asm("sdata_static+11520");
+extern struct ChannelAttr ctr_channelAttrNew[NUM_SFX_CHANNELS] asm("sdata_static+11616");
+extern s32 ctr_distortConstOtherFX[0x100] asm("data+8204");
 extern struct LinkedList ctr_channelTaken asm("sdata_static+13824");
 extern struct LinkedList ctr_channelFree asm("sdata_static+13836");
 

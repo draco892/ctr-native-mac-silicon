@@ -4,10 +4,8 @@ void cseq_opcode01_noteoff(struct SongSeq *seq)
 {
 	struct ChannelStats *curr, *backupNext;
 	u8 *currNote = seq->currNote;
-	int soundID = seq->soundID;
-	u32 *flagPtr;
 
-	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
+	for (curr = (struct ChannelStats *)GAME_CHANNEL_TAKEN.first; curr != NULL; curr = backupNext)
 	{
 		backupNext = curr->link.links.next;
 
@@ -16,8 +14,8 @@ void cseq_opcode01_noteoff(struct SongSeq *seq)
 			continue;
 		}
 
-		// not the sound needed to turn off
-		if (curr->soundID != soundID)
+		// only update this sequence's channels
+		if (curr->soundID != seq->soundID)
 		{
 			continue;
 		}
@@ -29,15 +27,15 @@ void cseq_opcode01_noteoff(struct SongSeq *seq)
 		}
 
 		// enable OFF flag, disable ON flag
-		flagPtr = &sdata->ChannelUpdateFlags[curr->channelID];
-		*flagPtr |= HOWL_CHANNEL_UPDATE_OFF;
-		*flagPtr &= ~HOWL_CHANNEL_UPDATE_KEY_ON;
+		GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] |= HOWL_CHANNEL_UPDATE_OFF;
+		// NOTE(aalhendi): Retail rereads the word for the second flag update.
+		*(volatile u32 *)&GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] &= ~HOWL_CHANNEL_UPDATE_KEY_ON;
 
 		curr->flags &= (u8)~1;
 
 		// recycle: remove from taken, put on free
-		LIST_RemoveMember(&sdata->channelTaken, (struct Item *)curr);
-		LIST_AddBack(&sdata->channelFree, (struct Item *)curr);
+		LIST_RemoveMember(&GAME_CHANNEL_TAKEN, (struct Item *)curr);
+		LIST_AddBack(&GAME_CHANNEL_FREE, (struct Item *)curr);
 	}
 }
 
@@ -50,17 +48,16 @@ void cseq_opcode02_empty(struct SongSeq *seq)
 // "end of song" opcode
 void cseq_opcode03(struct SongSeq *seq)
 {
-	// if song does not loop
-	if ((seq->flags & 2) == 0)
+	// if song loops
+	if ((seq->flags & 2) != 0)
 	{
-		SongPool_StopAllCseq(&sdata->songPool[seq->songPoolIndex]);
+		seq->flags |= 8;
 	}
 
-	// if song loops
+	// if song does not loop
 	else
 	{
-		// start over
-		seq->flags |= 8;
+		SongPool_StopAllCseq(&GAME_SONG_POOL[seq->songPoolIndex]);
 	}
 }
 
@@ -127,31 +124,29 @@ void howl_InitChannelAttr_Music(struct SongSeq *seq, struct ChannelAttr *attr, i
 // change volume
 void cseq_opcode_from06and07(struct SongSeq *seq)
 {
-	struct ChannelStats *curr, *backupNext;
-	int soundID = seq->soundID;
-	int songIndex = seq->songPoolIndex;
+	struct ChannelStats *curr;
 
-	int sampleVol = CTR_MipsMulLo(CTR_MipsMulLo(sdata->vol_Music, sdata->songPool[songIndex].vol_Curr), seq->vol_Curr);
-
-	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
+	for (curr = (struct ChannelStats *)GAME_CHANNEL_TAKEN.first; curr != NULL; curr = (struct ChannelStats *)curr->link.links.next)
 	{
-		backupNext = curr->link.links.next;
+		int sampleVol;
 
 		if (curr->type != HOWL_CHANNEL_TYPE_MUSIC)
 		{
 			continue;
 		}
 
-		// not the sound needed to turn off
-		if (curr->soundID != soundID)
+		// only update this sequence's channels
+		if (curr->soundID != seq->soundID)
 		{
 			continue;
 		}
 
-		Channel_SetVolume(&sdata->channelAttrNew[curr->channelID], CTR_MipsSra(CTR_MipsMulLo(sampleVol, curr->vol), 18), seq->LR);
+		// NOTE(aalhendi): Retail samples the current song volume for each matching channel.
+		sampleVol = CTR_MipsMulLo(CTR_MipsMulLo(sdata->vol_Music, GAME_SONG_POOL[seq->songPoolIndex].vol_Curr), seq->vol_Curr);
+		Channel_SetVolume(&GAME_CHANNEL_ATTR_NEW[curr->channelID], CTR_MipsSra(CTR_MipsMulLo(sampleVol, curr->vol), 18), seq->LR);
 
 		// update volume
-		sdata->ChannelUpdateFlags[curr->channelID] |= HOWL_CHANNEL_UPDATE_VOLUME;
+		GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] |= HOWL_CHANNEL_UPDATE_VOLUME;
 	}
 }
 
@@ -224,30 +219,27 @@ void cseq_opcode07(struct SongSeq *seq)
 
 void cseq_opcode08(struct SongSeq *seq)
 {
-	struct ChannelStats *curr, *backupNext;
+	struct ChannelStats *curr;
 	u8 *currNote = seq->currNote;
-	int soundID = seq->soundID;
 
-	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
+	for (curr = (struct ChannelStats *)GAME_CHANNEL_TAKEN.first; curr != NULL; curr = (struct ChannelStats *)curr->link.links.next)
 	{
-		backupNext = curr->link.links.next;
-
 		if (curr->type != HOWL_CHANNEL_TYPE_MUSIC)
 		{
 			continue;
 		}
 
-		// not the sound needed to turn off
-		if (curr->soundID != soundID)
+		// only update this sequence's channels
+		if (curr->soundID != seq->soundID)
 		{
 			continue;
 		}
 
 		// set reverb
-		sdata->channelAttrNew[curr->channelID].reverb = currNote[1];
+		GAME_CHANNEL_ATTR_NEW[curr->channelID].reverb = currNote[1];
 
 		// update Reverb (reverberation = echo)
-		sdata->ChannelUpdateFlags[curr->channelID] |= HOWL_CHANNEL_UPDATE_REVERB;
+		GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] |= HOWL_CHANNEL_UPDATE_REVERB;
 	}
 }
 
@@ -259,58 +251,49 @@ void cseq_opcode09(struct SongSeq *seq)
 
 void cseq_opcode0a(struct SongSeq *seq)
 {
-	int pitch;
-	struct ChannelStats *curr, *backupNext;
-	int soundID = seq->soundID;
+	struct ChannelStats *curr;
 
 	u8 *currNote = seq->currNote;
 	seq->distort = currNote[1];
 
-	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
+	for (curr = (struct ChannelStats *)GAME_CHANNEL_TAKEN.first; curr != NULL; curr = (struct ChannelStats *)curr->link.links.next)
 	{
-		backupNext = curr->link.links.next;
-
 		if (curr->type != HOWL_CHANNEL_TYPE_MUSIC)
 		{
 			continue;
 		}
 
-		// not the sound needed to turn off
-		if (curr->soundID != soundID)
+		// only update this sequence's channels
+		if (curr->soundID != seq->soundID)
 		{
 			continue;
 		}
 
-		int index = curr->drumIndex_pitchIndex;
-
-		// instrument
-		if ((seq->flags & 4) == 0)
-		{
-			struct SampleInstrument *longSample = &sdata->ptrCseqLongSamples[seq->instrumentID];
-
-			pitch = howl_InstrumentPitch(longSample->basePitch, index, seq->distort);
-		}
-
 		// drums
-		else
+		if ((seq->flags & 4) != 0)
 		{
-			struct SampleDrums *shortSample = &sdata->ptrCseqShortSamples[index];
+			struct SampleDrums *shortSample = &sdata->ptrCseqShortSamples[curr->drumIndex_pitchIndex];
 
-			if (seq->distort == HOWL_SFX_DISTORTION_NONE)
+			if (seq->distort != HOWL_SFX_DISTORTION_NONE)
 			{
-				pitch = shortSample->pitch;
+				// NOTE(aalhendi): Resolve the destination before the table lookup for retail page order.
+				struct ChannelAttr *attr = &GAME_CHANNEL_ATTR_NEW[curr->channelID];
+				attr->pitch = CTR_MipsSrl(CTR_MipsMulLo((u16)shortSample->pitch, GAME_DISTORT_CONST_OTHER_FX[seq->distort]), 16);
 			}
-
 			else
 			{
-				pitch = CTR_MipsSrl(CTR_MipsMulLo((u16)shortSample->pitch, data.distortConst_OtherFX[seq->distort]), 16);
+				GAME_CHANNEL_ATTR_NEW[curr->channelID].pitch = (u16)shortSample->pitch;
 			}
 		}
 
-		// save pitch
-		sdata->channelAttrNew[curr->channelID].pitch = pitch;
+		// instrument
+		else
+		{
+			struct SampleInstrument *longSample = &sdata->ptrCseqLongSamples[seq->instrumentID];
+			GAME_CHANNEL_ATTR_NEW[curr->channelID].pitch = howl_InstrumentPitch(longSample->basePitch, curr->drumIndex_pitchIndex, seq->distort);
+		}
 
 		// update pitch
-		sdata->ChannelUpdateFlags[curr->channelID] |= HOWL_CHANNEL_UPDATE_PITCH;
+		GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] |= HOWL_CHANNEL_UPDATE_PITCH;
 	}
 }

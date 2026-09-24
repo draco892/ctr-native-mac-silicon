@@ -350,7 +350,7 @@ struct SampleInstrument
 
 	// 0x4
 	// middle C at frequency 60
-	s16 basePitch;
+	u16 basePitch;
 
 	// 0x6
 	s16 spuIndex;
