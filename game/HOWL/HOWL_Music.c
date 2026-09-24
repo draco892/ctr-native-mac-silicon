@@ -426,6 +426,8 @@ void Music_SetDefaults(void)
 	sdata->cseqBoolPlay = false;
 	sdata->cseqHighestIndex = -1;
 	sdata->cseqTempo = 0;
+	// NOTE(aalhendi): Retail leaves the return delay slot empty after these stores.
+	CTR_PSX_MEMORY_BARRIER();
 }
 
 // param_1 - SongID (playing)
@@ -537,6 +539,8 @@ void Music_Start(u32 songID)
 
 	// set highest song index
 	sdata->cseqHighestIndex = songID & 0xffff;
+	// NOTE(aalhendi): Keep the final store before retail's empty return delay slot.
+	CTR_PSX_MEMORY_BARRIER();
 }
 
 void Music_End(void)
@@ -545,6 +549,8 @@ void Music_End(void)
 
 	// no songs are playing
 	sdata->cseqHighestIndex = -1;
+	// NOTE(aalhendi): Keep the final store before retail's empty return delay slot.
+	CTR_PSX_MEMORY_BARRIER();
 }
 
 u32 Music_GetHighestSongPlayIndex(void)

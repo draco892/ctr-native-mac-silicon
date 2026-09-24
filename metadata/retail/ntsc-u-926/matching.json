@@ -1089,6 +1089,36 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "music-defaults",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "Music_SetDefaults",
+      "end_symbol": "Music_Adjust",
+      "symbol_prefix": "Music_SetDefaults",
+      "source": "game/HOWL/HOWL_Music.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
+      "name": "music-state",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "Music_Start",
+      "end_symbol": "GTE_AudioLR_Inst",
+      "symbol_prefix": "Music_",
+      "source": "game/HOWL/HOWL_Music.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
       "name": "song-pool-playback",
       "kind": "resident",
       "artifact": "exe",
