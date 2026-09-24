@@ -12,20 +12,24 @@ enum DebugFontConstants
 void DebugFont_Init(struct GameTracker *gGT)
 {
 	struct Icon *debugFontIcon = gGT->ptrIcons[DEBUG_FONT_ICON_INDEX];
+	u32 u;
+	u32 v;
+	u16 clut;
+	u16 tpage;
 
 	if (debugFontIcon == 0)
 	{
 		return;
 	}
 
-	u8 u = debugFontIcon->texLayout.u0;
-	u8 v = debugFontIcon->texLayout.v0;
-	u16 clut = debugFontIcon->texLayout.clut;
-	u16 tpage = debugFontIcon->texLayout.tpage;
+	u = debugFontIcon->texLayout.u0;
+	clut = debugFontIcon->texLayout.clut;
 	sdata->debugFont.u = u;
-	sdata->debugFont.v = v;
+	v = debugFontIcon->texLayout.v0;
+	tpage = debugFontIcon->texLayout.tpage;
 	sdata->debugFont.clut = clut;
 	sdata->debugFont.tpage = tpage;
+	sdata->debugFont.v = v;
 }
 
 

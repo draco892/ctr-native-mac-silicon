@@ -1060,6 +1060,20 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "debug-font",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "DebugFont_Init",
+      "end_symbol": "DebugFont_DrawNumbers",
+      "symbol_prefix": "DebugFont_",
+      "source": "game/DebugFont.c",
+      "include_directories": ["include"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
       "name": "rectmenu",
       "kind": "resident",
       "artifact": "exe",
