@@ -2,11 +2,12 @@
 
 void LOAD_GlobalModelPtrs_MPK()
 {
-	struct GameTracker *gGT = sdata->gGT;
+	struct GameTracker *gGT = GAME_TRACKER;
+	int i;
 
-	for (int i = 0; i < LOAD_DRIVER_MODEL_EXTRA_COUNT; i++)
+	for (i = 0; i < LOAD_DRIVER_MODEL_EXTRA_COUNT; i++)
 	{
-		struct Model *m = data.driverModelExtras[i].model;
+		struct Model *m = GAME_DRIVER_MODEL_EXTRAS[i].model;
 
 		if (m == NULL)
 		{
@@ -21,9 +22,10 @@ void LOAD_GlobalModelPtrs_MPK()
 		gGT->modelPtr[m->id] = m;
 	}
 
-	if (sdata->PLYROBJECTLIST != 0)
+	if (GAME_PLAYER_OBJECT_LIST != 0)
 	{
-		LibraryOfModels_Store(gGT, -1, (struct Model **)sdata->PLYROBJECTLIST);
+		// NOTE(aalhendi): Retail reloads the tracker for this call after the model loop.
+		LibraryOfModels_Store(GAME_TRACKER_RELOAD(), -1, GAME_PLAYER_OBJECT_LIST);
 	}
 }
 

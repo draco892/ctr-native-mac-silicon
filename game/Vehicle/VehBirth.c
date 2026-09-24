@@ -601,7 +601,7 @@ struct Model *VehBirth_GetModelByName(char *searchName)
 	// maximum of 4, used in VS mode
 	for (; i < VEH_EXTRA_DRIVER_MODEL_COUNT; i++)
 	{
-		extraModel = VEH_DRIVER_MODEL_EXTRAS[i].model;
+		extraModel = GAME_DRIVER_MODEL_EXTRAS[i].model;
 
 		if ((extraModel != NULL) && VEH_BIRTH_MODEL_NAME_EQUALS(extraModel, searchName))
 		{
@@ -610,7 +610,7 @@ struct Model *VehBirth_GetModelByName(char *searchName)
 		}
 	}
 
-	loadedModels = VEH_PLAYER_OBJECT_LIST;
+	loadedModels = GAME_PLAYER_OBJECT_LIST;
 
 	if (loadedModels != NULL)
 	{

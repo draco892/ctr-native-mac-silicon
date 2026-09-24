@@ -55,14 +55,6 @@
 #define VEH_TURBO2_NAME (sdata->s_turbo2)
 #endif
 
-#ifndef VEH_DRIVER_MODEL_EXTRAS
-#define VEH_DRIVER_MODEL_EXTRAS (data.driverModelExtras)
-#endif
-
-#ifndef VEH_PLAYER_OBJECT_LIST
-#define VEH_PLAYER_OBJECT_LIST ((struct Model **)sdata->PLYROBJECTLIST)
-#endif
-
 #ifndef VEH_META_PHYS
 #define VEH_META_PHYS (data.metaPhys)
 #endif

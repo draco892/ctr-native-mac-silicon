@@ -20,8 +20,8 @@
 #define GAME_LANGUAGE_STRINGS        (sdata->lngStrings)
 #define GAME_CHARACTER_METADATA      (data.MetaDataCharacters)
 #define GAME_CHARACTER_IDS           (data.characterIDs)
-#define GAME_LEVEL_METADATA           (data.metaDataLEV)
-#define GAME_BOSS_WEAPON_METADATA      (data.bossWeaponMetaPtr)
+#define GAME_LEVEL_METADATA          (data.metaDataLEV)
+#define GAME_BOSS_WEAPON_METADATA    (data.bossWeaponMetaPtr)
 #define GAME_FRAMES_SINCE_RACE_ENDED (sdata->framesSinceRaceEnded)
 #define GAME_MENU_READY              (sdata->menuReadyToPass)
 #define GAME_ANY_PLAYER_TAP          (sdata->AnyPlayerTap)
@@ -35,6 +35,8 @@
 #define GAME_ADD_CONFIG_0            (sdata->Loading.OnBegin.AddBitsConfig0)
 #define GAME_REMOVE_CONFIG_0         (sdata->Loading.OnBegin.RemBitsConfig0)
 #define GAME_DOOR_ACCESS_FLAGS       (sdata->doorAccessFlags)
+#define GAME_DRIVER_MODEL_EXTRAS     (data.driverModelExtras)
+#define GAME_PLAYER_OBJECT_LIST      ((struct Model **)sdata->PLYROBJECTLIST)
 #endif
 
 // NOTE(aalhendi): Retail sometimes rereads the pointer slot rather than reusing

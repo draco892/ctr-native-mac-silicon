@@ -10,7 +10,6 @@
 
 // NOTE(aalhendi): Retail Vehicle code addresses the game-tracker pointer as
 // an individual symbol even though the native layout groups it in sData.
-extern DriverModelExtraSlot veh_driverModelExtras[LOAD_DRIVER_MODEL_EXTRA_COUNT] asm("data+12400");
 extern struct MetaPhys veh_metaPhys[65] asm("data+32876");
 extern CtrPackedU32 veh_bakedGteMathWords[BAKED_GTE_MATRIX_COUNT * 2] asm(VEH_BAKED_GTE_MATH_ASM_NAME);
 extern CtrPackedU32 veh_trigApprox[0x400] asm(VEH_TRIG_APPROX_ASM_NAME);
@@ -31,7 +30,6 @@ extern char veh_talkMaskHead[] asm("sdata_static+1780");
 extern char veh_playerThreadName[] asm("sdata_static+1704");
 extern char veh_turbo1Name[] asm("sdata_static+1712");
 extern char veh_turbo2Name[] asm("sdata_static+1720");
-extern struct Model **veh_playerObjectList asm("sdata_static+2308");
 extern SVec3 veh_botCrashNavRotArg asm("veh_botCrashNavRotArg") __attribute__((section(".data")));
 extern Vec3 veh_physCrashForward asm("veh_physCrashForward");
 extern MATRIX veh_physCrashMatrix asm("veh_physCrashMatrix");
@@ -57,7 +55,6 @@ extern void veh_emitterJogCon2() asm("GAMEPAD_JogCon2");
 #define VEH_TUMBLE_INIT_FROM_PAGE(page)                                                ((DriverFunc)((u32)(page) - 32092))
 #define VEH_LOAD_CHARACTER_IDS_PAGE(page)                                              CTR_PSX_LOAD_SYMBOL_PAGE((page), RETAIL_CHARACTER_IDS_ASM_NAME)
 #define VEH_ADD_CHARACTER_IDS_LOW(result, page) CTR_PSX_ADD_SYMBOL_LOW((result), (page), RETAIL_CHARACTER_IDS_ASM_NAME, GAME_CHARACTER_IDS)
-#define VEH_DRIVER_MODEL_EXTRAS                                                        veh_driverModelExtras
 #define VEH_META_PHYS                                                                  veh_metaPhys
 #define VEH_BAKED_GTE_PHYS_ENTRY(index)                                                ((void *)(u32)veh_bakedGteMathWords[(index) * 2])
 #define VEH_BAKED_GTE_NUM_ENTRIES(index)                                               ((int)veh_bakedGteMathWords[((index) * 2) + 1])
@@ -79,7 +76,6 @@ extern void veh_emitterJogCon2() asm("GAMEPAD_JogCon2");
 #define VEH_PLAYER_THREAD_NAME                                                         veh_playerThreadName
 #define VEH_TURBO1_NAME                                                                veh_turbo1Name
 #define VEH_TURBO2_NAME                                                                veh_turbo2Name
-#define VEH_PLAYER_OBJECT_LIST                                                         veh_playerObjectList
 #define VEH_BOT_CRASH_NAV_ROT_ARG                                                      veh_botCrashNavRotArg
 #define VEH_PHYS_CRASH_FORWARD                                                         veh_physCrashForward
 #define VEH_PHYS_CRASH_MATRIX                                                          veh_physCrashMatrix

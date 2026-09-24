@@ -17,7 +17,7 @@
 #define GAME_CHARACTER_METADATA            ctr_characterMetadata
 #define GAME_CHARACTER_IDS                 ctr_characterIDs
 #define GAME_LEVEL_METADATA                ctr_levelMetadata
-#define GAME_BOSS_WEAPON_METADATA           ctr_bossWeaponMetaPtr
+#define GAME_BOSS_WEAPON_METADATA          ctr_bossWeaponMetaPtr
 #define GAME_FRAMES_SINCE_RACE_ENDED       ctr_framesSinceRaceEnded
 #define GAME_MENU_READY                    ctr_menuReady
 #define GAME_ANY_PLAYER_TAP                ctr_anyPlayerTap
@@ -31,6 +31,8 @@
 #define GAME_ADD_CONFIG_0                  ctr_addConfig0
 #define GAME_REMOVE_CONFIG_0               ctr_removeConfig0
 #define GAME_DOOR_ACCESS_FLAGS             ctr_doorAccessFlags
+#define GAME_DRIVER_MODEL_EXTRAS           ctr_driverModelExtras
+#define GAME_PLAYER_OBJECT_LIST            ctr_playerObjectList
 
 #include <common.h>
 
@@ -55,5 +57,7 @@ extern struct Instance *ctr_token asm("sdata_static+2660");
 extern u32 ctr_addConfig0 asm(RETAIL_ADD_CONFIG_0_ASM_NAME);
 extern u32 ctr_removeConfig0 asm("sdata_static+408");
 extern u32 ctr_doorAccessFlags asm("sdata_static+1980");
+extern DriverModelExtraSlot ctr_driverModelExtras[LOAD_DRIVER_MODEL_EXTRA_COUNT] asm("data+12400");
+extern struct Model **ctr_playerObjectList asm("sdata_static+2308");
 
 #endif
