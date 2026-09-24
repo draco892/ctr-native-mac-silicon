@@ -1,5 +1,9 @@
 #include <common.h>
 
+// NOTE(aalhendi): Index from the AnimTex base so GCC preserves retail's signed 16-bit frame index and pointer-add order.
+#define CYCLE_TEX_FRAME(animtex, frame) \
+	(((struct IconGroup4 **)((u32)(animtex) + ((u32)(s16)(frame) << 2)))[sizeof(struct AnimTex) / sizeof(struct IconGroup4 *)])
+
 void CTR_CycleTex_LEV(struct AnimTex *animtex, int timer)
 {
 	int frameCurr;
@@ -20,14 +24,12 @@ void CTR_CycleTex_LEV(struct AnimTex *animtex, int timer)
 		// save result
 		curAnimTex->frameCurr = frameCurr;
 
-		struct IconGroup4 **ptrArray = ANIMTEX_GETARRAY(curAnimTex);
-
 		// Save new frame
 		// For levels, this is just a pointer
-		curAnimTex->ptrActiveTex = (int *)ptrArray[frameCurr];
+		curAnimTex->ptrActiveTex = (int *)CYCLE_TEX_FRAME(curAnimTex, frameCurr);
 
 		// Go to next AnimTex, which comes after this AnimTex's ptrarray
-		curAnimTex = (struct AnimTex *)&ptrArray[curAnimTex->numFrames];
+		curAnimTex = (struct AnimTex *)&(ANIMTEX_GETARRAY(curAnimTex))[curAnimTex->numFrames];
 	}
 }
 
@@ -51,14 +53,12 @@ void CTR_CycleTex_Model(struct AnimTex *animtex, int timer)
 		// save result
 		curAnimTex->frameCurr = frameCurr;
 
-		struct IconGroup4 **ptrArray = ANIMTEX_GETARRAY(curAnimTex);
-
 		// Save new frame
 		// For Model, this is a pointer to a pointer
-		*curAnimTex->ptrActiveTex = (int)ptrArray[frameCurr];
+		*curAnimTex->ptrActiveTex = (int)CYCLE_TEX_FRAME(curAnimTex, frameCurr);
 
 		// Go to next AnimTex, which comes after this AnimTex's ptrarray
-		curAnimTex = (struct AnimTex *)&ptrArray[curAnimTex->numFrames];
+		curAnimTex = (struct AnimTex *)&(ANIMTEX_GETARRAY(curAnimTex))[curAnimTex->numFrames];
 	}
 }
 
@@ -66,6 +66,8 @@ void CTR_CycleTex_AllModels(u32 numModels, struct Model **pModelArray, int timer
 {
 	struct Model *pModel;
 	struct ModelHeader *pHeader;
+	struct ModelHeader *pHeaderEnd;
+	s32 headerCount;
 
 	if (pModelArray == NULL)
 	{
@@ -85,15 +87,18 @@ void CTR_CycleTex_AllModels(u32 numModels, struct Model **pModelArray, int timer
 			return;
 		}
 
-		// iterate over all model headers
-		for (int j = 0; j < pModel->numHeaders; j++)
+		headerCount = pModel->numHeaders;
+		// NOTE(aalhendi): Keep the short-lived count distinct from the header end pointer for retail register allocation.
+		CTR_PSX_KEEP_VALUE(headerCount);
+		pHeader = pModel->headers;
+		pHeaderEnd = pHeader + headerCount;
+		while (pHeader < pHeaderEnd)
 		{
-			pHeader = &pModel->headers[j];
-
 			if ((pHeader->animtex != NULL) && ((pHeader->flags & 2) == 0))
 			{
 				CTR_CycleTex_Model(pHeader->animtex, timer);
 			}
+			pHeader++;
 		}
 
 		numModels--;
@@ -109,5 +114,7 @@ void CTR_CycleTex_AllModels(u32 numModels, struct Model **pModelArray, int timer
 void CTR_CycleTex_2p3p4pWumpaHUD(u32 *ptrActiveTex, u32 *ptrArray, int numFrames)
 {
 	ptrArray[0] = ptrActiveTex[0];
-	ptrActiveTex[0] = CtrGpu_PrimToOTLink24(&ptrArray[numFrames - 1]);
+	ptrArray += numFrames;
+	ptrArray--;
+	ptrActiveTex[0] = CtrGpu_PrimToOTLink24(ptrArray);
 }
