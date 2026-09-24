@@ -1074,6 +1074,36 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "song-pool-tempo",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "SongPool_FindFreeChannel",
+      "end_symbol": "SongPool_Start",
+      "symbol_prefix": "SongPool_",
+      "source": "game/HOWL/HOWL_SongPool.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
+      "name": "song-pool-playback",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "SongPool_Volume",
+      "end_symbol": "howl_Disable",
+      "symbol_prefix": "SongPool_",
+      "source": "game/HOWL/HOWL_SongPool.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
       "name": "load-model-ptrs",
       "kind": "resident",
       "artifact": "exe",

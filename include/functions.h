@@ -196,7 +196,7 @@ void cseq_opcode09(struct SongSeq *seq);
 void cseq_opcode0a(struct SongSeq *seq);
 struct SongSeq *SongPool_FindFreeChannel(void);
 u32 SongPool_CalculateTempo(s16 const60, s16 tpqn, s16 bpm);
-void SongPool_ChangeTempo(struct Song *song, s16 deltaBPM);
+void SongPool_ChangeTempo(struct Song *song, s32 deltaBPM);
 void SongPool_Start(struct Song *song, u16 songID, s16 deltaBPM, b32 boolLoopAtEnd, struct SongSet *songSet, int songSetActiveBits);
 void SongPool_Volume(struct Song *song, int newVol, int newStep, b32 boolImm);
 void SongPool_AdvHub1(struct Song *song, int seqID, int vol, b32 boolImm);

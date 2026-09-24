@@ -33,6 +33,10 @@
 #define GAME_DOOR_ACCESS_FLAGS             ctr_doorAccessFlags
 #define GAME_DRIVER_MODEL_EXTRAS           ctr_driverModelExtras
 #define GAME_PLAYER_OBJECT_LIST            ctr_playerObjectList
+#define GAME_SONG_SEQUENCES                ctr_songSequences
+#define GAME_CHANNEL_UPDATE_FLAGS          ctr_channelUpdateFlags
+#define GAME_CHANNEL_TAKEN                 ctr_channelTaken
+#define GAME_CHANNEL_FREE                  ctr_channelFree
 
 #include <common.h>
 
@@ -59,5 +63,9 @@ extern u32 ctr_removeConfig0 asm("sdata_static+408");
 extern u32 ctr_doorAccessFlags asm("sdata_static+1980");
 extern DriverModelExtraSlot ctr_driverModelExtras[LOAD_DRIVER_MODEL_EXTRA_COUNT] asm("data+12400");
 extern struct Model **ctr_playerObjectList asm("sdata_static+2308");
+extern struct SongSeq ctr_songSequences[NUM_SFX_CHANNELS] asm("sdata_static+13152");
+extern u32 ctr_channelUpdateFlags[NUM_SFX_CHANNELS] asm("sdata_static+11520");
+extern struct LinkedList ctr_channelTaken asm("sdata_static+13824");
+extern struct LinkedList ctr_channelFree asm("sdata_static+13836");
 
 #endif

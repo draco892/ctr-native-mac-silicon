@@ -1,17 +1,19 @@
 #include <common.h>
 
-// Returns the CseqSongHeader for the given song ID from the parsed song data buffer.
-static struct CseqSongHeader *GetCseqSongHeader(u16 songID)
+// NOTE(aalhendi): Retail reads the song offset unsigned before adding it to the data base.
+static inline struct CseqSongHeader *GetCseqSongHeader(u16 songID)
 {
-	return (struct CseqSongHeader *)&sdata->ptrCseqSongData[sdata->ptrCseqSongStartOffset[songID]];
+	return (struct CseqSongHeader *)&sdata->ptrCseqSongData[(u16)sdata->ptrCseqSongStartOffset[songID]];
 }
 
 struct SongSeq *SongPool_FindFreeChannel(void)
 {
 	struct SongSeq *seq;
+	int i;
 
-	for (seq = &sdata->songSeq[0]; seq < &sdata->songSeq[NUM_SFX_CHANNELS]; seq++)
+	for (i = 0; i < NUM_SFX_CHANNELS; i++)
 	{
+		seq = &GAME_SONG_SEQUENCES[i];
 		// if seq is not playing
 		if ((seq->flags & 1) == 0)
 		{
@@ -25,12 +27,12 @@ struct SongSeq *SongPool_FindFreeChannel(void)
 u32 SongPool_CalculateTempo(s16 const60, s16 tpqn, s16 bpm)
 {
 	s32 ticksPerMinute = CTR_MipsMulLo(bpm, tpqn);
-	u32 ticksPerSecond = CTR_MipsMulHiU((u32)ticksPerMinute, 0x88888889u) >> 5;
+	u32 ticksPerSecond = (u32)ticksPerMinute / 60u;
 
 	return CTR_MipsDivU((u32)CTR_MipsSll((s32)ticksPerSecond, 16), (u32)(s32)const60);
 }
 
-void SongPool_ChangeTempo(struct Song *song, s16 deltaBPM)
+void SongPool_ChangeTempo(struct Song *song, s32 deltaBPM)
 {
 	struct CseqSongHeader *csh = GetCseqSongHeader(song->id);
 
@@ -48,6 +50,7 @@ void SongPool_Start(struct Song *song, u16 songID, s16 deltaBPM, b32 boolLoopAtE
 	struct CseqSongHeader *csh;
 	char *cnhFirst;
 	struct SongNoteHeader *cnhCurr;
+	u16 *seqOffsetArr;
 
 	// now playing
 	song->flags = 1;
@@ -100,7 +103,7 @@ void SongPool_Start(struct Song *song, u16 songID, s16 deltaBPM, b32 boolLoopAtE
 	song->vol_StepRate = 1;
 	song->numSequences = 0;
 
-	u16 *seqOffsetArr = (u16 *)SONGHEADER_GETSEQOFFARR(csh);
+	seqOffsetArr = (u16 *)SONGHEADER_GETSEQOFFARR(csh);
 
 	// first note header comes after end of CseqSongHeader
 	// and the full array of seqOffsets within the header
@@ -218,14 +221,12 @@ void SongPool_AdvHub1(struct Song *song, int seqID, int vol, b32 boolImm)
 void SongPool_AdvHub2(struct Song *song, struct SongSet *songSet, int songSetActiveBits)
 {
 	int i;
-	int vol;
 	struct CseqSongHeader *csh = GetCseqSongHeader(song->id);
-	u8 numSeqs = csh->numSeqs;
 
 	// advHub
 	if (songSet != 0)
 	{
-		if (songSet->numSeqs != numSeqs)
+		if (songSet->numSeqs != csh->numSeqs)
 		{
 			return;
 		}
@@ -233,26 +234,25 @@ void SongPool_AdvHub2(struct Song *song, struct SongSet *songSet, int songSetAct
 		song->songSetActiveBits = songSetActiveBits;
 	}
 
-	for (i = 0; i < numSeqs; i++)
+	for (i = 0; i < csh->numSeqs; i++)
 	{
-		// volume on
-		vol = 0xff;
-
-		if ((songSet->ptrSongSetBits[i] & song->songSetActiveBits) == 0)
+		// NOTE(aalhendi): Keep the two volume calls distinct for retail's branch layout.
+		if ((songSet->ptrSongSetBits[i] & song->songSetActiveBits) != 0)
 		{
-			vol = 0;
+			SongPool_AdvHub1(song, i, 0xff, 0);
 		}
-
-		SongPool_AdvHub1(song, i, vol, 0);
+		else
+		{
+			SongPool_AdvHub1(song, i, 0, 0);
+		}
 	}
 }
 
 void SongPool_StopCseq(struct SongSeq *seq)
 {
 	struct ChannelStats *curr, *backupNext;
-	u32 *flagPtr;
 
-	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
+	for (curr = (struct ChannelStats *)GAME_CHANNEL_TAKEN.first; curr != NULL; curr = backupNext)
 	{
 		backupNext = curr->link.links.next;
 
@@ -267,15 +267,15 @@ void SongPool_StopCseq(struct SongSeq *seq)
 		}
 
 		// enable OFF flag, disable ON flag
-		flagPtr = &sdata->ChannelUpdateFlags[curr->channelID];
-		*flagPtr |= HOWL_CHANNEL_UPDATE_OFF;
-		*flagPtr &= ~HOWL_CHANNEL_UPDATE_KEY_ON;
+		GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] |= HOWL_CHANNEL_UPDATE_OFF;
+		// NOTE(aalhendi): Retail rereads the flag word for the second update.
+		*(volatile u32 *)&GAME_CHANNEL_UPDATE_FLAGS[curr->channelID] &= ~HOWL_CHANNEL_UPDATE_KEY_ON;
 
 		curr->flags &= (u8)~1;
 
 		// recycle: remove from taken, put on free
-		LIST_RemoveMember(&sdata->channelTaken, (struct Item *)curr);
-		LIST_AddBack(&sdata->channelFree, (struct Item *)curr);
+		LIST_RemoveMember(&GAME_CHANNEL_TAKEN, (struct Item *)curr);
+		LIST_AddBack(&GAME_CHANNEL_FREE, (struct Item *)curr);
 	}
 
 	// not playing

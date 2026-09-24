@@ -37,6 +37,10 @@
 #define GAME_DOOR_ACCESS_FLAGS       (sdata->doorAccessFlags)
 #define GAME_DRIVER_MODEL_EXTRAS     (data.driverModelExtras)
 #define GAME_PLAYER_OBJECT_LIST      ((struct Model **)sdata->PLYROBJECTLIST)
+#define GAME_SONG_SEQUENCES          (sdata->songSeq)
+#define GAME_CHANNEL_UPDATE_FLAGS    (sdata->ChannelUpdateFlags)
+#define GAME_CHANNEL_TAKEN           (sdata->channelTaken)
+#define GAME_CHANNEL_FREE            (sdata->channelFree)
 #endif
 
 // NOTE(aalhendi): Retail sometimes rereads the pointer slot rather than reusing
