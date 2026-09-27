@@ -1020,6 +1020,20 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "howl-other-fx-recycle",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "OtherFX_RecycleNew",
+      "end_symbol": "OtherFX_DriverCrashing",
+      "symbol_prefix": "OtherFX_Recycle",
+      "source": "game/HOWL/HOWL_OtherFXRecycle.c",
+      "include_directories": ["include"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
       "name": "howl-reverb-mode",
       "kind": "resident",
       "artifact": "exe",

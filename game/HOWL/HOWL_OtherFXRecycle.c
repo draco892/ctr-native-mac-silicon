@@ -14,13 +14,12 @@ void OtherFX_RecycleNew(u32 *soundID_Count, u32 newSoundID, u32 modifyFlags)
 		OtherFX_Stop1(local);
 
 		*soundID_Count = 0;
-		local = 0;
 	}
 
 	if (newSoundID != (u32)-1)
 	{
 		// if this is a new sound
-		if (local == 0)
+		if (*soundID_Count == 0)
 		{
 			*soundID_Count = OtherFX_Play_LowLevel(newSoundID & 0xffff, 0, modifyFlags);
 		}
@@ -28,7 +27,7 @@ void OtherFX_RecycleNew(u32 *soundID_Count, u32 newSoundID, u32 modifyFlags)
 		// modification of old sound
 		else
 		{
-			OtherFX_Modify(local, modifyFlags);
+			OtherFX_Modify(*soundID_Count, modifyFlags);
 		}
 	}
 }
