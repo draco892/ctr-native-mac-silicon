@@ -41,7 +41,9 @@ void SongPool_ChangeTempo(struct Song *song, s32 deltaBPM)
 	song->tempo = SongPool_CalculateTempo(60, song->tpqn, song->bpm);
 }
 
-void SongPool_Start(struct Song *song, u16 songID, s16 deltaBPM, b32 boolLoopAtEnd, struct SongSet *songSet, int songSetActiveBits)
+// NOTE(aalhendi): Retail passes the full tempo delta word; the song BPM store
+// performs the 16-bit truncation after the addition.
+void SongPool_Start(struct Song *song, u16 songID, s32 deltaBPM, b32 boolLoopAtEnd, struct SongSet *songSet, int songSetActiveBits)
 {
 	int i;
 	int vol;

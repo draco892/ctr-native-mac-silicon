@@ -39,8 +39,9 @@ void Channel_SetVolume(struct ChannelAttr *attr, int volume, int LR)
 
 	if (sdata->boolStereoEnabled == 1)
 	{
-		attr->audioL = (volume * data.volumeLR[0xFF - LR]) >> 8;
-		attr->audioR = (volume * data.volumeLR[0x00 + LR]) >> 8;
+		// NOTE(aalhendi): The clamp makes volume nonnegative; retail shifts the products logically.
+		attr->audioL = (u32)(volume * GAME_VOLUME_LR[0xFF - LR]) >> 8;
+		attr->audioR = (u32)(volume * GAME_VOLUME_LR[0x00 + LR]) >> 8;
 		return;
 	}
 
@@ -53,7 +54,7 @@ int Channel_FindSound(int soundID)
 {
 	struct ChannelStats *curr, *backupNext;
 
-	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
+	for (curr = (struct ChannelStats *)GAME_CHANNEL_TAKEN.first; curr != NULL; curr = backupNext)
 	{
 		backupNext = curr->link.links.next;
 
@@ -310,6 +311,13 @@ void Channel_ParseSongToChannels()
 
 	for (song = &sdata->songPool[0]; song < &sdata->songPool[2]; song++)
 	{
+		int unk10_total;
+		int volCurr;
+		int volNew;
+		int volStepRate;
+		int volStepped;
+		b32 boolFinalStep;
+
 		// if not playing, skip
 		if ((song->flags & 1) == 0)
 		{
@@ -324,16 +332,14 @@ void Channel_ParseSongToChannels()
 
 		// song playing offset?
 		song->unk10 += song->tempo;
-		int unk10_total = song->unk10;
+		unk10_total = song->unk10;
 
 		song->timeSpentPlaying += unk10_total >> 0x10;
 		song->unk10 = (u16)unk10_total;
 
-		int volCurr = song->vol_Curr;
-		int volNew = song->vol_New;
-		int volStepRate = song->vol_StepRate;
-		int volStepped;
-		b32 boolFinalStep;
+		volCurr = song->vol_Curr;
+		volNew = song->vol_New;
+		volStepRate = song->vol_StepRate;
 
 		// === Copy/Paste ===
 		if (volCurr != volNew)
@@ -409,6 +415,8 @@ void Channel_ParseSongToChannels()
 
 				while (seq->NoteLength <= seq->NoteTimeElapsed)
 				{
+					int opcode;
+
 					// if reached end, quit
 					if ((seq->flags & 1) == 0)
 					{
@@ -418,7 +426,7 @@ void Channel_ParseSongToChannels()
 					seq->NoteTimeElapsed -= seq->NoteLength;
 
 					// currNote->opcode
-					int opcode = (u8)seq->currNote[0];
+					opcode = (u8)seq->currNote[0];
 
 					if (opcode < 0xb)
 					{
@@ -535,13 +543,12 @@ void Channel_UpdateChannels()
 			{
 				int ad = new->ad;
 				int sr = new->sr;
-
-				cur->ad = ad;
-				cur->sr = sr;
-
 				int local_38;
 				int local_34;
 				int RRmode;
+
+				cur->ad = ad;
+				cur->sr = sr;
 
 				if ((s16)ad < 0)
 				{

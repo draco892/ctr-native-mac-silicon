@@ -3,10 +3,13 @@
 void Music_SetIntro(void)
 {
 	struct Bank thisBank;
+	// NOTE(aalhendi): Retail prepares the bank ID before clearing the one-byte loading state.
+	register int bankID CTR_PSX_REGISTER("$4") = 33;
 
-	sdata->audioDefaults[7] = 0;
+	*(u8 *)&sdata->audioDefaults[7] = 0;
+	CTR_PSX_MEMORY_BARRIER();
 
-	Bank_Load(33, &thisBank);
+	Bank_Load(bankID, &thisBank);
 
 	while (Bank_AssignSpuAddrs() == 0)
 	{

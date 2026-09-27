@@ -11,6 +11,8 @@ void Cutscene_VolumeBackup(void)
 
 	// copy exists
 	sdata->boolStoringVolume = 1;
+	// NOTE(aalhendi): Keep the state store ahead of the next call on PSX.
+	CTR_PSX_MEMORY_BARRIER();
 
 	// exit critical section
 	Smart_ExitCriticalSection();
@@ -20,14 +22,19 @@ void Cutscene_VolumeBackup(void)
 
 void Cutscene_VolumeRestore(void)
 {
+	int storedVolume;
+
 	// enter critical section
 	Smart_EnterCriticalSection();
 
+	storedVolume = sdata->storedVolume;
 	// copy does not exist
 	sdata->boolStoringVolume = 0;
+	// NOTE(aalhendi): Keep the state store ahead of the next call on PSX.
+	CTR_PSX_MEMORY_BARRIER();
 
 	// Set volume of FX
-	howl_VolumeSet(0, sdata->storedVolume);
+	howl_VolumeSet(0, storedVolume);
 
 	// exit critical section
 	Smart_ExitCriticalSection();
@@ -93,9 +100,11 @@ void howl_PlayAudio_Update()
 
 void howl_InitChannelAttr_EngineFX(struct EngineFX *engineFX, struct ChannelAttr *attr, int vol, int LR, int distort)
 {
+	s16 pitch;
+
 	Channel_SetVolume(attr, (sdata->vol_FX * engineFX->volume * vol) >> 10, LR);
 
-	s16 pitch = engineFX->pitch;
+	pitch = engineFX->pitch;
 
 	if (distort != HOWL_SFX_DISTORTION_NONE)
 	{
@@ -114,6 +123,7 @@ void howl_InitChannelAttr_EngineFX(struct EngineFX *engineFX, struct ChannelAttr
 void howl_InitChannelAttr_OtherFX(struct OtherFX *otherFX, struct ChannelAttr *attr, int vol, int LR, int distort)
 {
 	int otherVol;
+	s16 pitch;
 
 	otherVol = sdata->vol_FX;
 
@@ -124,7 +134,7 @@ void howl_InitChannelAttr_OtherFX(struct OtherFX *otherFX, struct ChannelAttr *a
 
 	Channel_SetVolume(attr, (otherVol * otherFX->volume * vol) >> 10, LR);
 
-	s16 pitch = otherFX->pitch;
+	pitch = otherFX->pitch;
 
 	if (distort != HOWL_SFX_DISTORTION_NONE)
 	{
@@ -161,14 +171,17 @@ void howl_PauseAudio()
 	Smart_EnterCriticalSection();
 	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
 	{
+		int *dest;
+		int *src;
+
 		backupNext = curr->link.links.next;
 
 		ptrFlag = &sdata->ChannelUpdateFlags[curr->channelID];
 		*ptrFlag |= 1;
 		*ptrFlag &= ~(2);
 
-		int *dest = (int *)pausedStats++;
-		int *src = (int *)curr;
+		dest = (int *)pausedStats++;
+		src = (int *)curr;
 
 		// psx's kernel memcpy does NOT work inside "critical" sections
 		dest[0] = src[0];
@@ -241,6 +254,9 @@ void howl_UnPauseAudio()
 	Smart_EnterCriticalSection();
 	for (i = 0, curr = (struct ChannelStats *)sdata->channelFree.first; i < sdata->numBackup_ChannelStats; i++, curr = backupNext)
 	{
+		int *src;
+		int *dest;
+
 		if (curr == NULL)
 		{
 			break;
@@ -250,8 +266,8 @@ void howl_UnPauseAudio()
 		backupPrev = curr->link.links.prev;
 		backupNext = curr->link.links.next;
 
-		int *src = (int *)pausedStats++;
-		int *dest = (int *)curr;
+		src = (int *)pausedStats++;
+		dest = (int *)curr;
 
 		// psx's kernel memcpy does NOT work inside "critical" sections
 		dest[0] = src[0];

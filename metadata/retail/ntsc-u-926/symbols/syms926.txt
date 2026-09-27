@@ -258,6 +258,7 @@
 80029ca4 howl_LoadSong
 80029dc0 howl_ErasePtrCseqHeader
 80029dcc howl_GetNextNote
+80029e10 cseq_opcode00_empty
 80029e18 cseq_opcode01_noteoff
 80029f1c cseq_opcode02_empty
 80029f24 cseq_opcode03

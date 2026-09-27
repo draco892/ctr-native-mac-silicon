@@ -3257,7 +3257,8 @@ struct sData
 	u16 padCanSaveGhost;
 
 	// 8008d75c
-	int countSounds;
+	u16 countSounds;
+	u16 padCountSounds;
 
 	// 8008d760
 	u16 curReverb;
@@ -3270,14 +3271,16 @@ struct sData
 	int numAudioSectors;
 
 	// 8008d76c
-	int numAudioBanks;
+	u8 numAudioBanks;
+	u8 _pad_numAudioBanks[3];
 
 	// 8008d770
 	// spu address of some type
 	int audioAllocPtr;
 
 	// 8008d774
-	int bankLoadStage;
+	u8 bankLoadStage;
+	u8 _pad_bankLoadStage[3];
 
 	// 8008d778
 	int bankSectorOffset;
@@ -3317,7 +3320,8 @@ struct sData
 	int OptionSlider_soundID;
 
 	// 8008d7a4
-	int songLoadStage;
+	u8 songLoadStage;
+	u8 _pad_songLoadStage[3];
 
 	// 8008d7a8
 	int songSectorOffset;
@@ -3403,7 +3407,8 @@ struct sData
 	s16 nTropyVoiceCount;
 
 	// 8008d7fc
-	int boolNeedXASeek;
+	u8 boolNeedXASeek;
+	u8 _pad_boolNeedXASeek[3];
 
 	// 8008d800 -- end of sData (due to alignment)
 	int bankCount;
@@ -3774,7 +3779,8 @@ struct sData
 	struct Instance *ptrTimebox1;
 
 	// 8008d9dc
-	int WrongWayDirection_bool;
+	u8 WrongWayDirection_bool;
+	u8 _pad_WrongWayDirection_bool[3];
 
 	// 8008d9e0
 	int relicTime_10sec;

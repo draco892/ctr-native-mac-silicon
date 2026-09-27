@@ -88,6 +88,7 @@
 #define CTR_PSX_ADD_POINTER_OFFSET(result, base, offset)                         ((result) = (void *)((char *)(base) + (offset)))
 #define CTR_PSX_ADD_POINTER_OFFSET_OFFSET_FIRST(result, base, offset)            ((result) = (void *)((char *)(base) + (offset)))
 #define CTR_PSX_ADD_POINTER_IMMEDIATE(result, base, byteOffset, nativeValue)     ((result) = (nativeValue))
+#define CTR_PSX_ADD_U32(result, lhs, rhs)                                        ((result) = (u32)(lhs) + (u32)(rhs))
 #define CTR_PSX_NEGATE_IN_PLACE(value)                                           ((value) = CTR_MipsNegLo(value))
 #define CTR_PSX_NEGATE(result, value)                                            ((result) = CTR_MipsNegLo(value))
 #define CTR_PSX_LOAD_IMMEDIATE(result, value)                                    ((result) = (value))
@@ -105,6 +106,12 @@
 		(void)(dependency);                                                               \
 	} while (0)
 #define CTR_PSX_LOAD_UNSIGNED_BYTE(result, base, byteOffset, nativeValue) ((result) = (u8)(nativeValue))
+#define CTR_PSX_LOAD_GP_UNSIGNED_BYTE_AFTER(result, gpOffset, nativeValue, dependency) \
+	do                                                                                 \
+	{                                                                                  \
+		(result) = (u8)(nativeValue);                                                  \
+		(void)(dependency);                                                            \
+	} while (0)
 #define CTR_PSX_LOAD_UNSIGNED_HALF(result, base, byteOffset, nativeValue) ((result) = (u16)(nativeValue))
 #define CTR_PSX_SHIFT_LEFT_IN_PLACE(value, shift)                         ((value) = CTR_MipsSll((value), (shift)))
 #define CTR_PSX_SHIFT_RIGHT_ARITHMETIC(result, value, shift)              ((result) = CTR_MipsSra((value), (shift)))
@@ -166,6 +173,7 @@
 #define CTR_PSX_ADD_POINTER_OFFSET(result, base, offset)                     __asm__("addu %0,%1,%2" : "=r"(result) : "r"(base), "r"(offset))
 #define CTR_PSX_ADD_POINTER_OFFSET_OFFSET_FIRST(result, base, offset)        __asm__("addu %0,%2,%1" : "=r"(result) : "r"(base), "r"(offset))
 #define CTR_PSX_ADD_POINTER_IMMEDIATE(result, base, byteOffset, nativeValue) __asm__("addiu %0,%1,%2" : "=r"(result) : "r"(base), "I"(byteOffset))
+#define CTR_PSX_ADD_U32(result, lhs, rhs)                                    __asm__("addu %0,%1,%2" : "=r"(result) : "r"(lhs), "r"(rhs))
 #define CTR_PSX_NEGATE_IN_PLACE(value)                                       __asm__("negu %0,%0" : "+r"(value))
 #define CTR_PSX_NEGATE(result, value)                                        __asm__("subu %0,$0,%1" : "=r"(result) : "r"(value))
 #define CTR_PSX_LOAD_IMMEDIATE(result, value)                                __asm__("li %0,%1" : "=r"(result) : "I"(value))
@@ -180,6 +188,8 @@
 #define CTR_PSX_LOAD_SIGNED_HALF_AFTER(result, base, byteOffset, nativeValue, dependency) \
 	__asm__("lh %0,%2(%1)" : "=r"(result) : "r"(base), "I"(byteOffset), "r"(dependency), "m"(nativeValue))
 #define CTR_PSX_LOAD_UNSIGNED_BYTE(result, base, byteOffset, nativeValue) __asm__("lbu %0,%2(%1)" : "=r"(result) : "r"(base), "I"(byteOffset), "m"(nativeValue))
+// NOTE(aalhendi): This scheduling seam is used before any write to the loaded byte.
+#define CTR_PSX_LOAD_GP_UNSIGNED_BYTE_AFTER(result, gpOffset, nativeValue, dependency) __asm__("lbu %0,%2($gp)" : "=r"(result) : "r"(dependency), "I"(gpOffset))
 #define CTR_PSX_LOAD_UNSIGNED_HALF(result, base, byteOffset, nativeValue) __asm__("lhu %0,%2(%1)" : "=r"(result) : "r"(base), "I"(byteOffset), "m"(nativeValue))
 #define CTR_PSX_SHIFT_LEFT_IN_PLACE(value, shift)                         __asm__("sll %0,%0,%1" : "+r"(value) : "I"(shift))
 #define CTR_PSX_SHIFT_RIGHT_ARITHMETIC(result, value, shift)              __asm__("sra %0,%1,%2" : "=r"(result) : "r"(value), "I"(shift))

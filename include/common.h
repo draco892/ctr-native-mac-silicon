@@ -39,11 +39,35 @@
 #define GAME_PLAYER_OBJECT_LIST      ((struct Model **)sdata->PLYROBJECTLIST)
 #define GAME_SONG_SEQUENCES          (sdata->songSeq)
 #define GAME_SONG_POOL               (sdata->songPool)
+#define GAME_NOTE_FREQUENCY          (data.noteFrequency)
+#define GAME_DISTORT_CONST_MUSIC     (data.distortConst_Music)
 #define GAME_CHANNEL_UPDATE_FLAGS    (sdata->ChannelUpdateFlags)
 #define GAME_CHANNEL_ATTR_NEW        (sdata->channelAttrNew)
+#define GAME_VOLUME_LR               (data.volumeLR)
+#define GAME_WRONG_WAY_DIRECTION     (sdata->WrongWayDirection_bool)
+#define GAME_SAME_DIRECTION_FRAMES   (sdata->framesDrivingSameDirection)
 #define GAME_DISTORT_CONST_OTHER_FX  (data.distortConst_OtherFX)
+#define GAME_HOWL_REVERB_PARAMS      (data.reverbParams)
 #define GAME_CHANNEL_TAKEN           (sdata->channelTaken)
 #define GAME_CHANNEL_FREE            (sdata->channelFree)
+#define GAME_HOWL_CD_FILE            (sdata->KartHWL_CdFile)
+#define GAME_AUDIO_ENABLED           (sdata->boolAudioEnabled)
+#define GAME_HOWL_BANK_OFFSETS       (sdata->howl_bankOffsets)
+#define GAME_HOWL_HEADER             (sdata->ptrHowlHeader)
+#define GAME_CSEQ_HEADER             (sdata->ptrCseqHeader)
+#define GAME_HOWL_SPU_ADDRS          (sdata->howl_spuAddrs)
+#define GAME_AUDIO_BANKS             (sdata->bank)
+#define GAME_AUDIO_BANK_COUNT        (sdata->numAudioBanks)
+#define GAME_HOWL_SAMPLE_BLOCK_NAME  (rdata.s_LoadSampleBlock)
+#endif
+
+#ifndef GAME_AUDIO_BANK_COUNT_LOAD_AFTER
+#define GAME_AUDIO_BANK_COUNT_LOAD_AFTER(result, dependency) \
+	do                                                       \
+	{                                                        \
+		(result) = GAME_AUDIO_BANK_COUNT;                    \
+		(void)(dependency);                                  \
+	} while (0)
 #endif
 
 // NOTE(aalhendi): Retail sometimes rereads the pointer slot rather than reusing

@@ -26,6 +26,7 @@ void Voiceline_PoolInit(void)
 	for (index = 0; index < 24; index++)
 	{
 		struct ChannelStats *stats = &sdata->channelStatsPrev[index];
+		struct ChannelAttr *curr;
 		sdata->ChannelUpdateFlags[index] = 0;
 
 		SpuSetVoiceADSRAttr(index, 0, 0xf, 0x7f, 2, 0xf, 5, 1, 3);
@@ -36,7 +37,7 @@ void Voiceline_PoolInit(void)
 		stats->ad = 0x80ff;
 		stats->sr = 0x1fc2;
 
-		struct ChannelAttr *curr = &sdata->channelAttrCur[index];
+		curr = &sdata->channelAttrCur[index];
 
 		curr->spuStartAddr = (void *)-1;
 
@@ -72,7 +73,9 @@ void Voiceline_PoolInit(void)
 
 void Voiceline_ClearTimeStamp(void)
 {
-	for (s32 i = 0; i < 16; i++)
+	s32 i;
+
+	for (i = 0; i < 16; i++)
 	{
 		// Clear audio timestamps arrays
 		sdata->timeSet1[i] = 0;
@@ -133,6 +136,7 @@ void Voiceline_RequestPlay(u32 voiceID, u32 characterID, u32 characterID2)
 	u32 elapsedFrames;
 	u32 canImmediate;
 	u32 canQueue;
+	struct Item *item;
 
 	if (voiceID >= 0x18)
 	{
@@ -245,7 +249,7 @@ queueVoiceline:
 
 	sdata->timeSet1[characterID] |= 1 << (voiceID & 0x1f);
 
-	for (struct Item *item = sdata->Voiceline2.first; item != NULL; item = item->next)
+	for (item = sdata->Voiceline2.first; item != NULL; item = item->next)
 	{
 		struct VoicelineItem *voiceLine = (struct VoicelineItem *)item;
 
@@ -255,7 +259,7 @@ queueVoiceline:
 		}
 	}
 
-	struct Item *item = sdata->Voiceline1.first;
+	item = sdata->Voiceline1.first;
 	if (item != NULL)
 	{
 		LIST_RemoveMember(&sdata->Voiceline1, item);
@@ -287,6 +291,11 @@ void Voiceline_StartPlay(struct Item *voiceLine)
 	u32 voiceID = (u16)voiceLineItem->voiceID;
 	u32 characterID = voiceLineItem->characterID;
 	u32 voiceSetIndex;
+	s16 *voiceIDs;
+	u16 numVoiceIDs;
+	u32 rng;
+	u32 voiceIndex;
+	u32 xaID;
 
 	CTR_WriteU32LE(&sdata->backupParams_FUN_8002cf28[0], CTR_ReadU32LE((u8 *)voiceLineItem + 0x0));
 	CTR_WriteU32LE(&sdata->backupParams_FUN_8002cf28[1], CTR_ReadU32LE((u8 *)voiceLineItem + 0x4));
@@ -295,16 +304,16 @@ void Voiceline_StartPlay(struct Item *voiceLine)
 
 	if ((IS_BOSS_RACE(sdata->gGT->gameMode1)) && ((u32)(voiceID - 10) < 6) && (((u32)(characterID - 8) < 4) || (characterID == 0xf)))
 	{
-		u32 rng = Voiceline_RequestPlay_NextAudioRNG();
-		voiceSetIndex = (rng & 3) + 4;
+		u32 bossRaceRng = Voiceline_RequestPlay_NextAudioRNG();
+		voiceSetIndex = (bossRaceRng & 3) + 4;
 	}
 	else
 	{
 		voiceSetIndex = data.voiceID[(s16)voiceID];
 	}
 
-	s16 *voiceIDs = data.voiceData[characterID].voiceSet[voiceSetIndex].ptr;
-	u16 numVoiceIDs = data.voiceData[characterID].voiceSet[voiceSetIndex].num;
+	voiceIDs = data.voiceData[characterID].voiceSet[voiceSetIndex].ptr;
+	numVoiceIDs = data.voiceData[characterID].voiceSet[voiceSetIndex].num;
 
 	if (numVoiceIDs == 0)
 	{
@@ -312,9 +321,9 @@ void Voiceline_StartPlay(struct Item *voiceLine)
 		return;
 	}
 
-	u32 rng = Voiceline_RequestPlay_NextAudioRNG();
-	u32 voiceIndex = rng % numVoiceIDs;
-	u32 xaID = (u16)voiceIDs[voiceIndex];
+	rng = Voiceline_RequestPlay_NextAudioRNG();
+	voiceIndex = rng % numVoiceIDs;
+	xaID = (u16)voiceIDs[voiceIndex];
 
 	if (CDSYS_XAPlay(CDSYS_XA_TYPE_GAME, xaID) == 0)
 	{
@@ -410,11 +419,13 @@ void Voiceline_SetDefaults(void)
 	sdata->desiredXA_FinalLapIndex = 0;
 	sdata->desiredXA_RaceIntroIndex = 0;
 
-	sdata->WrongWayDirection_bool = false;
+	GAME_WRONG_WAY_DIRECTION = false;
 
-	sdata->framesDrivingSameDirection = 0;
+	GAME_SAME_DIRECTION_FRAMES = 0;
 	sdata->nTropyVoiceCount = 0;
 	sdata->boolNeedXASeek = 0;
+	// NOTE(aalhendi): Retail stores the seek flag before calling music defaults.
+	CTR_PSX_MEMORY_BARRIER();
 
 	Music_SetDefaults();
 }

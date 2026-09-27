@@ -138,6 +138,7 @@ void EngineSound_Player(struct Driver *driver)
 	u32 volume;
 	u32 distortion;
 	u32 lr;
+	u32 echo;
 	int engine = data.MetaDataCharacters[data.characterIDs[id]].engineID;
 
 	if (driver->engineSoundMode == ENGINE_SOUND_FADE_OUT)
@@ -160,6 +161,11 @@ void EngineSound_Player(struct Driver *driver)
 	{
 		int targetPitch;
 		int distortionValue;
+		int pitchDelta;
+		int steer;
+		u32 volMax;
+		u32 pitchMax;
+		int enginePitch;
 
 		if (driver->kartState == KS_ENGINE_REVVING)
 		{
@@ -198,7 +204,7 @@ void EngineSound_Player(struct Driver *driver)
 			}
 		}
 
-		int pitchDelta = targetPitch - driver->engineSoundPitchState;
+		pitchDelta = targetPitch - driver->engineSoundPitchState;
 		if (pitchDelta < 0)
 		{
 			pitchDelta = -pitchDelta;
@@ -231,14 +237,14 @@ void EngineSound_Player(struct Driver *driver)
 			}
 		}
 
-		int steer = driver->wheelRotation;
+		steer = driver->wheelRotation;
 		driver->engineSoundPitchState = (s16)((targetPitch * 0x89 + driver->engineSoundPitchState * 0x177) >> 9);
 		if (steer < 0)
 		{
 			steer = -steer;
 		}
 
-		u32 volMax = ((driver->actionsFlagSet & ACTION_BOT) == 0) ? 0xe6 : 0xbe;
+		volMax = ((driver->actionsFlagSet & ACTION_BOT) == 0) ? 0xe6 : 0xbe;
 		volume = VehCalc_MapToRange(driver->engineSoundVolumeState, 0, driver->const_AccelSpeed_ClassStat, 0x82, volMax);
 
 		if ((driver->kartState != KS_DRIFTING) && ((driver->actionsFlagSet & ACTION_ACCEL_PREVENTION) == 0))
@@ -246,14 +252,15 @@ void EngineSound_Player(struct Driver *driver)
 			volume += steer >> 3;
 		}
 
-		u32 pitchMax = ((driver->actionsFlagSet & ACTION_BOT) == 0) ? 200 : 0xbe;
-		int enginePitch =
+		pitchMax = ((driver->actionsFlagSet & ACTION_BOT) == 0) ? 200 : 0xbe;
+		enginePitch =
 		    VehCalc_MapToRange(driver->engineSoundPitchState, 0, driver->const_AccelSpeed_ClassStat + driver->const_SacredFireSpeed + 0xf00, 0x3c, pitchMax);
 
 		if ((driver->actionsFlagSet & ACTION_BOT) == 0)
 		{
 			if (driver->kartState == KS_DRIFTING)
 			{
+				int drift;
 				if (driver->turbo_MeterRoomLeft == 0)
 				{
 					if (driver->sfxDistortOffset != 0)
@@ -266,7 +273,7 @@ void EngineSound_Player(struct Driver *driver)
 					driver->sfxDistortOffset = ((u8)driver->const_turboMaxRoom >> 1) - (driver->turbo_MeterRoomLeft >> 6);
 				}
 
-				int drift = (s32)((u32)driver->turnWobbleAngle << 0x10) >> 0x13;
+				drift = (s32)((u32)driver->turnWobbleAngle << 0x10) >> 0x13;
 				if (drift < 0)
 				{
 					drift = -drift;
@@ -311,7 +318,7 @@ void EngineSound_Player(struct Driver *driver)
 		lr = 0xc0;
 	}
 
-	u32 echo = ((driver->actionsFlagSet & ACTION_ENGINE_ECHO) != 0) ? 1 : 0;
+	echo = ((driver->actionsFlagSet & ACTION_ENGINE_ECHO) != 0) ? 1 : 0;
 
 	EngineAudio_Recalculate(((engine * 4) + id) & 0xffff, HowlSfx_Pack(lr, distortion, volume, echo));
 }
@@ -321,19 +328,20 @@ int EngineSound_VolumeAdjust(int desired, int current, int step)
 	int delta = desired - current;
 	int absDelta = delta;
 
-	if (absDelta < 0)
+	if (delta < 0)
 	{
-		absDelta = -absDelta;
+		// NOTE(aalhendi): Retail negates the copied magnitude in v0, leaving delta in v1 for the direction check.
+		CTR_PSX_NEGATE_IN_PLACE(absDelta);
 	}
 
 	if (step < absDelta)
 	{
-		if (delta < 1)
+		if (delta > 0)
 		{
-			return current - step;
+			return current + step;
 		}
 
-		return current + step;
+		return current - step;
 	}
 
 	return desired;
@@ -463,6 +471,7 @@ void EngineSound_AI(struct Driver *ai, struct Driver *cameraDriver, int slotInde
 {
 	u32 volume;
 	u32 distortion;
+	u32 echo;
 	int targetPitch = EngineSound_AI_GetTargetPitch(ai);
 
 	EngineSound_AI_UpdateSmoothing(ai, targetPitch);
@@ -479,7 +488,7 @@ void EngineSound_AI(struct Driver *ai, struct Driver *cameraDriver, int slotInde
 		lr = 0xff;
 	}
 
-	u32 echo = ((cameraDriver->actionsFlagSet & ACTION_ENGINE_ECHO) != 0);
+	echo = ((cameraDriver->actionsFlagSet & ACTION_ENGINE_ECHO) != 0);
 	EngineAudio_Recalculate((slotIndex + 0x10) & 0xffff, HowlSfx_Pack(lr, distortion, volume, echo));
 }
 
@@ -538,8 +547,10 @@ void EngineSound_NearestAIs(void)
 {
 	struct GameTracker *gGT = sdata->gGT;
 	struct Driver *closestDrivers[2];
+	struct Thread *thread;
 	int closestDistances[2];
 	s16 closestPlayers[2];
+	int i;
 
 	if (gGT->numBotsNextGame == 0)
 	{
@@ -551,17 +562,17 @@ void EngineSound_NearestAIs(void)
 	closestDistances[0] = 0x7fffffff;
 	closestDistances[1] = 0x7fffffff;
 
-	for (struct Thread *thread = gGT->threadBuckets[ROBOT].thread; thread != NULL; thread = thread->siblingThread)
+	for (thread = gGT->threadBuckets[ROBOT].thread; thread != NULL; thread = thread->siblingThread)
 	{
 		struct Driver *ai = thread->object;
 
-		for (int i = 0; i < gGT->numPlyrCurrGame; i++)
+		for (i = 0; i < gGT->numPlyrCurrGame; i++)
 		{
 			EngineSound_NearestAIs_InsertClosest(ai, i, EngineSound_NearestAIs_GetDistance(ai, i), closestDrivers, closestDistances, closestPlayers);
 		}
 	}
 
-	for (int i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++)
 	{
 		struct Driver *ai = closestDrivers[i];
 		if (ai != NULL)
@@ -584,19 +595,21 @@ void EngineSound_NearestAIs(void)
 
 void EngineAudio_Stop(u32 soundID)
 {
-	if (sdata->boolAudioEnabled == 0)
+	u32 id;
+
+	if (GAME_AUDIO_ENABLED == 0)
 	{
 		return;
 	}
 
-	soundID = soundID & 0xffff;
-	if (sdata->ptrHowlHeader->numEngineFX <= (int)soundID)
+	id = soundID & 0xffff;
+	if ((u32)GAME_HOWL_HEADER->numEngineFX <= id)
 	{
 		return;
 	}
 
 	Smart_EnterCriticalSection();
-	Channel_SearchFX_Destroy(HOWL_CHANNEL_TYPE_ENGINE_FX, soundID, 0xffffffff);
+	Channel_SearchFX_Destroy(HOWL_CHANNEL_TYPE_ENGINE_FX, id, 0xffffffff);
 	Smart_ExitCriticalSection();
 
 	return;

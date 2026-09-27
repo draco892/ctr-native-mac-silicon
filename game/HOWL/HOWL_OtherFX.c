@@ -26,14 +26,8 @@ int OtherFX_Play(u32 soundID, int flags)
 // 1 - echo
 void OtherFX_Play_Echo(u32 soundID, int flags, int echoFlag)
 {
-	int otherFlags = HOWL_SFX_DEFAULT_FLAGS;
-
-	if (echoFlag != 0)
-	{
-		otherFlags |= HOWL_SFX_ECHO_FLAG;
-	}
-
-	OtherFX_Play_LowLevel(soundID & 0xffff, flags & 0xff, otherFlags);
+	u32 id = soundID & 0xffff;
+	OtherFX_Play_LowLevel(id, flags & 0xff, echoFlag ? HOWL_SFX_DEFAULT_FLAGS | HOWL_SFX_ECHO_FLAG : HOWL_SFX_DEFAULT_FLAGS);
 }
 
 int OtherFX_Play_LowLevel(u32 soundID, u8 boolAntiSpam, u32 flags)

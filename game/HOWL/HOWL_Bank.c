@@ -5,11 +5,16 @@ void Bank_ResetAllocator()
 	sdata->numAudioBanks = 0;
 	sdata->audioAllocPtr = 0x202;
 	sdata->bankLoadStage = 4; // Stage 4: Finished
+	CTR_PSX_OBSERVE_MEMORY(sdata->bankLoadStage);
 }
 
 int Bank_Alloc(int bankID, struct Bank *ptrBank)
 {
-	if (sdata->boolAudioEnabled == 0)
+	struct SampleBlockHeader *sampleBlock;
+	int bankOffset;
+	register int result CTR_PSX_REGISTER("$2");
+
+	if (GAME_AUDIO_ENABLED == 0)
 	{
 		// Stage 4: Complete
 		sdata->bankLoadStage = 4;
@@ -17,33 +22,46 @@ int Bank_Alloc(int bankID, struct Bank *ptrBank)
 	}
 
 	// is last bank needed for level?
-	sdata->bankFlags = (ptrBank->flags & 1) != 0;
+	if (ptrBank->flags & 1)
+	{
+		sdata->bankFlags = 1;
+		// NOTE(aalhendi): Keep this store ahead of the join's jump delay slot.
+		CTR_PSX_OBSERVE_MEMORY(sdata->bankFlags);
+	}
+	else
+	{
+		sdata->bankFlags = 0;
+	}
 
-	sdata->bankSectorOffset = sdata->howl_bankOffsets[bankID & 0xffff];
-
-	// ghidra makes this look like a pointer to stack memory,
-	// game shows it's a pointer to ram bank[8], what's happening?
+	bankOffset = GAME_HOWL_BANK_OFFSETS[bankID & 0xffff];
 	sdata->ptrLastBank = ptrBank;
+	sdata->bankSectorOffset = bankOffset;
+	// NOTE(aalhendi): Retail publishes the sector offset before pushing the allocator state.
+	CTR_PSX_OBSERVE_MEMORY(sdata->bankSectorOffset);
 
 	// temporary for loading banks to RAM,
 	// sending data to SPU, then erasing RAM
 	MEMPACK_PushState();
 
-	sdata->ptrSampleBlock2 = MEMPACK_AllocMem(0x800, NULL /* "SampleBlock" */);
-
-	if (sdata->ptrSampleBlock2 == 0)
+	sampleBlock = MEMPACK_AllocMem(0x800, GAME_HOWL_SAMPLE_BLOCK_NAME);
+	sdata->ptrSampleBlock2 = sampleBlock;
+	// NOTE(aalhendi): Retail stores the allocation before testing it for failure.
+	CTR_PSX_MEMORY_BARRIER();
+	if (sampleBlock == 0)
 	{
-		// no data loaded, PopState
 		MEMPACK_PopState();
 		return 0;
 	}
 
-	// Stage 0: Start chain of events
-	// to parse banks and ship to SPU
+	// Stage 0: Start loading the bank into RAM, then transfer it to SPU.
+	result = 1;
+	// NOTE(aalhendi): Keep success in v0 for the allocation-failure branch slot.
+	CTR_PSX_OBSERVE_VALUE(result);
+	sdata->ptrSampleBlock1 = sampleBlock;
 	sdata->bankLoadStage = 0;
-
-	sdata->ptrSampleBlock1 = sdata->ptrSampleBlock2;
-	return 1;
+	// NOTE(aalhendi): Finish the stage write before the return jump.
+	CTR_PSX_MEMORY_BARRIER();
+	return result;
 }
 
 int Bank_AssignSpuAddrs()
@@ -51,6 +69,8 @@ int Bank_AssignSpuAddrs()
 	int i;
 	int ret;
 	int audioAllocPtr;
+	int spuAddrStart;
+	struct SpuAddrEntry *sae;
 
 	// if Stage 4: Complete
 	if (sdata->bankLoadStage == 4)
@@ -146,8 +166,6 @@ int Bank_AssignSpuAddrs()
 
 		// === Assign SpuEntry for all "new" samples ===
 
-		struct SpuAddrEntry *sae;
-
 #if 0
 		printf("New\n");
 		printf("%08x\n", sdata->audioAllocPtr);
@@ -182,7 +200,7 @@ int Bank_AssignSpuAddrs()
 			return 0;
 		}
 
-		int spuAddrStart = (u32)sdata->ptrLastBank->min * 8;
+		spuAddrStart = (u32)sdata->ptrLastBank->min * 8;
 
 		// 0x7e000 = 512kb SPU memory
 		if (spuAddrStart + sdata->audioAllocSize < 0x7e000)
@@ -225,95 +243,126 @@ int Bank_AssignSpuAddrs()
 
 void Bank_Destroy(struct Bank *ptrLastBank)
 {
-	u16 flags;
+	int flags;
 
-	if (sdata->boolAudioEnabled == 0)
+	if (GAME_AUDIO_ENABLED == 0)
 	{
 		return;
 	}
 
-	flags = ptrLastBank->flags;
+	flags = ptrLastBank->flags & 1;
 
 	Bank_ClearInRange(ptrLastBank->min, ptrLastBank->max);
 
-	if ((flags & 1) == 0)
+	if (flags == 0)
 	{
-		// this works cause Bank_Destroy
-		// is only called on the "last" bank
+		// NOTE(aalhendi): Only the last bank can release the allocation tail.
 		sdata->audioAllocPtr = ptrLastBank->min;
 	}
 
-	ptrLastBank->flags = flags & ~(2);
+	ptrLastBank->flags &= ~2;
 }
 
 void Bank_ClearInRange(u16 min, u16 max)
 {
-	int i;
-	u16 end = min + max;
+	u32 i;
+	u32 count;
+	struct HowlHeader *header;
+	struct HowlHeader *loopHeader;
 	struct SpuAddrEntry *sae;
-	sae = &sdata->howl_spuAddrs[0];
+	u32 lower;
+	register u32 upper CTR_PSX_REGISTER("$4");
+	register u32 sum CTR_PSX_REGISTER("$5");
 
-	for (i = 0; i < sdata->ptrHowlHeader->numSpuAddrs; i++)
+	header = GAME_HOWL_HEADER;
+	// NOTE(aalhendi): Retail loads the header before adding these bounds in order.
+	CTR_PSX_ADD_U32(sum, min, max);
+	CTR_PSX_DEPEND_VALUE(sum, header);
+	if (header->numSpuAddrs == 0)
 	{
-		if (sae[i].spuAddr < min)
-		{
-			continue;
-		}
-		if (sae[i].spuAddr >= end)
-		{
-			continue;
-		}
-		sae[i].spuAddr = 0;
+		return;
 	}
+	i = 0;
+	lower = (u16)min;
+	upper = (u16)sum;
+	loopHeader = header;
+	sae = GAME_HOWL_SPU_ADDRS;
+	do
+	{
+		if (sae->spuAddr >= lower && sae->spuAddr < upper)
+		{
+			sae->spuAddr = 0;
+		}
+		count = (u32)loopHeader->numSpuAddrs;
+		// NOTE(aalhendi): Reload the count before advancing the loop index.
+		CTR_PSX_OBSERVE_VALUE(count);
+		i++;
+		sae++;
+	} while (i < count);
 }
 
 int Bank_Load(int bankID, struct Bank *ptrBank)
 {
-	int numBanks = sdata->numAudioBanks;
+	// NOTE(aalhendi): These register lifetimes preserve retail's argument copy and bank-array base.
+	register int bankForAlloc CTR_PSX_REGISTER("$6");
+	register struct Bank *bankBase CTR_PSX_REGISTER("$3");
+	u32 countCheck;
+	u32 numBanks;
 
-	// if out of banks, quit
-	if (numBanks >= 8)
+	// NOTE(aalhendi): The pointer dependency leaves the first count load's
+	// delay slot available for the a0-to-a2 copy.
+	GAME_AUDIO_BANK_COUNT_LOAD_AFTER(countCheck, ptrBank);
+	CTR_PSX_COPY_VALUE(bankForAlloc, bankID);
+
+	if (countCheck >= 8)
 	{
 		return 0;
 	}
-
-	sdata->bank[numBanks].bankID = bankID & 0xffff;
-
-	// if bank is in use, quit
-	if ((sdata->bank[numBanks].flags & 3) != 0)
+	// NOTE(aalhendi): Retail rereads the count after checking capacity.
+	CTR_PSX_RELOAD(sdata->numAudioBanks);
+	numBanks = GAME_AUDIO_BANK_COUNT;
+	bankBase = GAME_AUDIO_BANKS;
+	bankBase[numBanks].bankID = bankID & 0xffff;
+	if ((bankBase[numBanks].flags & 3) != 0)
 	{
 		return 0;
 	}
-
-	if (Bank_Alloc(bankID, &sdata->bank[numBanks]) == 0)
+	if (Bank_Alloc((u16)bankForAlloc, &bankBase[numBanks]) == 0)
 	{
 		return 0;
 	}
-
-	// starting to think this isn't really a bank...
-	ptrBank->bankID = sdata->numAudioBanks++;
+	// NOTE(aalhendi): Retail returns the bank index in the first byte only.
+	*(u8 *)ptrBank = GAME_AUDIO_BANK_COUNT++;
 	return 1;
 }
 
 int Bank_DestroyLast()
 {
-	if (sdata->numAudioBanks == 0)
-	{
-		return 0;
-	}
+	u8 count = GAME_AUDIO_BANK_COUNT;
 
-	Bank_Destroy(&sdata->bank[--sdata->numAudioBanks]);
-	return 1;
+	if (count != 0)
+	{
+		count--;
+		GAME_AUDIO_BANK_COUNT = count;
+		Bank_Destroy(&GAME_AUDIO_BANKS[count]);
+		return 1;
+	}
+	return 0;
 }
 
 void Bank_DestroyUntilIndex(int index)
 {
 	struct Bank *ptrLastBank;
 	u16 bankID = index;
+	u32 slot;
 
-	while (sdata->numAudioBanks != 0)
+	while (GAME_AUDIO_BANK_COUNT != 0)
 	{
-		ptrLastBank = &sdata->bank[sdata->numAudioBanks - 1];
+		slot = GAME_AUDIO_BANK_COUNT;
+		slot--;
+		// NOTE(aalhendi): Keep the decrement before the shift instead of folding it into the array base.
+		CTR_PSX_OBSERVE_VALUE(slot);
+		ptrLastBank = &GAME_AUDIO_BANKS[slot];
 
 		if ((u16)ptrLastBank->bankID == bankID)
 		{
@@ -326,8 +375,15 @@ void Bank_DestroyUntilIndex(int index)
 
 void Bank_DestroyAll()
 {
-	while (sdata->numAudioBanks != 0)
+	u8 count = GAME_AUDIO_BANK_COUNT;
+
+	if (count == 0)
+	{
+		return;
+	}
+	do
 	{
 		Bank_DestroyLast();
-	}
+		count = GAME_AUDIO_BANK_COUNT;
+	} while (count != 0);
 }

@@ -3,6 +3,7 @@
 #ifdef CTR_NATIVE
 struct rData rdata = {
     .s_asphalt2_thisAppearsTwice = "asphalt2",
+    .s_LoadSampleBlock = "_LoadSampleBlock",
 
     .s_crystal1 = "crystal1",
     .s_fruitdisp = "fruitdisp",
