@@ -57,6 +57,7 @@
 #define GAME_CSEQ_HEADER             (sdata->ptrCseqHeader)
 #define GAME_HOWL_SPU_ADDRS          (sdata->howl_spuAddrs)
 #define GAME_GARAGE_SOUND_POOL       (sdata->garageSoundPool)
+#define GAME_MEMCARD_DIR_HEADER      (sdata->s_memcardDirHeader)
 #define GAME_AUDIO_BANKS             (sdata->bank)
 #define GAME_AUDIO_BANK_COUNT        (sdata->numAudioBanks)
 #define GAME_HOWL_SAMPLE_BLOCK_NAME  (rdata.s_LoadSampleBlock)

@@ -54,6 +54,7 @@
 #define GAME_CSEQ_HEADER                   ctr_cseqHeader
 #define GAME_HOWL_SPU_ADDRS                ctr_howlSpuAddrs
 #define GAME_GARAGE_SOUND_POOL             ctr_garageSoundPool
+#define GAME_MEMCARD_DIR_HEADER            ctr_memcardDirHeader
 #define GAME_AUDIO_BANKS                   ctr_audioBanks
 #define GAME_AUDIO_BANK_COUNT              ctr_audioBankCount
 
@@ -107,6 +108,7 @@ extern struct HowlHeader *ctr_howlHeader asm("sdata_static+2132");
 extern struct CseqHeader *ctr_cseqHeader asm("sdata_static+2116");
 extern struct SpuAddrEntry *ctr_howlSpuAddrs asm("sdata_static+2160");
 extern struct GarageFX ctr_garageSoundPool[8] asm("sdata_static+37752");
+extern char ctr_memcardDirHeader[8] asm("sdata_static+1192");
 extern struct Bank ctr_audioBanks[8] asm("sdata_static+11456");
 // NOTE(aalhendi): The lifecycle namespace resolves this byte and _gp together for GP-relative loads.
 extern u8 ctr_audioBankCount;
