@@ -260,7 +260,8 @@ struct GarageFX
 	s16 volume;
 
 	// 0x4
-	int LR;
+	s16 LR;
+	u16 padding_0x6;
 
 	// 0x8
 	u32 soundIDCount;
@@ -610,6 +611,8 @@ CTR_STATIC_ASSERT(sizeof(struct VoicelineItem) == 0x10);
 CTR_STATIC_ASSERT(sizeof(struct ChannelAttr) == 0x10);
 CTR_STATIC_ASSERT(sizeof(struct ChannelStats) == 0x20);
 CTR_STATIC_ASSERT(sizeof(struct GarageFX) == 0xC);
+CTR_STATIC_ASSERT(OFFSETOF(struct GarageFX, LR) == 0x4);
+CTR_STATIC_ASSERT(OFFSETOF(struct GarageFX, soundIDCount) == 0x8);
 CTR_STATIC_ASSERT(sizeof(struct SongSeq) == 0x1C);
 CTR_STATIC_ASSERT(sizeof(struct Song) == 0x7C);
 

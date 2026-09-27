@@ -10,7 +10,7 @@ void Garage_Init(void)
 
 	for (i = 0; i < 8; i++)
 	{
-		garageSounds = &sdata->garageSoundPool[i];
+		garageSounds = &GAME_GARAGE_SOUND_POOL[i];
 		garageSounds->gsp_curr = GSP_GONE;
 		garageSounds->gsp_prev = GSP_GONE;
 		garageSounds->volume = 0;
@@ -120,8 +120,9 @@ void Garage_LerpFX(void)
 {
 	struct GarageFX *garageSounds = sdata->garageSoundPool;
 	u32 *soundIDCountRef;
+	int i;
 
-	for (int i = 0; i < 8; ++i, ++garageSounds)
+	for (i = 0; i < 8; ++i, ++garageSounds)
 	{
 		s16 targetVolume, targetLR;
 		u8 garageSoundPos = garageSounds->gsp_curr;
@@ -250,7 +251,7 @@ void Garage_MoveLR(int desiredId)
 void Garage_Leave(void)
 {
 	int i;
-	struct GarageFX *garageSounds = sdata->garageSoundPool;
+	struct GarageFX *garageSounds = GAME_GARAGE_SOUND_POOL;
 
 	for (i = 0; i < 8; i++)
 	{

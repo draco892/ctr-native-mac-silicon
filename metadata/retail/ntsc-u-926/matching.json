@@ -1155,6 +1155,36 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "howl-garage-init",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "Garage_Init",
+      "end_symbol": "Garage_Enter",
+      "symbol_prefix": "Garage_Init",
+      "source": "game/HOWL/HOWL_Garage.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G0", "-msoft-float"],
+      "small_data_limit": 0,
+      "aspsx_version": "2.77"
+    },
+    {
+      "name": "howl-garage-leave",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "Garage_Leave",
+      "end_symbol": "INSTANCE_Birth",
+      "symbol_prefix": "Garage_Leave",
+      "source": "game/HOWL/HOWL_Garage.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G0", "-msoft-float"],
+      "small_data_limit": 0,
+      "aspsx_version": "2.77"
+    },
+    {
       "name": "elim-bg-deactivate",
       "kind": "resident",
       "artifact": "exe",
