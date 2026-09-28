@@ -46,24 +46,25 @@ u8 MEMCARD_GetNextHwEvent(void)
 	return MC_RETURN_PENDING;
 }
 
-u8 MEMCARD_WaitForHwEvent(void)
+s32 MEMCARD_WaitForHwEvent(void)
 {
 	while (1)
 	{
 		// IOE = IO End, meaning "finished without error"
-		if (TestEvent(sdata->HwCARD_EvSpIOE))
+		// NOTE(aalhendi): Retail recognizes the signaled state only when TestEvent returns 1.
+		if (TestEvent(sdata->HwCARD_EvSpIOE) == 1)
 		{
 			return MC_RETURN_IOE;
 		}
-		if (TestEvent(sdata->HwCARD_EvSpERROR))
+		if (TestEvent(sdata->HwCARD_EvSpERROR) == 1)
 		{
 			return MC_RETURN_TIMEOUT;
 		}
-		if (TestEvent(sdata->HwCARD_EvSpTIMOUT))
+		if (TestEvent(sdata->HwCARD_EvSpTIMOUT) == 1)
 		{
 			return MC_RETURN_NOCARD;
 		}
-		if (TestEvent(sdata->HwCARD_EvSpNEW))
+		if (TestEvent(sdata->HwCARD_EvSpNEW) == 1)
 		{
 			return MC_RETURN_NEWCARD;
 		}

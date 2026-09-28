@@ -1,4 +1,5 @@
 #include <common.h>
+#include <psn00bsdk/include/sys/fcntl.h>
 
 // === This is bugged ===
 // People reported "Out of room" error screens
@@ -7,15 +8,16 @@
 void MEMCARD_GetFreeBytes(int slotIdx)
 {
 	struct DIRENTRY *firstEntry;
+	struct DIRENTRY *nxtEntry;
 	struct DIRENTRY entry;
-
 	int bytesUsedMemCard = 0;
+
 	MEMCARD_StringSet(sdata->s_memcardFileCurr, slotIdx, sdata->s_AnyFile);
 
 	// string for directory and file of save that is in use
 	firstEntry = firstfile(sdata->s_memcardFileCurr, &entry);
 
-	for (struct DIRENTRY *nxtEntry = &entry; firstEntry == nxtEntry; nxtEntry = nextfile(&entry))
+	for (nxtEntry = &entry; firstEntry == nxtEntry; nxtEntry = nextfile(&entry))
 	{
 		bytesUsedMemCard += entry.size + 0x1fffU;
 		bytesUsedMemCard &= 0xffffe000;
@@ -74,33 +76,35 @@ u8 MEMCARD_Format(int slotIdx)
 int MEMCARD_IsFile(int slotIdx, char *save_name)
 {
 	char name[64];
+	int fd;
+	register int invalidFd CTR_PSX_REGISTER("$16");
 
 	MEMCARD_StringSet(name, slotIdx, save_name);
 
-	int fd;
-
 	fd = open(name, FASYNC | FWRITE);
+	// NOTE(aalhendi): Retail loads -1, stores the descriptor, then branches on the result.
+	CTR_PSX_LOAD_IMMEDIATE(invalidFd, -1);
 	sdata->memcard_fd = fd;
+	CTR_PSX_MEMORY_BARRIER();
 
-	if (fd != -1)
-	{
-		close(fd);
-		sdata->memcard_fd = -1;
-		return MC_RETURN_IOE;
-	}
+	if (fd == invalidFd)
+		return MC_RETURN_NODATA;
 
-	return MC_RETURN_NODATA;
+	close(fd);
+	sdata->memcard_fd = invalidFd;
+	return MC_RETURN_IOE;
 }
 
 char *MEMCARD_FindFirstGhost(int slotIdx, char *srcString)
 {
+	struct DIRENTRY *firstEntry;
+	struct DIRENTRY someEntry;
+
 	if (sdata->memcard_stage != MC_STAGE_IDLE)
 	{
 		return 0;
 	}
 
-	struct DIRENTRY *firstEntry;
-	struct DIRENTRY someEntry;
 	MEMCARD_StringSet(sdata->s_memcardFileCurr, slotIdx, srcString);
 
 	firstEntry = firstfile(sdata->s_memcardFileCurr, &someEntry);
@@ -114,13 +118,13 @@ char *MEMCARD_FindFirstGhost(int slotIdx, char *srcString)
 
 char *MEMCARD_FindNextGhost(void)
 {
+	struct DIRENTRY *nextEntry;
+	struct DIRENTRY someEntry;
+
 	if (sdata->memcard_stage != MC_STAGE_GHOST_FOUND)
 	{
 		return 0;
 	}
-
-	struct DIRENTRY *nextEntry;
-	struct DIRENTRY someEntry;
 
 	nextEntry = nextfile(&someEntry);
 	if (nextEntry == 0)
@@ -136,10 +140,11 @@ char *MEMCARD_FindNextGhost(void)
 // called by MC_ACTION_Erase
 u8 MEMCARD_EraseFile(int slotIdx, char *srcString)
 {
+	char name[64];
+
 	if (sdata->memcard_stage != 0)
 		return MC_RETURN_TIMEOUT;
 
-	char name[64];
 	MEMCARD_StringSet(name, slotIdx, srcString);
 
 	sdata->memcard_stage = (erase(name)) ? MC_STAGE_ERASE_PASS : MC_STAGE_ERASE_FAIL;
