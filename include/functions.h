@@ -600,7 +600,7 @@ void PROC_DestroyObject(void *object, ThreadFlags threadFlags);
 void PROC_DestroySelf(struct Thread *t);
 void PROC_DestroyTracker(struct Thread *t);
 void PROC_PerBspLeaf_CheckInstances(struct BSP *bspLeaf, struct ScratchpadStruct *sps);
-struct Thread *PROC_SearchForModel(struct Thread *th, s16 modelID);
+struct Thread *PROC_SearchForModel(struct Thread *th, s32 modelID);
 void PROC_StartSearch_Self(struct ScratchpadStruct *sps);
 
 void ThTick_SetAndExec(struct Thread *thread, void (*funcThTick)(struct Thread *));
