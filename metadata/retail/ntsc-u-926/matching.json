@@ -1793,6 +1793,20 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "queue-load-track-menu-ptr",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "QueueLoadTrack_GetMenuPtr",
+      "end_symbol": "RaceConfig_LoadGameOptions",
+      "symbol_prefix": "QueueLoadTrack_GetMenuPtr",
+      "source": "game/QueueLoadTrack.c",
+      "include_directories": ["include"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77"
+    },
+    {
       "name": "music-state",
       "kind": "resident",
       "artifact": "exe",
