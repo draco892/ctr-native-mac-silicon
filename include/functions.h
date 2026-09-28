@@ -458,7 +458,7 @@ void TRIG_AngleSinCos_r15r16r17(u32 angle, s32 *sine, s32 *cosine);
 void TRIG_AngleSinCos_r16r17r18_duplicate(u32 angle, u32 *sine, u32 *cosine);
 void TRIG_AngleSinCos_r9r8r10(u32 angle, s32 *sine, s32 *cosine);
 void TRIG_AngleSinCos_r16r17r18(u32 angle, s32 *sine, s32 *cosine);
-MATRIX *MATH_HitboxMatrix(MATRIX *output, MATRIX *input);
+void MATH_HitboxMatrix(MATRIX *output, MATRIX *input);
 void ConvertRotToMatrix_InverseTranspose_NoRotY(MATRIX *m, const SVec3 *rot);
 void ConvertRotToMatrix_InverseTranspose(MATRIX *m, const SVec3 *rot);
 void ConvertRotToMatrix(MATRIX *m, const SVec3 *rot);

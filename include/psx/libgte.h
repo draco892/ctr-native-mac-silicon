@@ -34,7 +34,8 @@ static inline void CTR_MatrixSetRotIdentity(MATRIX *m)
 	m->m[2][2] = 0x1000;
 }
 
-typedef struct
+// NOTE(aalhendi): Retail also views MATRIX.t as the first three VECTOR words.
+typedef struct CTR_MAY_ALIAS
 { /* int  word type 3D vector */
 	s32 vx, vy;
 	s32 vz, pad;
