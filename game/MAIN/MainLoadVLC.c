@@ -4,6 +4,8 @@ void MainLoadVLC_Callback(struct LoadQueueSlot *param_1)
 {
 	// VLC is now loaded
 	sdata->bool_IsLoaded_VlcTable = 1;
+	// NOTE(aalhendi): Retail commits the flag before the return delay slot.
+	CTR_PSX_MEMORY_BARRIER();
 
 #ifdef CTR_NATIVE
 	// NOTE(aalhendi): Native keeps the loaded VLC pointer in host-visible state.
