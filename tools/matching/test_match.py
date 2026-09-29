@@ -58,6 +58,19 @@ class ResidentDefinitionTests(unittest.TestCase):
 
 
 class SharedSectionsTests(unittest.TestCase):
+    def test_linked_section_reports_its_actual_address_and_size(self) -> None:
+        headers = (
+            "  0 .resident_block 0000048c 8003ddac 8003ddac 00000dac 2**2\n"
+            "  1 .rodata 00000038 800115ac 800115ac 000005ac 2**2\n"
+        )
+        with mock.patch.object(ctr_match, "command_output", return_value=headers):
+            self.assertEqual(
+                ctr_match.linked_section(Path("objdump"), Path("block.elf"), ".rodata"),
+                {"size": 0x38, "address": 0x800115AC},
+            )
+            with self.assertRaises(ctr_match.MatchError):
+                ctr_match.linked_section(Path("objdump"), Path("block.elf"), ".data")
+
     def test_generated_tables_must_agree_with_the_emitted_artifact(self) -> None:
         toolchain = SimpleNamespace(binutils={"objdump": "objdump"})
         with tempfile.TemporaryDirectory() as directory:

@@ -647,6 +647,17 @@ def linked_symbols(
     return symbols
 
 
+def linked_section(objdump: Path, linked_object: Path, name: str) -> dict[str, int]:
+    headers = command_output([str(objdump), "-h", str(linked_object)])
+    match = re.search(
+        rf"(?m)^\s*\d+\s+{re.escape(name)}\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+",
+        headers,
+    )
+    if match is None:
+        raise MatchError(f"linked artifact has no section named {name!r}")
+    return {"size": int(match[1], 16), "address": int(match[2], 16)}
+
+
 def normalized_objdump(command: list[str]) -> str:
     output = command_output(command)
     instruction = re.compile(r"^[0-9a-f]+:\s")

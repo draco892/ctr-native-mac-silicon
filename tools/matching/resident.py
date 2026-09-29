@@ -383,13 +383,23 @@ def link_contiguous_block(
     symbols = ctr_match.linked_symbols(
         toolchain.binutils["objdump"], linked_object, start
     )
-    placed = all(
+    code_section = ctr_match.linked_section(
+        toolchain.binutils["objdump"], linked_object, ".resident_block"
+    )
+    rodata_section = ctr_match.linked_section(
+        toolchain.binutils["objdump"], linked_object, ".rodata"
+    )
+    code_placed = code_section == {"address": start, "size": size} and all(
         (symbol := symbols.get(function.name)) is not None
         and symbol["address"] == function.address
         and symbol["size"] == function.size
         and symbol["section"] == ".resident_block"
         for function in functions
     )
+    rodata_placed = rodata_section == {
+        "address": rodata_address,
+        "size": rodata_size,
+    }
 
     code = output / "code.bin"
     rodata = output / "rodata.bin"
@@ -422,7 +432,9 @@ def link_contiguous_block(
     return {
         "address": f"0x{start:08x}",
         "size": size,
-        "placement_exact": placed,
+        "code_placement_exact": code_placed,
+        "rodata_placement_exact": rodata_placed,
+        "placement_exact": code_placed and rodata_placed,
         "code": code_comparison,
         "rodata_address": f"0x{rodata_address:08x}",
         "rodata_size": rodata_size,
@@ -430,7 +442,9 @@ def link_contiguous_block(
         "rodata_candidate_size": len(actual_rodata),
         "rodata_expected_sha256": ctr_match.sha256_bytes(expected_rodata),
         "rodata_candidate_sha256": ctr_match.sha256_bytes(actual_rodata),
-        "exact": placed and code_comparison["exact"] and rodata_exact,
+        "exact": (
+            code_placed and rodata_placed and code_comparison["exact"] and rodata_exact
+        ),
     }
 
 
