@@ -628,6 +628,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 #ifndef CTR_NATIVE
 	// NOTE(aalhendi): The C above remains the native implementation. On PSX,
 	// this block replaces GCC's divergent tail with the retail sequence.
+	// Use a distinct local row-loop label; GCC reuses $L252 in MenuProc.
 	asm volatile(".endif\n"
 	             "\tlw\t$10,72($sp)\n"
 	             "\tnop\n"
@@ -963,7 +964,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 	             "\tmove $fp,$17\n"
 	             " #NO_APP\n"
 	             "\tsll\t$3,$19,16\n"
-	             "$L252:\n"
+	             ".Lmm_highscore_draw_row_loop:\n"
 	             "\tsra\t$3,$3,16\n"
 	             "\taddu\t$2,$3,2\n"
 	             "\tsll\t$17,$2,2\n"
@@ -1099,7 +1100,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 	             "\tslt\t$2,$2,5\n"
 	             "\t.set\tnoreorder\n"
 	             "\t.set\tnomacro\n"
-	             "\tbne\t$2,$0,$L252\n"
+	             "\tbne\t$2,$0,.Lmm_highscore_draw_row_loop\n"
 	             "\tsll\t$3,$19,16\n"
 	             "\t.set\tmacro\n"
 	             "\t.set\treorder\n"

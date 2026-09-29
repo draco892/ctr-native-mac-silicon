@@ -30,7 +30,7 @@
 #define VB_MATCH_ROW_ALLOCATION_BEGIN(value) __asm__ volatile("" : "=g"(value))
 // NOTE(aalhendi): The shared C produces retail's row-preheader instructions,
 // but GCC schedules those independent instructions differently. Replace only
-// that preheader with retail's order. $L245 is GCC's generated loop target and
+// that preheader with retail's order. $L246 is GCC's generated loop target and
 // must be updated if surrounding source or headers renumber local labels.
 #define VB_MATCH_ROW_SCHEDULE_BEGIN()        __asm__ volatile(".if 0")
 #define VB_MATCH_ROW_SCHEDULE_END()                                      \
@@ -46,7 +46,7 @@
 	                 "sw $9,144($sp)\n\t"                                \
 	                 "li $9,5\n\t"                                       \
 	                 "sw $9,148($sp)\n\t"                                \
-	                 "$L245:")
+	                 "$L246:")
 #define VB_MATCH_ROW_SETUP_ORDER(rowCount, configIndex) __asm__ volatile("" : "+g"(rowCount), "+g"(configIndex))
 #define VB_MATCH_ROW_ALLOCATION_END(value)              __asm__ volatile("" : : "g"(value))
 
@@ -61,8 +61,8 @@
 // Native copies the resident u32 through its adapter.
 extern Color vb_battleColor asm("sdata_static+1228");
 
-#define VB_BATTLE_COLOR_PTR        (&vb_battleColor)
-#define VB_DRAW_OUTER_RECT         RECTMENU_DrawOuterRect_HighLevel
-#define VB_DRAW_POLY_FT4           DecalHUD_DrawPolyFT4
+#define VB_BATTLE_COLOR_PTR (&vb_battleColor)
+#define VB_DRAW_OUTER_RECT  RECTMENU_DrawOuterRect_HighLevel
+#define VB_DRAW_POLY_FT4    DecalHUD_DrawPolyFT4
 
 #endif
