@@ -46,6 +46,17 @@ void after(void) {}
             self.assertIn(probe["symbol"], extracted)
 
 
+class ResidentDefinitionTests(unittest.TestCase):
+    def test_assembly_label_owns_retail_only_function(self) -> None:
+        source = '__asm__(".globl MEMCARD_GetInfo\\n"\n        "MEMCARD_GetInfo:\\n");'
+        self.assertEqual(ctr_resident.definition_count(source, "MEMCARD_GetInfo"), 1)
+        self.assertEqual(ctr_resident.definition_count(source, "OtherFunction"), 0)
+
+    def test_c_definition_takes_precedence_over_conditional_assembly(self) -> None:
+        source = 'void target(void) {}\n__asm__("target:\\n");'
+        self.assertEqual(ctr_resident.definition_count(source, "target"), 1)
+
+
 class SharedSectionsTests(unittest.TestCase):
     def test_generated_tables_must_agree_with_the_emitted_artifact(self) -> None:
         toolchain = SimpleNamespace(binutils={"objdump": "objdump"})

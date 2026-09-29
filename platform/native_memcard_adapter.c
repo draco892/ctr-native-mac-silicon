@@ -127,6 +127,79 @@ int MEMCARD_HandleEvent(void)
 	return MC_RETURN_TIMEOUT;
 }
 
+// NOTE(aalhendi): Native keeps the card setup flow through its SDK shims;
+// retail selects the instruction-exact implementation in game_unity.h.
+void MEMCARD_InitCard(void)
+{
+	EnterCriticalSection();
+	sdata->SwCARD_EvSpIOE = OpenEvent(SwCARD, EvSpIOE, EvMdNOINTR, NULL);
+	sdata->SwCARD_EvSpERROR = OpenEvent(SwCARD, EvSpERROR, EvMdNOINTR, NULL);
+	sdata->SwCARD_EvSpTIMOUT = OpenEvent(SwCARD, EvSpTIMOUT, EvMdNOINTR, NULL);
+	sdata->SwCARD_EvSpNEW = OpenEvent(SwCARD, EvSpNEW, EvMdNOINTR, NULL);
+	sdata->HwCARD_EvSpIOE = OpenEvent(HwCARD, EvSpIOE, EvMdNOINTR, NULL);
+	sdata->HwCARD_EvSpERROR = OpenEvent(HwCARD, EvSpERROR, EvMdNOINTR, NULL);
+	sdata->HwCARD_EvSpTIMOUT = OpenEvent(HwCARD, EvSpTIMOUT, EvMdNOINTR, NULL);
+	sdata->HwCARD_EvSpNEW = OpenEvent(HwCARD, EvSpNEW, EvMdNOINTR, NULL);
+	EnableEvent(sdata->SwCARD_EvSpIOE);
+	EnableEvent(sdata->SwCARD_EvSpERROR);
+	EnableEvent(sdata->SwCARD_EvSpTIMOUT);
+	EnableEvent(sdata->SwCARD_EvSpNEW);
+	EnableEvent(sdata->HwCARD_EvSpIOE);
+	EnableEvent(sdata->HwCARD_EvSpERROR);
+	EnableEvent(sdata->HwCARD_EvSpTIMOUT);
+	EnableEvent(sdata->HwCARD_EvSpNEW);
+	ExitCriticalSection();
+
+	InitCARD(0);
+	StartCARD();
+	_bu_init();
+	// NOTE(aalhendi): Bit 0 makes the first successful card-info event enter
+	// the new-card path; with both bits 0 and 1 clear it is unformatted.
+	sdata->memcardStatusFlags = 1;
+}
+
+int MEMCARD_ChecksumLoad(u8 *saveBytes, int len)
+{
+	int byteIndex = sdata->crc16_checkpoint_byteIndex;
+	int byteIndexEnd;
+	b32 boolFinishThisFrame;
+	int crc = sdata->crc16_checkpoint_status;
+
+	if ((sdata->memcardStatusFlags & MEMCARD_STATUS_SYNC_CHECKSUM) == 0)
+	{
+		byteIndexEnd = byteIndex + 0x200;
+		boolFinishThisFrame = false;
+
+		if (byteIndexEnd < len - 2)
+			goto RunChecksum;
+	}
+
+	boolFinishThisFrame = true;
+	byteIndexEnd = len - 2;
+
+RunChecksum:
+	for (; byteIndex < byteIndexEnd; byteIndex++)
+	{
+		crc = MEMCARD_CRC16(crc, saveBytes[byteIndex]);
+	}
+
+	sdata->crc16_checkpoint_byteIndex = byteIndex;
+	sdata->crc16_checkpoint_status = crc;
+
+	if (!boolFinishThisFrame)
+	{
+		return MC_RETURN_PENDING;
+	}
+
+	crc = MEMCARD_CRC16(crc, saveBytes[byteIndex]);
+	crc = MEMCARD_CRC16(crc, saveBytes[byteIndex + 1]);
+
+	// Will return one of these:
+	// 0: MC_RETURN_IOE
+	// 1: MC_RETURN_TIMEOUT
+	return (u32)(crc != 0);
+}
+
 s32 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags)
 {
 	char nativeName[64];

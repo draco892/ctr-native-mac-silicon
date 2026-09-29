@@ -96,7 +96,12 @@ def definition_count(text: str, symbol: str) -> int:
         rf"(?:\*[ \t]*)*{re.escape(symbol)}[ \t]*\([^;{{}}]*\)"
         rf"[ \t\r\n]*\{{"
     )
-    return len(pattern.findall(text))
+    c_count = len(pattern.findall(text))
+    if c_count:
+        return c_count
+    # Retail-only sources may define a function through global assembly.
+    label = re.compile(rf'(?m)^[ \t]*"{re.escape(symbol)}:\\n"')
+    return len(label.findall(text))
 
 
 def discover_function_ranges(

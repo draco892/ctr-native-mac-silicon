@@ -485,7 +485,7 @@ void MEMCARD_CloseCard(void);
 s32 MEMCARD_GetNextSwEvent(void);
 s32 MEMCARD_GetNextHwEvent(void);
 s32 MEMCARD_SkipEvents(void);
-int MEMCARD_NewTask(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, int flags);
+int MEMCARD_NewTask(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize);
 void MEMCARD_CloseFile(void);
 int MEMCARD_ReadFile(int start_offset, int size);
 u8 MEMCARD_WriteFile(int start_offset, const u8 *data, int size);

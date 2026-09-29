@@ -149,8 +149,10 @@
 // NOTE(aalhendi): Retail card operations use PSX card/event/file APIs. Native
 // provides the same game-facing MEMCARD_* API from platform/native_memcard_adapter.c.
 #if !defined(CTR_NATIVE)
+#include "MEMCARD/MEMCARD_RetailChecksumLoad.c"
+#include "MEMCARD/MEMCARD_RetailInitCard.c"
 #include "MEMCARD/MEMCARD_RetailCard.c"
-#include "MEMCARD/MEMCARD_RetailEvents.c"
+#include "MEMCARD/MEMCARD_RetailHandleEvent.c"
 #include "MEMCARD/MEMCARD_RetailTransfer.c"
 #endif
 
