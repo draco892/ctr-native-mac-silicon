@@ -2380,6 +2380,42 @@ CTR_STATIC_ASSERT(sizeof(((struct Data *)0)->characterIDs_2P_AIs) == 0x1c);
 CTR_STATIC_ASSERT(offsetof(struct Data, bakedGteMath) == 0x7554);
 CTR_STATIC_ASSERT(sizeof(((struct Data *)0)->bakedGteMath) == BAKED_GTE_MATRIX_COUNT * 8);
 
+// NOTE(aalhendi): Grouping the resident block keeps its far-page base and
+// field offsets shared by native and PSX instead of duplicating raw addresses.
+struct MemcardState
+{
+	// NOTE(aalhendi): Bit 0 copies frame 2 into frame 1.
+	s32 memcardUnk1;
+	// NOTE(aalhendi): MC_RESULT and MC_ACTION state.
+	s16 desired_memcardResult;
+	s16 frame1_memcardAction;
+	s16 frame1_memcardSlot;
+	s16 frame2_memcardAction;
+	s16 frame2_memcardSlot;
+	s16 frame3_memcardAction;
+	s16 frame3_memcardSlot;
+	s16 frame4_memcardAction;
+	s16 frame4_memcardSlot;
+	s16 padding8009aa46;
+	char *ghostProfile_fileName;
+	char *ghostProfile_fileIconHeader;
+	// NOTE(aalhendi): Destination for ghost load; source for ghost save.
+	struct GhostHeader *ghostProfile_ptrGhostHeader;
+	s16 ghostProfile_size3E00;
+	// NOTE(aalhendi): Set for one frame, then reset to -1.
+	s16 ghostProfile_rowSelect;
+	s16 ghostProfile_indexSave;
+	s16 ghostProfile_indexLoad;
+	s16 numGhostProfilesSaved;
+	s16 padding_8009aa5e;
+	struct GhostProfile ghostProfile_memcard[7];
+	struct GhostProfile ghostProfile_current;
+};
+
+CTR_STATIC_ASSERT(sizeof(struct MemcardState) == 0x1d0);
+CTR_STATIC_ASSERT(offsetof(struct MemcardState, numGhostProfilesSaved) == 0x2c);
+CTR_STATIC_ASSERT(offsetof(struct MemcardState, ghostProfile_memcard) == 0x30);
+
 // 0x8008CF6C
 struct sData
 {
@@ -3643,7 +3679,8 @@ struct sData
 	struct RectMenu *ptrDesiredMenu;
 
 	// 8008d928
-	char unk_memcardRelated_8008d928[0x8];
+	b16 unk_memcardRelated_8008d928;
+	char padding_8008d92a[0x6];
 
 	// 8008d930
 	u16 trackSelBackup;
@@ -3687,16 +3724,19 @@ struct sData
 	s16 padding_8008d95a;
 
 	// 8008d95c
-	int unk8008d95c;
+	b16 unk8008d95c;
+	s16 padding_8008d95e;
 
 	// 8008d960
 	s8 teamOfEachPlayer[4];
 
 	// 8008d964
-	int unk8008d964;
+	b16 unk8008d964;
+	s16 padding_8008d966;
 
 	// 8008d968
-	int boolAdvProfilesChecked;
+	b16 boolAdvProfilesChecked;
+	s16 padding_8008d96a;
 
 	// 8008d96c
 	int advProfileIndex;
@@ -3724,7 +3764,8 @@ struct sData
 	int demoModeIndex;
 
 	// 8008d984
-	int boolError;
+	b16 boolError;
+	s16 padding_8008d986;
 
 	// 8008d988
 	// root counter
@@ -4078,74 +4119,8 @@ struct sData
 	// 4 profiles, 3 instances per profile, 0x90 bytes total
 	struct SelectProfileLoadSaveIcon LoadSaveData[12];
 
-	// 0x8009AA30
-	// & 1: frame2->frame1
-	int memcardUnk1;
-
-	// result
-
-	// 8009AA34 (MC_RESULT)
-	s16 desired_memcardResult;
-
-	// 8009aa36 (MC_ACTION)
-	s16 frame1_memcardAction;
-
-	// 8009aa38
-	s16 frame1_memcardSlot;
-
-	// 8009aa3a
-	s16 frame2_memcardAction;
-
-	// 8009aa3c
-	s16 frame2_memcardSlot;
-
-	// 8009aa3e
-	s16 frame3_memcardAction;
-
-	// 8009aa40
-	s16 frame3_memcardSlot;
-
-	// 8009aa42
-	s16 frame4_memcardAction;
-
-	// 8009aa44
-	s16 frame4_memcardSlot;
-
-	s16 padding8009aa46;
-
-	// 8009aa48
-	char *ghostProfile_fileName;
-
-	// 8009aa4c
-	char *ghostProfile_fileIconHeader;
-
-	// 8009aa50
-	// Points to Destination (ghost load)
-	// Points to Source (ghost save)
-	struct GhostHeader *ghostProfile_ptrGhostHeader;
-
-	// 8009aa54 -- Size (saving = 3E00)
-	s16 ghostProfile_size3E00;
-
-	// 8009aa56
-	// only set for one frame,
-	// then resets to -1
-	s16 ghostProfile_rowSelect;
-
-	// 8009aa58
-	s16 ghostProfile_indexSave;
-
-	// 8009aa5a
-	s16 ghostProfile_indexLoad;
-
-	// 8009aa5c
-	int numGhostProfilesSaved;
-
-	// 8009aa60
-	struct GhostProfile ghostProfile_memcard[7];
-
-	// 8009ABCC
-	struct GhostProfile ghostProfile_current;
+	// 0x8009aa30..0x8009ac00
+	struct MemcardState memcard;
 
 	// 8009AC00
 	struct
@@ -4293,6 +4268,7 @@ CTR_STATIC_ASSERT(sizeof(struct MetaDataMODEL) == 0xC);
 #define OFFSETOF_SDATA(ELEMENT) ((u32)0x8008cf6c + OFFSETOF(struct sData, ELEMENT))
 #define OFFSETOF_DATA(ELEMENT)  ((u32)0x800809a0 + OFFSETOF(struct Data, ELEMENT))
 
+CTR_STATIC_ASSERT(OFFSETOF_SDATA(memcard) == 0x8009aa30);
 CTR_STATIC_ASSERT(OFFSETOF_DATA(rowsQuit) == 0x800841BC);
 CTR_STATIC_ASSERT(OFFSETOF_DATA(menuQuit) == 0x800841D0);
 CTR_STATIC_ASSERT(OFFSETOF_DATA(playerIconAdvMap) == 0x80086418);

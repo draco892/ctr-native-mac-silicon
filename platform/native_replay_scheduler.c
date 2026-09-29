@@ -741,8 +741,8 @@ internal s32 NativeReplayScheduler_MemcardIdleForRootSwitch(void)
 	{
 		return 0;
 	}
-	if (NativeReplayScheduler_MemcardActionBlocksRootSwitch(sdata->frame1_memcardAction) ||
-	    NativeReplayScheduler_MemcardActionBlocksRootSwitch(sdata->frame2_memcardAction))
+	if (NativeReplayScheduler_MemcardActionBlocksRootSwitch(sdata->memcard.frame1_memcardAction) ||
+	    NativeReplayScheduler_MemcardActionBlocksRootSwitch(sdata->memcard.frame2_memcardAction))
 	{
 		return 0;
 	}
@@ -760,7 +760,7 @@ internal void NativeReplayScheduler_LogMemcardStartDeferred(void)
 	if (sdata != NULL)
 	{
 		Platform_Log("[CTR Replay] report start waiting for memcard activity to finish (stage=%d frame1=%d frame2=%d)\n", sdata->memcard_stage,
-		             sdata->frame1_memcardAction, sdata->frame2_memcardAction);
+		             sdata->memcard.frame1_memcardAction, sdata->memcard.frame2_memcardAction);
 	}
 	else
 	{

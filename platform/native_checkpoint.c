@@ -1541,9 +1541,9 @@ internal void NativeCheckpoint_RelocateSDataPointers(const struct NativeCheckpoi
 		NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.quadBlocksRendered[i]);
 	}
 
-	NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.ghostProfile_ptrGhostHeader);
-	NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.ghostProfile_fileName);
-	NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.ghostProfile_fileIconHeader);
+	NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.memcard.ghostProfile_ptrGhostHeader);
+	NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.memcard.ghostProfile_fileName);
+	NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, &sdata_static.memcard.ghostProfile_fileIconHeader);
 	NativeCheckpoint_RelocatePushBuffer(oldHeader, liveHeader, &sdata_static.pushBuffer_DecalMP);
 }
 

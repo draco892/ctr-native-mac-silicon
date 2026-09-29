@@ -544,7 +544,10 @@ struct GhostProfile
 	s16 characterID;
 
 	// 0x2C
-	int memcardProfileIndex;
+	u16 memcardProfileIndex;
+
+	// 0x2E
+	u16 padding_2e;
 
 	// 0x30
 	int trackTime;
