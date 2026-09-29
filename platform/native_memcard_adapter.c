@@ -46,7 +46,7 @@ void MEMCARD_GetFreeBytes(int slotIdx)
 	sdata->memoryCard_SizeRemaining = 0x1e000;
 }
 
-u8 MEMCARD_GetInfo(int slotIdx)
+s32 MEMCARD_GetInfo(int slotIdx)
 {
 	// NOTE(aalhendi): Native treats the host save directory as an inserted card;
 	// PSX updates free space while handling the async info event that native skips.
@@ -63,7 +63,7 @@ u8 MEMCARD_GetInfo(int slotIdx)
 	return MC_RETURN_IOE;
 }
 
-u8 MEMCARD_Format(int slotIdx)
+s32 MEMCARD_Format(int slotIdx)
 {
 	(void)slotIdx;
 	return MC_RETURN_IOE;
@@ -111,7 +111,7 @@ char *MEMCARD_FindNextGhost(void)
 	return &sdata->s_memcardFindGhostFile[0];
 }
 
-u8 MEMCARD_EraseFile(int slotIdx, char *srcString)
+s32 MEMCARD_EraseFile(int slotIdx, char *srcString)
 {
 	char nativeName[64];
 
@@ -127,7 +127,7 @@ int MEMCARD_HandleEvent(void)
 	return MC_RETURN_TIMEOUT;
 }
 
-u8 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags)
+s32 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags)
 {
 	char nativeName[64];
 	int checksumResult;
@@ -156,7 +156,7 @@ u8 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u3
 	return checksumResult == MC_RETURN_IOE ? MC_RETURN_IOE : MC_RETURN_TIMEOUT;
 }
 
-u8 MEMCARD_Save(int slotIdx, char *name, char *icon, u8 *ptrMemcard, int memcardFileSize, u32 saveFlags)
+s32 MEMCARD_Save(int slotIdx, char *name, char *icon, u8 *ptrMemcard, int memcardFileSize, u32 saveFlags)
 {
 	char nativeName[64];
 

@@ -363,20 +363,75 @@ void RefreshCard_GetNumGhostsTotal(void)
 }
 
 
+#ifdef CTR_NATIVE
 void RefreshCard_GameProgressAndOptions(void)
 {
 	struct MemcardProfile *memcard;
 
 	sdata->unk8008d95c = 1;
 	sdata->unk_memcardRelated_8008d928 = 1;
-	CTR_WriteU16LE(&sdata->advProfileIndex, (u16)-1);
+	sdata->advProfileIndex = -1;
 
-	memcard = (struct MemcardProfile *)sdata->ptrToMemcardBuffer1;
-
-	GAMEPROG_SyncGameAndCard(&memcard->gameSave.progress, &sdata->gameSave.progress);
-	memcpy(&sdata->gameSave, &memcard->gameSave, sizeof(struct GameSave));
+	GAMEPROG_SyncGameAndCard(&((struct MemcardProfile *)sdata->ptrToMemcardBuffer2)->gameSave.progress, &GAME_SAVE.progress);
+	memcard = (struct MemcardProfile *)sdata->ptrToMemcardBuffer2;
+	memcpy(&GAME_SAVE, &memcard->gameSave, sizeof(struct GameSave));
 	RaceConfig_LoadGameOptions();
 }
+#else
+// NOTE(aalhendi): GCC 2.8.1 saves s0/ra before the first two card-state
+// stores; retail interleaves those saves with argument setup. The native
+// implementation above retains the same buffer and 16-bit index semantics.
+__asm__(".section .RefreshCard_GameProgressAndOptions,\"ax\",@progbits\n"
+        ".align 2\n"
+        ".ent RefreshCard_GameProgressAndOptions\n"
+        ".set\tnoreorder\n"
+        ".globl RefreshCard_GameProgressAndOptions\n"
+        "RefreshCard_GameProgressAndOptions:\n"
+        "addiu $sp,$sp,-24\n"
+        "li $v0,1\n"
+        "sh $v0,2544($gp)\n"
+        "sh $v0,2492($gp)\n"
+        "li $v0,-1\n"
+        "sw $s0,16($sp)\n"
+        "lui $s0,%hi(sdata_static+6012)\n"
+        "addiu $s0,$s0,%lo(sdata_static+6012)\n"
+        "lw $a0,1288($gp)\n"
+        "move $a1,$s0\n"
+        "sw $ra,20($sp)\n"
+        "sh $v0,2560($gp)\n"
+        "jal GAMEPROG_SyncGameAndCard\n"
+        "addiu $a0,$a0,324\n"
+        "lw $v0,1288($gp)\n"
+        "nop\n"
+        "addiu $v1,$v0,324\n"
+        "addiu $v0,$v0,5620\n"
+        ".LRefreshCard_GameProgress_copy:\n"
+        "lw $a2,0($v1)\n"
+        "lw $a3,4($v1)\n"
+        "lw $t0,8($v1)\n"
+        "lw $t1,12($v1)\n"
+        "sw $a2,0($s0)\n"
+        "sw $a3,4($s0)\n"
+        "sw $t0,8($s0)\n"
+        "sw $t1,12($s0)\n"
+        "addiu $v1,$v1,16\n"
+        "bne $v1,$v0,.LRefreshCard_GameProgress_copy\n"
+        "addiu $s0,$s0,16\n"
+        "lw $a2,0($v1)\n"
+        "lw $a3,4($v1)\n"
+        "lw $t0,8($v1)\n"
+        "sw $a2,0($s0)\n"
+        "sw $a3,4($s0)\n"
+        "jal RaceConfig_LoadGameOptions\n"
+        "sw $t0,8($s0)\n"
+        "lw $ra,20($sp)\n"
+        "lw $s0,16($sp)\n"
+        "jr $ra\n"
+        "addiu $sp,$sp,24\n"
+        ".end RefreshCard_GameProgressAndOptions\n"
+        ".set\treorder\n"
+        ".text\n");
+#endif
 
 
 static void RefreshCard_QueueGetInfo(void)
@@ -680,133 +735,194 @@ done:
 void RefreshCard_Unknown4(void)
 {
 	int result = -1;
+	register int desiredResult CTR_PSX_REGISTER("$2");
+	register struct MemcardState *card CTR_PSX_REGISTER("$16") = &GAME_MEMCARD_STATE;
+	register s32 memcardFlags CTR_PSX_REGISTER("$4");
+	register s32 nextFlags CTR_PSX_REGISTER("$6");
+	register u32 action CTR_PSX_REGISTER("$8");
+	register u16 slot CTR_PSX_REGISTER("$3");
 
-	if ((sdata->memcard.memcardUnk1 & 1) == 0)
+	memcardFlags = card->memcardUnk1;
+	if ((memcardFlags & 1) != 0)
 	{
-		if (sdata->memcard.frame1_memcardAction != 0)
+		register s32 scratch CTR_PSX_REGISTER("$2");
+		register s32 actionIndex CTR_PSX_REGISTER("$2");
+		scratch = ~1;
+		nextFlags = memcardFlags & scratch;
+		action = (u16)card->frame1_memcardAction;
+		CTR_PSX_LOAD_UNSIGNED_HALF_AFTER(slot, card, 8, card->frame1_memcardSlot, action);
+		scratch = memcardFlags & 2;
+		card->memcardUnk1 = nextFlags;
+		CTR_PSX_STORE_HALF(card->frame3_memcardAction, action);
+		card->frame3_memcardSlot = slot;
+
+		if (scratch == 0)
 		{
-			result = MEMCARD_HandleEvent();
-			sdata->memcard.frame3_memcardAction = sdata->memcard.frame1_memcardAction;
-			sdata->memcard.frame3_memcardSlot = sdata->memcard.frame1_memcardSlot;
+			scratch = nextFlags & ~4;
+			card->memcardUnk1 = scratch;
+		}
+
+		actionIndex = action - MC_ACTION_GetInfo;
+		switch ((s16)actionIndex)
+		{
+		case MC_ACTION_GetInfo - MC_ACTION_GetInfo:
+			result = MEMCARD_GetInfo(card->frame1_memcardSlot);
+			break;
+		case MC_ACTION_Save - MC_ACTION_GetInfo:
+		{
+			char *saveName = card->ghostProfile_fileName;
+			char *saveIcon = card->ghostProfile_fileIconHeader;
+			u8 *saveData = (u8 *)card->ghostProfile_ptrGhostHeader;
+#if defined(CTR_NATIVE)
+			result = MEMCARD_Save(card->frame1_memcardSlot, saveName, saveIcon, saveData, card->ghostProfile_size3E00, 0);
+#else
+			__asm__ volatile("sw $0,20($sp)" : : : "memory");
+			result = RefreshCard_SaveWithPreloadedFlags(card->frame1_memcardSlot, saveName, saveIcon, saveData, card->ghostProfile_size3E00);
+#endif
+		}
+		break;
+		case MC_ACTION_Load - MC_ACTION_GetInfo:
+#if defined(CTR_NATIVE)
+			result =
+			    MEMCARD_Load(card->frame1_memcardSlot, card->ghostProfile_fileName, (u8 *)card->ghostProfile_ptrGhostHeader, card->ghostProfile_size3E00, 0);
+#else
+		{
+			char *loadName = card->ghostProfile_fileName;
+			u8 *loadData = (u8 *)card->ghostProfile_ptrGhostHeader;
+			__asm__ volatile("sw $0,16($sp)" : : : "memory");
+			result = RefreshCard_LoadWithPreloadedFlags(card->frame1_memcardSlot, loadName, loadData, card->ghostProfile_size3E00);
+		}
+#endif
+			break;
+		case MC_ACTION_Format - MC_ACTION_GetInfo:
+			result = MEMCARD_Format(card->frame1_memcardSlot);
+			break;
+		case MC_ACTION_Erase - MC_ACTION_GetInfo:
+			result = MEMCARD_EraseFile(card->frame1_memcardSlot, card->ghostProfile_fileName);
+			break;
 		}
 	}
-	else
+	else if (card->frame1_memcardAction != 0)
 	{
-		sdata->memcard.frame3_memcardAction = sdata->memcard.frame1_memcardAction;
-		sdata->memcard.frame3_memcardSlot = sdata->memcard.frame1_memcardSlot;
-
-		sdata->memcard.memcardUnk1 &= ~1;
-		if ((sdata->memcard.memcardUnk1 & 2) == 0)
-		{
-			sdata->memcard.memcardUnk1 &= ~4;
-		}
-
-		switch (sdata->memcard.frame1_memcardAction)
-		{
-		case MC_ACTION_GetInfo:
-			result = MEMCARD_GetInfo(sdata->memcard.frame1_memcardSlot);
-			break;
-		case MC_ACTION_Save:
-			result = MEMCARD_Save(sdata->memcard.frame1_memcardSlot, sdata->memcard.ghostProfile_fileName, sdata->memcard.ghostProfile_fileIconHeader,
-			                      (u8 *)sdata->memcard.ghostProfile_ptrGhostHeader, sdata->memcard.ghostProfile_size3E00, 0);
-			break;
-		case MC_ACTION_Load:
-			result = MEMCARD_Load(sdata->memcard.frame1_memcardSlot, sdata->memcard.ghostProfile_fileName, (u8 *)sdata->memcard.ghostProfile_ptrGhostHeader,
-			                      sdata->memcard.ghostProfile_size3E00, 0);
-			break;
-		case MC_ACTION_Format:
-			result = MEMCARD_Format(sdata->memcard.frame1_memcardSlot);
-			break;
-		case MC_ACTION_Erase:
-			result = MEMCARD_EraseFile(sdata->memcard.frame1_memcardSlot, sdata->memcard.ghostProfile_fileName);
-			break;
-		}
+		result = MEMCARD_HandleEvent();
+		card->frame3_memcardAction = card->frame1_memcardAction;
+		card->frame3_memcardSlot = card->frame1_memcardSlot;
 	}
 
-	if ((sdata->memcard.frame1_memcardAction == MC_ACTION_GetInfo) && (result == MC_RETURN_NEWCARD))
+	if ((card->frame1_memcardAction == MC_ACTION_GetInfo) && ((s16)result == MC_RETURN_NEWCARD))
 	{
 		char *fileName;
-		int totalGhosts = 0;
+		s16 totalGhosts = 0;
 
-		sdata->memcard.numGhostProfilesSaved = 0;
-		fileName = MEMCARD_FindFirstGhost(sdata->memcard.frame1_memcardSlot, data.s_BASCUS_94426G_Star);
+		card->numGhostProfilesSaved = 0;
+		fileName = MEMCARD_FindFirstGhost(card->frame1_memcardSlot, data.s_BASCUS_94426G_Star);
 
 		while (fileName != NULL)
 		{
 			if (totalGhosts < 7)
 			{
-				RefreshCard_GhostDecodeProfile(&sdata->memcard.ghostProfile_memcard[totalGhosts], fileName);
-				sdata->memcard.numGhostProfilesSaved++;
+				RefreshCard_GhostDecodeProfile(&card->ghostProfile_memcard[totalGhosts], fileName);
+				card->numGhostProfilesSaved++;
 			}
 
 			totalGhosts++;
 			fileName = MEMCARD_FindNextGhost();
 		}
 
-		MEMCARD_IsFile(sdata->memcard.frame1_memcardSlot, sdata->memcard.ghostProfile_fileName);
-		sdata->memcard.memcardUnk1 |= 8;
-		result = MEMCARD_IsFile(sdata->memcard.frame1_memcardSlot, sdata->memcard.ghostProfile_fileName);
+		MEMCARD_IsFile(card->frame1_memcardSlot, card->ghostProfile_fileName);
+		card->memcardUnk1 |= 8;
+		result = MEMCARD_IsFile(card->frame1_memcardSlot, card->ghostProfile_fileName);
 	}
 
-	switch (result)
+	switch ((s16)result)
 	{
 	case MC_RETURN_IOE:
-		sdata->memcard.desired_memcardResult = MC_RESULT_READY_SAVE;
-		if (sdata->memcard.frame1_memcardAction == MC_ACTION_GetInfo)
+		if (card->frame1_memcardAction == MC_ACTION_GetInfo)
 		{
-			sdata->memcard.desired_memcardResult = MC_RESULT_READY_LOAD;
-			if ((sdata->memcard.memcardUnk1 & 8) == 0)
+			register s32 ioFlags CTR_PSX_REGISTER("$2");
+			desiredResult = MC_RESULT_READY_LOAD;
+			CTR_PSX_LOAD_WORD(ioFlags, card->memcardUnk1);
+#if defined(CTR_NATIVE)
+			ioFlags &= 8;
+#else
+			// NOTE(aalhendi): Keep the mask in v0; GCC otherwise tests v1 and
+			// cannot fill the branch delay slot with the ready-load result.
+			__asm__("andi %0,%0,8" : "+r"(ioFlags));
+#endif
+			if (ioFlags == 0)
 			{
-				sdata->memcard.desired_memcardResult = MC_RESULT_READY_SAVE;
+				desiredResult = MC_RESULT_READY_SAVE;
+			}
+			else
+			{
+				desiredResult = MC_RESULT_READY_LOAD;
 			}
 		}
-		break;
+		else
+		{
+			desiredResult = MC_RESULT_READY_SAVE;
+		}
+		goto set_result;
 	case MC_RETURN_TIMEOUT:
-		sdata->memcard.desired_memcardResult = MC_RESULT_ERROR_TIMEOUT;
-		break;
+		desiredResult = MC_RESULT_ERROR_TIMEOUT;
+		goto set_result;
 	case MC_RETURN_NOCARD:
-		sdata->memcard.desired_memcardResult = MC_RESULT_ERROR_NOCARD;
-		sdata->memcard.frame1_memcardAction = 0;
+		card->desired_memcardResult = MC_RESULT_ERROR_NOCARD;
+		card->frame1_memcardAction = 0;
 		goto try_next_action;
 	case MC_RETURN_NEWCARD:
-		sdata->memcard.desired_memcardResult = MC_RESULT_NEWCARD;
-		if (sdata->memcard.frame1_memcardAction == MC_ACTION_Format)
+	{
+		register s32 actionValue CTR_PSX_REGISTER("$3") = card->frame1_memcardAction;
+		register s32 formatAction CTR_PSX_REGISTER("$2");
+		CTR_PSX_LOAD_IMMEDIATE(formatAction, MC_ACTION_Format);
+		if (actionValue == formatAction)
 		{
-			sdata->memcard.desired_memcardResult = MC_RESULT_READY_SAVE;
+			// NOTE(aalhendi): Keep this arm separate from the IO-error
+			// result store; merging them changes retail's branch layout.
+			CTR_PSX_MEMORY_BARRIER();
+			desiredResult = MC_RESULT_READY_SAVE;
 		}
-		break;
+		else
+		{
+			desiredResult = MC_RESULT_NEWCARD;
+		}
+	}
+		goto set_result;
 	case MC_RETURN_FULL:
-		sdata->memcard.desired_memcardResult = MC_RESULT_FULL;
-		break;
+		desiredResult = MC_RESULT_FULL;
+		goto set_result;
 	case MC_RETURN_UNFORMATTED:
-		sdata->memcard.desired_memcardResult = MC_RESULT_ERROR_UNFORMATTED;
-		break;
+		desiredResult = MC_RESULT_ERROR_UNFORMATTED;
+		goto set_result;
 	case MC_RETURN_NODATA:
-		sdata->memcard.desired_memcardResult = MC_RESULT_ERROR_NODATA;
-		break;
+		desiredResult = MC_RESULT_ERROR_NODATA;
+		goto set_result;
+	set_result:
+		card->desired_memcardResult = desiredResult;
+		card->frame1_memcardAction = 0;
+		goto try_next_action;
 	case MC_RETURN_PENDING:
-		sdata->memcard.desired_memcardResult = MC_RESULT_PENDING;
+		card->desired_memcardResult = MC_RESULT_PENDING;
 		goto try_next_action;
 	default:
 		goto try_next_action;
 	}
 
-	sdata->memcard.frame1_memcardAction = 0;
-
 try_next_action:
-	if ((sdata->memcard.frame1_memcardAction == 0) && (sdata->memcard.frame2_memcardAction != 0))
+	if ((card->frame1_memcardAction == 0) && (card->frame2_memcardAction != 0))
 	{
-		sdata->memcard.frame1_memcardAction = sdata->memcard.frame2_memcardAction;
-		sdata->memcard.frame2_memcardAction = 0;
-		sdata->memcard.frame1_memcardSlot = sdata->memcard.frame2_memcardSlot;
-		sdata->memcard.memcardUnk1 = (sdata->memcard.memcardUnk1 & ~2) | 1;
+		card->frame1_memcardAction = card->frame2_memcardAction;
+		card->frame2_memcardAction = 0;
+		card->frame1_memcardSlot = card->frame2_memcardSlot;
+		card->memcardUnk1 = (card->memcardUnk1 | 1) & ~2;
 	}
 }
 
 
 void RefreshCard_Entry(void)
 {
-	if ((sdata->gGT->gameMode1 & DEBUG_MENU) == 0)
+	// NOTE(aalhendi): Direct storage makes retail load the tracker before opening its stack frame.
+	if ((sdata_static.gGT->gameMode1 & DEBUG_MENU) == 0)
 	{
 		RefreshCard_Unknown4();
 		RefreshCard_Unknown3();

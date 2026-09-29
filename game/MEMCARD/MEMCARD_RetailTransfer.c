@@ -1,6 +1,6 @@
 #include <common.h>
 
-u8 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags)
+s32 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags)
 {
 	if (sdata->memcard_stage != MC_STAGE_IDLE)
 		return MC_RETURN_TIMEOUT;
@@ -25,7 +25,7 @@ u8 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u3
 	return MEMCARD_ReadFile(0, 0x80);
 }
 
-u8 MEMCARD_Save(int slotIdx, char *name, char *param_3, u8 *ptrMemcard, int memcardFileSize, u32 saveFlags)
+s32 MEMCARD_Save(int slotIdx, char *name, char *param_3, u8 *ptrMemcard, int memcardFileSize, u32 saveFlags)
 
 {
 	if (sdata->memcard_stage != MC_STAGE_IDLE)

@@ -490,16 +490,22 @@ void MEMCARD_CloseFile(void);
 int MEMCARD_ReadFile(int start_offset, int size);
 u8 MEMCARD_WriteFile(int start_offset, const u8 *data, int size);
 void MEMCARD_GetFreeBytes(int slotIdx);
-u8 MEMCARD_GetInfo(int slotIdx);
-u8 MEMCARD_Format(int slotIdx);
+s32 MEMCARD_GetInfo(int slotIdx);
+s32 MEMCARD_Format(int slotIdx);
 int MEMCARD_IsFile(int slotIdx, char *save_name);
 char *MEMCARD_FindFirstGhost(int slotIdx, char *srcString);
 char *MEMCARD_FindNextGhost(void);
-u8 MEMCARD_EraseFile(int slotIdx, char *srcString);
+s32 MEMCARD_EraseFile(int slotIdx, char *srcString);
 int MEMCARD_HandleEvent(void);
 s32 MEMCARD_WaitForHwEvent(void);
-u8 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags);
-u8 MEMCARD_Save(int slotIdx, char *name, char *icon, u8 *ptrMemcard, int memcardFileSize, u32 saveFlags);
+s32 MEMCARD_Load(int slotIdx, char *name, u8 *ptrMemcard, int memcardFileSize, u32 loadFlags);
+s32 MEMCARD_Save(int slotIdx, char *name, char *icon, u8 *ptrMemcard, int memcardFileSize, u32 saveFlags);
+#if !defined(CTR_NATIVE)
+// NOTE(aalhendi): RefreshCard_Unknown4 stores the final zero stack argument
+// before evaluating the others. These PSX call shapes preserve that order.
+s32 RefreshCard_SaveWithPreloadedFlags(int slotIdx, char *name, char *icon, u8 *data, int size) asm("MEMCARD_Save");
+s32 RefreshCard_LoadWithPreloadedFlags(int slotIdx, char *name, u8 *data, int size) asm("MEMCARD_Load");
+#endif
 
 void RaceConfig_LoadGameOptions(void);
 void RaceConfig_SaveGameOptions(void);

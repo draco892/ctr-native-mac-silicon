@@ -54,6 +54,7 @@
 #define GAME_CSEQ_HEADER                   ctr_cseqHeader
 #define GAME_HOWL_SPU_ADDRS                ctr_howlSpuAddrs
 #define GAME_GARAGE_SOUND_POOL             ctr_garageSoundPool
+#define GAME_MEMCARD_STATE                 ctr_memcardState
 #define GAME_MEMCARD_DIR_HEADER            ctr_memcardDirHeader
 #define GAME_MEMCARD_SW_IOE                ctr_memcardSwIOE
 #define GAME_MEMCARD_HW_IOE                ctr_memcardHwIOE
@@ -112,6 +113,7 @@ extern struct HowlHeader *ctr_howlHeader asm("sdata_static+2132");
 extern struct CseqHeader *ctr_cseqHeader asm("sdata_static+2116");
 extern struct SpuAddrEntry *ctr_howlSpuAddrs asm("sdata_static+2160");
 extern struct GarageFX ctr_garageSoundPool[8] asm("sdata_static+37752");
+extern struct MemcardState ctr_memcardState asm("sdata_static+56004");
 extern char ctr_memcardDirHeader[8] asm("sdata_static+1192");
 // NOTE(aalhendi): Link these as plain small-data symbols so GCC emits the
 // retail GP-relative event-handle loads before the stack frame is opened.

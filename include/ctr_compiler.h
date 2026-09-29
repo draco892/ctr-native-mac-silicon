@@ -121,6 +121,12 @@
 		(void)(dependency);                                                            \
 	} while (0)
 #define CTR_PSX_LOAD_UNSIGNED_HALF(result, base, byteOffset, nativeValue) ((result) = (u16)(nativeValue))
+#define CTR_PSX_LOAD_UNSIGNED_HALF_AFTER(result, base, byteOffset, nativeValue, dependency) \
+	do                                                                                   \
+	{                                                                                    \
+		(result) = (u16)(nativeValue);                                                    \
+		(void)(dependency);                                                              \
+	} while (0)
 #define CTR_PSX_SHIFT_LEFT_IN_PLACE(value, shift)                         ((value) = CTR_MipsSll((value), (shift)))
 #define CTR_PSX_SHIFT_RIGHT_ARITHMETIC(result, value, shift)              ((result) = CTR_MipsSra((value), (shift)))
 #define CTR_PSX_SHIFT_RIGHT_ARITHMETIC_IN_PLACE(value, shift)             ((value) = CTR_MipsSra((value), (shift)))
@@ -204,6 +210,8 @@
 // NOTE(aalhendi): This scheduling seam is used before any write to the loaded byte.
 #define CTR_PSX_LOAD_GP_UNSIGNED_BYTE_AFTER(result, gpOffset, nativeValue, dependency) __asm__("lbu %0,%2($gp)" : "=r"(result) : "r"(dependency), "I"(gpOffset))
 #define CTR_PSX_LOAD_UNSIGNED_HALF(result, base, byteOffset, nativeValue) __asm__("lhu %0,%2(%1)" : "=r"(result) : "r"(base), "I"(byteOffset), "m"(nativeValue))
+#define CTR_PSX_LOAD_UNSIGNED_HALF_AFTER(result, base, byteOffset, nativeValue, dependency) \
+	__asm__("lhu %0,%2(%1)" : "=r"(result) : "r"(base), "I"(byteOffset), "r"(dependency), "m"(nativeValue))
 #define CTR_PSX_SHIFT_LEFT_IN_PLACE(value, shift)                         __asm__("sll %0,%0,%1" : "+r"(value) : "I"(shift))
 #define CTR_PSX_SHIFT_RIGHT_ARITHMETIC(result, value, shift)              __asm__("sra %0,%1,%2" : "=r"(result) : "r"(value), "I"(shift))
 #define CTR_PSX_SHIFT_RIGHT_ARITHMETIC_IN_PLACE(value, shift)             __asm__("sra %0,%0,%1" : "+r"(value) : "I"(shift))

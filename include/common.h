@@ -57,6 +57,7 @@
 #define GAME_CSEQ_HEADER             (sdata->ptrCseqHeader)
 #define GAME_HOWL_SPU_ADDRS          (sdata->howl_spuAddrs)
 #define GAME_GARAGE_SOUND_POOL       (sdata->garageSoundPool)
+#define GAME_MEMCARD_STATE           (sdata->memcard)
 #define GAME_MEMCARD_DIR_HEADER      (sdata->s_memcardDirHeader)
 #define GAME_MEMCARD_SW_IOE          (sdata->SwCARD_EvSpIOE)
 #define GAME_MEMCARD_HW_IOE          (sdata->HwCARD_EvSpIOE)

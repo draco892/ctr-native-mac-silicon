@@ -3739,7 +3739,8 @@ struct sData
 	s16 padding_8008d96a;
 
 	// 8008d96c
-	int advProfileIndex;
+	s16 advProfileIndex;
+	s16 padding_8008d96e;
 
 	// 8008d970
 	// frame timer for color animation:

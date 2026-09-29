@@ -28,7 +28,7 @@ void MEMCARD_GetFreeBytes(int slotIdx)
 	return;
 }
 
-u8 MEMCARD_GetInfo(int slotIdx)
+s32 MEMCARD_GetInfo(int slotIdx)
 {
 	if (sdata->memcard_stage != MC_STAGE_IDLE)
 		return MC_RETURN_TIMEOUT;
@@ -49,7 +49,7 @@ u8 MEMCARD_GetInfo(int slotIdx)
 	return MC_RETURN_PENDING;
 }
 
-u8 MEMCARD_Format(int slotIdx)
+s32 MEMCARD_Format(int slotIdx)
 {
 	if (sdata->memcard_stage != MC_STAGE_IDLE)
 		return MC_RETURN_TIMEOUT;
@@ -138,7 +138,7 @@ char *MEMCARD_FindNextGhost(void)
 }
 
 // called by MC_ACTION_Erase
-u8 MEMCARD_EraseFile(int slotIdx, char *srcString)
+s32 MEMCARD_EraseFile(int slotIdx, char *srcString)
 {
 	char name[64];
 
