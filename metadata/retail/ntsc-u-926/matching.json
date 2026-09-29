@@ -1680,6 +1680,22 @@
       "aspsx_version": "2.77"
     },
     {
+      "name": "memcard-card-events",
+      "kind": "resident",
+      "artifact": "exe",
+      "symbol_file": "metadata/retail/ntsc-u-926/symbols/syms926.txt",
+      "start_symbol": "MEMCARD_GetNextSwEvent",
+      "end_symbol": "MEMCARD_NewTask",
+      "symbol_prefix": "MEMCARD_",
+      "source": "game/MEMCARD/MEMCARD_Events.c",
+      "include_directories": ["include"],
+      "forced_includes": ["tools/matching/retail_bindings.h"],
+      "compiler_flags": ["-O2", "-G8", "-msoft-float"],
+      "small_data_limit": 8,
+      "aspsx_version": "2.77",
+      "link_symbols": {"_gp": "0x8008cf6c", "ctr_memcardSwIOE": "0x8008d8d4", "ctr_memcardHwIOE": "0x8008d8c8"}
+    },
+    {
       "name": "memcard-wait-hw-event",
       "kind": "resident",
       "artifact": "exe",

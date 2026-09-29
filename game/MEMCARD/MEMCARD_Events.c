@@ -1,21 +1,21 @@
 #include <common.h>
 
-u8 MEMCARD_GetNextSwEvent(void)
+s32 MEMCARD_GetNextSwEvent(void)
 {
 	// IOE = IO End, meaning "finished without error"
-	if (TestEvent(sdata->SwCARD_EvSpIOE))
+	if (TestEvent(GAME_MEMCARD_SW_IOE) == 1)
 	{
 		return MC_RETURN_IOE;
 	}
-	if (TestEvent(sdata->SwCARD_EvSpERROR))
+	if (TestEvent(sdata->SwCARD_EvSpERROR) == 1)
 	{
 		return MC_RETURN_TIMEOUT;
 	}
-	if (TestEvent(sdata->SwCARD_EvSpTIMOUT))
+	if (TestEvent(sdata->SwCARD_EvSpTIMOUT) == 1)
 	{
 		return MC_RETURN_NOCARD;
 	}
-	if (TestEvent(sdata->SwCARD_EvSpNEW))
+	if (TestEvent(sdata->SwCARD_EvSpNEW) == 1)
 	{
 		return MC_RETURN_NEWCARD;
 	}
@@ -23,22 +23,22 @@ u8 MEMCARD_GetNextSwEvent(void)
 	return MC_RETURN_PENDING;
 }
 
-u8 MEMCARD_GetNextHwEvent(void)
+s32 MEMCARD_GetNextHwEvent(void)
 {
 	// IOE = IO End, meaning "finished without error"
-	if (TestEvent(sdata->HwCARD_EvSpIOE))
+	if (TestEvent(GAME_MEMCARD_HW_IOE) == 1)
 	{
 		return MC_RETURN_IOE;
 	}
-	if (TestEvent(sdata->HwCARD_EvSpERROR))
+	if (TestEvent(sdata->HwCARD_EvSpERROR) == 1)
 	{
 		return MC_RETURN_TIMEOUT;
 	}
-	if (TestEvent(sdata->HwCARD_EvSpTIMOUT))
+	if (TestEvent(sdata->HwCARD_EvSpTIMOUT) == 1)
 	{
 		return MC_RETURN_NOCARD;
 	}
-	if (TestEvent(sdata->HwCARD_EvSpNEW))
+	if (TestEvent(sdata->HwCARD_EvSpNEW) == 1)
 	{
 		return MC_RETURN_NEWCARD;
 	}
@@ -75,7 +75,7 @@ s32 MEMCARD_WaitForHwEvent(void)
 	}
 }
 
-void MEMCARD_SkipEvents(void)
+s32 MEMCARD_SkipEvents(void)
 {
 	// Flush all "previous" Events until everything shows PENDING
 	while (MEMCARD_GetNextSwEvent() != MC_RETURN_PENDING)
@@ -86,4 +86,5 @@ void MEMCARD_SkipEvents(void)
 	{
 		;
 	}
+	return MC_RETURN_PENDING;
 }
