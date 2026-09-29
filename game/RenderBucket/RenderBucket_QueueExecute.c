@@ -1270,8 +1270,19 @@ static struct ModelHeader *RenderBucket_SelectModelHeader(struct Instance *inst,
 
 static void RenderBucket_GteLoadRotMatrixWords(u32 m0, u32 m1, u32 m2, u32 m3, u32 m4)
 {
-	// Load the retail t3/t4/t5/t6/t7 tuple into GTE rotation registers 0-4.
+	// NOTE(aalhendi): The retail loader consumes t3-t7, not C ABI arguments.
+#ifdef CTR_NATIVE
 	MATRIX_SET_r11r12r13r14r15(m0, m1, m2, m3, m4);
+#else
+	register u32 t3 CTR_PSX_REGISTER("$11") = m0;
+	register u32 t4 CTR_PSX_REGISTER("$12") = m1;
+	register u32 t5 CTR_PSX_REGISTER("$13") = m2;
+	register u32 t6 CTR_PSX_REGISTER("$14") = m3;
+	__asm__ volatile(".set noreorder\n\tjal MATRIX_SET_r11r12r13r14r15\n\tlw $15,%4\n\t.set reorder"
+	                 :
+	                 : "r"(t3), "r"(t4), "r"(t5), "r"(t6), "m"(m4)
+	                 : "$15", "$31", "memory");
+#endif
 }
 
 static void RenderBucket_StoreMatrixWords(MATRIX *m, u32 m0, u32 m1, u32 m2, u32 m3, u32 m4)
@@ -1294,10 +1305,21 @@ static void RenderBucket_LoadMatrixWords(const MATRIX *m, u32 *m0, u32 *m1, u32 
 
 static void RenderBucket_GteLoadLightMatrixWords(const MATRIX *m)
 {
-	// Load the retail t3/t4/t5/t6/t7 tuple into GTE light matrix registers 8-12.
+	// NOTE(aalhendi): The retail loader consumes t3-t7, not C ABI arguments.
+#ifdef CTR_NATIVE
 	Unknown_8006c600(RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[0][0])), RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[0][2])),
 	                 RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[1][1])), RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[2][0])),
 	                 RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[2][2])));
+#else
+	register u32 t3 CTR_PSX_REGISTER("$11") = RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[0][0]));
+	register u32 t4 CTR_PSX_REGISTER("$12") = RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[0][2]));
+	register u32 t5 CTR_PSX_REGISTER("$13") = RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[1][1]));
+	register u32 t6 CTR_PSX_REGISTER("$14") = RenderBucket_ReadMatrixWord(m, offsetof(MATRIX, m[2][0]));
+	__asm__ volatile(".set noreorder\n\tjal Unknown_8006c600\n\tlw $15,%5(%4)\n\t.set reorder"
+	                 :
+	                 : "r"(t3), "r"(t4), "r"(t5), "r"(t6), "r"(m), "I"(offsetof(MATRIX, m[2][2]))
+	                 : "$15", "$31", "memory");
+#endif
 }
 
 static void RenderBucket_GteScaleMatrixColumns(u32 *m0, u32 *m1, u32 *m2, u32 *m3, u32 *m4)

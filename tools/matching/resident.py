@@ -344,7 +344,7 @@ def link_contiguous_block(
     functions: list[FunctionRange],
     object_file: Path,
 ) -> dict[str, Any]:
-    """Check the actual function order and initialized data in one link."""
+    """Check the actual function order and optional initialized data in one link."""
     output = BUILD_ROOT / config["name"] / "linked_block"
     output.mkdir(parents=True, exist_ok=True)
     linked_object = output / "block.elf"
@@ -353,14 +353,22 @@ def link_contiguous_block(
     block = config["linked_block"]
     start = functions[0].address
     size = sum(function.size for function in functions)
-    rodata_address = ctr_match.parse_int(block["rodata_address"])
-    rodata_size = ctr_match.parse_int(block["rodata_size"])
+    if ("rodata_address" in block) != ("rodata_size" in block):
+        raise ctr_match.MatchError("linked block needs both rodata address and size")
+    has_rodata = "rodata_address" in block
+    rodata_address = ctr_match.parse_int(block["rodata_address"]) if has_rodata else None
+    rodata_size = ctr_match.parse_int(block["rodata_size"]) if has_rodata else 0
     sections = " ".join(f"*(.{function.name})" for function in functions)
+    rodata_script = (
+        f"  .rodata 0x{rodata_address:08x} : SUBALIGN(4) "
+        "{ *(.rodata*) *(.rdata*) }\n"
+        if rodata_address is not None
+        else ""
+    )
     linker_script.write_text(
         "SECTIONS {\n"
         f"  .resident_block 0x{start:08x} : SUBALIGN(4) {{ {sections} }}\n"
-        f"  .rodata 0x{rodata_address:08x} : SUBALIGN(4) "
-        "{ *(.rodata*) *(.rdata*) }\n"
+        f"{rodata_script}"
         "  /DISCARD/ : { *(*) }\n"
         "}\n"
     )
@@ -386,8 +394,10 @@ def link_contiguous_block(
     code_section = ctr_match.linked_section(
         toolchain.binutils["objdump"], linked_object, ".resident_block"
     )
-    rodata_section = ctr_match.linked_section(
-        toolchain.binutils["objdump"], linked_object, ".rodata"
+    rodata_section = (
+        ctr_match.linked_section(toolchain.binutils["objdump"], linked_object, ".rodata")
+        if has_rodata
+        else None
     )
     code_placed = code_section == {"address": start, "size": size} and all(
         (symbol := symbols.get(function.name)) is not None
@@ -396,15 +406,14 @@ def link_contiguous_block(
         and symbol["section"] == ".resident_block"
         for function in functions
     )
-    rodata_placed = rodata_section == {
-        "address": rodata_address,
-        "size": rodata_size,
-    }
+    rodata_placed = (
+        rodata_section == {"address": rodata_address, "size": rodata_size}
+        if has_rodata
+        else None
+    )
 
     code = output / "code.bin"
-    rodata = output / "rodata.bin"
     ctr_match.extract_binary_section(toolchain, linked_object, ".resident_block", code)
-    ctr_match.extract_binary_section(toolchain, linked_object, ".rodata", rodata)
     expected_code = output / "retail-code.bin"
     expected_code.write_bytes(
         ctr_match.reference_bytes(
@@ -422,28 +431,38 @@ def link_contiguous_block(
         "retail/resident-block",
         "candidate/resident-block",
     )
-    expected_rodata = ctr_match.reference_bytes(
-        manifest,
-        references,
-        {"region": config["artifact"], "address": rodata_address, "size": rodata_size},
-    )
-    actual_rodata = rodata.read_bytes()
-    rodata_exact = actual_rodata == expected_rodata
+    if has_rodata:
+        rodata = output / "rodata.bin"
+        ctr_match.extract_binary_section(toolchain, linked_object, ".rodata", rodata)
+        expected_rodata = ctr_match.reference_bytes(
+            manifest,
+            references,
+            {"region": config["artifact"], "address": rodata_address, "size": rodata_size},
+        )
+        actual_rodata = rodata.read_bytes()
+    else:
+        expected_rodata = actual_rodata = b""
+    rodata_exact = actual_rodata == expected_rodata if has_rodata else None
+    placement_exact = code_placed and (not has_rodata or rodata_placed)
     return {
         "address": f"0x{start:08x}",
         "size": size,
         "code_placement_exact": code_placed,
         "rodata_placement_exact": rodata_placed,
-        "placement_exact": code_placed and rodata_placed,
+        "placement_exact": placement_exact,
         "code": code_comparison,
-        "rodata_address": f"0x{rodata_address:08x}",
-        "rodata_size": rodata_size,
+        "rodata_address": f"0x{rodata_address:08x}" if has_rodata else None,
+        "rodata_size": rodata_size if has_rodata else None,
         "rodata_exact": rodata_exact,
-        "rodata_candidate_size": len(actual_rodata),
-        "rodata_expected_sha256": ctr_match.sha256_bytes(expected_rodata),
-        "rodata_candidate_sha256": ctr_match.sha256_bytes(actual_rodata),
-        "exact": (
-            code_placed and rodata_placed and code_comparison["exact"] and rodata_exact
+        "rodata_candidate_size": len(actual_rodata) if has_rodata else None,
+        "rodata_expected_sha256": (
+            ctr_match.sha256_bytes(expected_rodata) if has_rodata else None
+        ),
+        "rodata_candidate_sha256": (
+            ctr_match.sha256_bytes(actual_rodata) if has_rodata else None
+        ),
+        "exact": placement_exact and code_comparison["exact"] and (
+            not has_rodata or rodata_exact
         ),
     }
 
@@ -608,7 +627,10 @@ def build_resident(
             print(f"{status:<7} linked block: {error}")
         else:
             code = block_result["code"]
-            rodata = "exact" if block_result["rodata_exact"] else "different"
+            if block_result["rodata_address"] is None:
+                rodata = "unmeasured"
+            else:
+                rodata = "exact" if block_result["rodata_exact"] else "different"
             placement = "exact" if block_result["placement_exact"] else "different"
             print(
                 f"{status:<7} linked block: "

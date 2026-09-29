@@ -56,6 +56,7 @@ static void MATH_Matrix_LoadRotWords(u32 r0, u32 r1, u32 r2, u32 r3, u32 r4)
 	CTC2(r4, 4);
 }
 
+#ifdef CTR_NATIVE
 void MATRIX_SET_r11r12r13r14r15(u32 r0, u32 r1, u32 r2, u32 r3, u32 r4)
 {
 	// NOTE(aalhendi): Retail inputs are t3/t4/t5/t6/t7 and writes GTE regs 0-4.
@@ -71,6 +72,41 @@ void Unknown_8006c600(u32 r0, u32 r1, u32 r2, u32 r3, u32 r4)
 	CTC2(r3, 11);
 	CTC2(r4, 12);
 }
+#else
+// NOTE(aalhendi): These GTE loaders receive t3-t7 from the resident matrix
+// routine, not C ABI arguments. Native keeps callable C implementations.
+__asm__(".section .MATRIX_SET_r11r12r13r14r15,\"ax\",@progbits\n"
+        ".align 2\n"
+        ".ent MATRIX_SET_r11r12r13r14r15\n"
+        ".set noreorder\n"
+        ".globl MATRIX_SET_r11r12r13r14r15\n"
+        "MATRIX_SET_r11r12r13r14r15:\n"
+        "ctc2 $t3,$0\n"
+        "ctc2 $t4,$1\n"
+        "ctc2 $t5,$2\n"
+        "ctc2 $t6,$3\n"
+        "jr $ra\n"
+        "ctc2 $t7,$4\n"
+        ".end MATRIX_SET_r11r12r13r14r15\n"
+        ".set reorder\n"
+        ".text\n");
+
+__asm__(".section .Unknown_8006c600,\"ax\",@progbits\n"
+        ".align 2\n"
+        ".ent Unknown_8006c600\n"
+        ".set noreorder\n"
+        ".globl Unknown_8006c600\n"
+        "Unknown_8006c600:\n"
+        "ctc2 $t3,$8\n"
+        "ctc2 $t4,$9\n"
+        "ctc2 $t5,$10\n"
+        "ctc2 $t6,$11\n"
+        "jr $ra\n"
+        "ctc2 $t7,$12\n"
+        ".end Unknown_8006c600\n"
+        ".set reorder\n"
+        ".text\n");
+#endif
 
 static void MATH_Matrix_MulRotWords(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 {
@@ -79,6 +115,8 @@ static void MATH_Matrix_MulRotWords(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 	u32 t5 = *r2;
 	u32 t6 = *r3;
 	u32 t7 = *r4;
+	u32 nextT6;
+	u32 nextT5;
 
 	u32 v0 = (t3 & 0xffff) | (t4 & 0xffff0000);
 	MTC2(v0, 0);
@@ -103,7 +141,7 @@ static void MATH_Matrix_MulRotWords(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 
 	v0 = MFC2(9);
 	t5 = MFC2(10);
-	u32 nextT6 = MFC2(11);
+	nextT6 = MFC2(11);
 	gte_rtv2_b();
 
 	t3 |= v0 << 0x10;
@@ -111,7 +149,7 @@ static void MATH_Matrix_MulRotWords(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 	t6 |= nextT6 << 0x10;
 
 	v0 = MFC2(9) & 0xffff;
-	u32 nextT5 = MFC2(10);
+	nextT5 = MFC2(10);
 	t7 = MFC2(11);
 
 	t4 |= v0;
@@ -139,6 +177,8 @@ void Unknown_8006c558(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 	u32 t5 = *r2;
 	u32 t6 = *r3;
 	u32 t7 = *r4;
+	u32 nextT6;
+	u32 nextT5;
 
 	u32 v0 = (t3 & 0xffff) | (t4 & 0xffff0000);
 	MTC2(v0, 0);
@@ -163,7 +203,7 @@ void Unknown_8006c558(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 
 	v0 = MFC2(9);
 	t5 = MFC2(10);
-	u32 nextT6 = MFC2(11);
+	nextT6 = MFC2(11);
 	gte_llv2_b();
 
 	t3 |= v0 << 0x10;
@@ -171,7 +211,7 @@ void Unknown_8006c558(u32 *r0, u32 *r1, u32 *r2, u32 *r3, u32 *r4)
 	t6 |= nextT6 << 0x10;
 
 	v0 = MFC2(9) & 0xffff;
-	u32 nextT5 = MFC2(10);
+	nextT5 = MFC2(10);
 	t7 = MFC2(11);
 
 	t4 |= v0;
@@ -328,29 +368,39 @@ void MatrixRotate(void *dst, MATRIX *src, MATRIX *rot)
 	MATH_Matrix_StoreWords(dst, r0, r1, r2, r3, r4);
 }
 
+#ifdef CTR_NATIVE
 s32 SquareRoot0_stub(s32 value)
 {
+	u32 shifted;
+	s32 leading;
+	s32 bit;
+	u32 remainder;
+	u32 root;
+
 	MTC2((u32)value, 30);
 	if (value == 0)
 	{
 		return 0;
 	}
 
-	u32 shifted = (u32)value;
-	s32 leading = MFC2(31) & 0x1e;
+	shifted = (u32)value;
+	leading = MFC2(31) & 0x1e;
 	shifted <<= leading;
 
-	s32 bit = leading ^ 0x1e;
-	u32 remainder = 0;
-	u32 root = 0;
+	bit = leading ^ 0x1e;
+	remainder = 0;
+	root = 0;
 
 	do
 	{
+		u32 trial;
+		u32 nextRemainder;
+
 		remainder |= shifted >> 0x1e;
-		u32 trial = (root << 2) + 1;
+		trial = (root << 2) + 1;
 		root <<= 1;
 
-		u32 nextRemainder = remainder - trial;
+		nextRemainder = remainder - trial;
 		shifted <<= 2;
 		if ((s32)nextRemainder >= 0)
 		{
@@ -367,12 +417,61 @@ s32 SquareRoot0_stub(s32 value)
 
 	return (s32)root;
 }
+#else
+// NOTE(aalhendi): Retail carries the result in v0 and uses the GTE leading-zero
+// count in t1. GCC's C loop adds a second live result register and a branch,
+// so keep this small PSX routine in its original register/branch shape.
+__asm__(".section .SquareRoot0_stub,\"ax\",@progbits\n"
+        ".align 2\n"
+        ".ent SquareRoot0_stub\n"
+        ".set\tnoreorder\n"
+        ".globl SquareRoot0_stub\n"
+        "SquareRoot0_stub:\n"
+        "mtc2 $a0,$30\n"
+        "beq $a0,$zero,.Lsqrt_zero\n"
+        "addiu $v0,$zero,0\n"
+        "mfc2 $t1,$31\n"
+        "addiu $v1,$zero,0\n"
+        "andi $t1,$t1,0x1e\n"
+        "sllv $a0,$a0,$t1\n"
+        "bgez $zero,.Lsqrt_test\n"
+        "xori $t1,$t1,0x1e\n"
+        ".Lsqrt_loop:\n"
+        "srl $t0,$a0,0x1e\n"
+        "or $v1,$v1,$t0\n"
+        "sll $t0,$v0,2\n"
+        "addiu $t0,$t0,1\n"
+        "sll $v0,$v0,1\n"
+        "subu $t0,$v1,$t0\n"
+        "bltz $t0,.Lsqrt_subtract_failed\n"
+        "sll $a0,$a0,2\n"
+        "addiu $v0,$v0,1\n"
+        "sll $v1,$t0,2\n"
+        ".Lsqrt_test:\n"
+        "bgez $t1,.Lsqrt_loop\n"
+        "addiu $t1,$t1,-2\n"
+        "jr $ra\n"
+        ".Lsqrt_subtract_failed:\n"
+        "sll $v1,$v1,2\n"
+        "bgez $t1,.Lsqrt_loop\n"
+        "addiu $t1,$t1,-2\n"
+        ".Lsqrt_zero:\n"
+        "jr $ra\n"
+        "nop\n"
+        ".end SquareRoot0_stub\n"
+        ".set\treorder\n"
+        ".text\n");
+#endif
 
+#ifdef CTR_NATIVE
 VECTOR *ApplyMatrixLV_stub(VECTOR *input, VECTOR *output)
 {
 	u32 x = (u32)input->vx;
 	u32 y = (u32)input->vy;
 	u32 z = (u32)input->vz;
+	u32 highX;
+	u32 highY;
+	u32 highZ;
 
 	MTC2((u32)((s32)x >> 0xf), 9);
 	MTC2((u32)((s32)y >> 0xf), 10);
@@ -383,9 +482,9 @@ VECTOR *ApplyMatrixLV_stub(VECTOR *input, VECTOR *output)
 	y &= 0x7fff;
 	z &= 0x7fff;
 
-	u32 highX = MFC2(25);
-	u32 highY = MFC2(26);
-	u32 highZ = MFC2(27);
+	highX = MFC2(25);
+	highY = MFC2(26);
+	highZ = MFC2(27);
 
 	MTC2(x, 9);
 	MTC2(y, 10);
@@ -410,3 +509,71 @@ VECTOR *Unknown_8006c6c8(VECTOR *input, VECTOR *output, MATRIX *matrix)
 
 	return ApplyMatrixLV_stub(input, output);
 }
+#else
+// NOTE(aalhendi): Retail's matrix-loading entry has no branch or return; it
+// falls through into ApplyMatrixLV_stub. The final EXE link must keep these
+// two sections adjacent in this order.
+__asm__(".section .Unknown_8006c6c8,\"ax\",@progbits\n"
+        ".align 2\n"
+        ".ent Unknown_8006c6c8\n"
+        ".set\tnoreorder\n"
+        ".globl Unknown_8006c6c8\n"
+        "Unknown_8006c6c8:\n"
+        "lw $t0,0($a2)\n"
+        "lw $t1,4($a2)\n"
+        "lw $t2,8($a2)\n"
+        "lw $t3,12($a2)\n"
+        "lw $t4,16($a2)\n"
+        "ctc2 $t0,$0\n"
+        "ctc2 $t1,$1\n"
+        "ctc2 $t2,$2\n"
+        "ctc2 $t3,$3\n"
+        "ctc2 $t4,$4\n"
+        ".end Unknown_8006c6c8\n"
+        ".set\treorder\n"
+        ".text\n");
+
+__asm__(".section .ApplyMatrixLV_stub,\"ax\",@progbits\n"
+        ".align 2\n"
+        ".ent ApplyMatrixLV_stub\n"
+        ".set\tnoreorder\n"
+        ".globl ApplyMatrixLV_stub\n"
+        "ApplyMatrixLV_stub:\n"
+        "lw $t0,0($a0)\n"
+        "lw $t1,4($a0)\n"
+        "lw $t2,8($a0)\n"
+        "sra $t3,$t0,15\n"
+        "sra $t4,$t1,15\n"
+        "sra $t5,$t2,15\n"
+        "mtc2 $t3,$9\n"
+        "mtc2 $t4,$10\n"
+        "mtc2 $t5,$11\n"
+        "andi $t0,$t0,0x7fff\n"
+        "cop2 0x041e012\n"
+        "andi $t1,$t1,0x7fff\n"
+        "andi $t2,$t2,0x7fff\n"
+        "mfc2 $t3,$25\n"
+        "mfc2 $t4,$26\n"
+        "mfc2 $t5,$27\n"
+        "mtc2 $t0,$9\n"
+        "mtc2 $t1,$10\n"
+        "mtc2 $t2,$11\n"
+        "sll $t3,$t3,3\n"
+        "cop2 0x049e012\n"
+        "sll $t4,$t4,3\n"
+        "sll $t5,$t5,3\n"
+        "mfc2 $t0,$25\n"
+        "mfc2 $t1,$26\n"
+        "mfc2 $t2,$27\n"
+        "addu $t0,$t0,$t3\n"
+        "addu $t1,$t1,$t4\n"
+        "addu $t2,$t2,$t5\n"
+        "sw $t0,0($a1)\n"
+        "sw $t1,4($a1)\n"
+        "sw $t2,8($a1)\n"
+        "jr $ra\n"
+        "addu $v0,$a1,$zero\n"
+        ".end ApplyMatrixLV_stub\n"
+        ".set\treorder\n"
+        ".text\n");
+#endif
