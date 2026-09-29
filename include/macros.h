@@ -39,6 +39,7 @@ typedef s32 b32;
 typedef float f32;
 typedef double f64;
 typedef u16 CtrPackedU16 CTR_MAY_ALIAS;
+typedef s16 CtrPackedS16 CTR_MAY_ALIAS;
 typedef u32 CtrPackedU32 CTR_MAY_ALIAS;
 
 CTR_STATIC_ASSERT(sizeof(u8) == 1);
@@ -86,6 +87,15 @@ static inline u16 CTR_ReadU16LE(const void *src)
 	return (u16)((u16)bytes[0] | ((u16)bytes[1] << 8));
 #else
 	return *(const CtrPackedU16 *)src;
+#endif
+}
+
+static inline s16 CTR_ReadS16LE(const void *src)
+{
+#ifdef CTR_NATIVE
+	return (s16)CTR_ReadU16LE(src);
+#else
+	return *(const CtrPackedS16 *)src;
 #endif
 }
 

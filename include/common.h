@@ -69,6 +69,16 @@
 #define GAME_HOWL_SAMPLE_BLOCK_NAME  (rdata.s_LoadSampleBlock)
 #endif
 
+#ifndef GAME_DESIRED_MENU
+#define GAME_DESIRED_MENU (sdata->ptrDesiredMenu)
+#endif
+#ifndef GAME_MAIN_MENU_STATE
+#define GAME_MAIN_MENU_STATE (sdata->mainMenuState)
+#endif
+#ifndef GAME_FRAME_COUNTER_LOW
+#define GAME_FRAME_COUNTER_LOW ((u16)sdata->frameCounter)
+#endif
+
 #ifndef GAME_AUDIO_BANK_COUNT_LOAD_AFTER
 #define GAME_AUDIO_BANK_COUNT_LOAD_AFTER(result, dependency) \
 	do                                                       \

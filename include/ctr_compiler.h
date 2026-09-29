@@ -88,6 +88,14 @@
 #define CTR_PSX_ADD_POINTER_OFFSET(result, base, offset)                         ((result) = (void *)((char *)(base) + (offset)))
 #define CTR_PSX_ADD_POINTER_OFFSET_OFFSET_FIRST(result, base, offset)            ((result) = (void *)((char *)(base) + (offset)))
 #define CTR_PSX_ADD_POINTER_IMMEDIATE(result, base, byteOffset, nativeValue)     ((result) = (nativeValue))
+// NOTE(aalhendi): PSX keeps this add in C so GCC may place it in a branch delay slot.
+// Native uses the real host pointer rather than the retail page and low offset.
+#define CTR_PSX_ADD_PAGE_OFFSET(result, page, offset, nativeValue) \
+	do                                                             \
+	{                                                              \
+		(void)(page);                                              \
+		(result) = (nativeValue);                                  \
+	} while (0)
 #define CTR_PSX_ADD_U32(result, lhs, rhs)                                        ((result) = (u32)(lhs) + (u32)(rhs))
 #define CTR_PSX_NEGATE_IN_PLACE(value)                                           ((value) = CTR_MipsNegLo(value))
 #define CTR_PSX_NEGATE(result, value)                                            ((result) = CTR_MipsNegLo(value))
@@ -102,6 +110,7 @@
 		(void)(dependency);                                                        \
 	} while (0)
 #define CTR_PSX_LOAD_WORD(result, nativeValue)                                   ((result) = (nativeValue))
+#define CTR_PSX_LOAD_WORD_AFTER(result, nativeValue, dependency)                 ((result) = (nativeValue))
 #define CTR_PSX_LOAD_WORD_DELAYED(result, nativeValue)                           ((result) = (nativeValue))
 #define CTR_PSX_LOAD_WORD_VOLATILE(result, nativeValue)                          ((result) = (nativeValue))
 #define CTR_PSX_LOAD_SIGNED_BYTE(result, base, byteOffset, nativeValue)          ((result) = (s8)(nativeValue))
@@ -191,6 +200,7 @@
 #define CTR_PSX_ADD_POINTER_OFFSET(result, base, offset)                     __asm__("addu %0,%1,%2" : "=r"(result) : "r"(base), "r"(offset))
 #define CTR_PSX_ADD_POINTER_OFFSET_OFFSET_FIRST(result, base, offset)        __asm__("addu %0,%2,%1" : "=r"(result) : "r"(base), "r"(offset))
 #define CTR_PSX_ADD_POINTER_IMMEDIATE(result, base, byteOffset, nativeValue) __asm__("addiu %0,%1,%2" : "=r"(result) : "r"(base), "I"(byteOffset))
+#define CTR_PSX_ADD_PAGE_OFFSET(result, page, offset, nativeValue)                 ((result) = (void *)((u32)(page) + (offset)))
 #define CTR_PSX_ADD_U32(result, lhs, rhs)                                    __asm__("addu %0,%1,%2" : "=r"(result) : "r"(lhs), "r"(rhs))
 #define CTR_PSX_NEGATE_IN_PLACE(value)                                       __asm__("negu %0,%0" : "+r"(value))
 #define CTR_PSX_NEGATE(result, value)                                        __asm__("subu %0,$0,%1" : "=r"(result) : "r"(value))
@@ -198,6 +208,7 @@
 #define CTR_PSX_LOAD_STACK_WORD(result, byteOffset, nativeValue)             __asm__ volatile("lw %0," #byteOffset "($sp)" : "=r"(result) : : "memory")
 #define CTR_PSX_LOAD_STACK_WORD_AFTER(result, byteOffset, nativeValue, dependency) __asm__("lw %0," #byteOffset "($sp)" : "=r"(result) : "r"(dependency))
 #define CTR_PSX_LOAD_WORD(result, nativeValue)                               __asm__("lw %0,%1" : "=r"(result) : "m"(nativeValue))
+#define CTR_PSX_LOAD_WORD_AFTER(result, nativeValue, dependency)                   __asm__("lw %0,%1" : "=r"(result) : "m"(nativeValue), "r"(dependency))
 #define CTR_PSX_LOAD_WORD_DELAYED(result, nativeValue)                       __asm__ volatile("lw %0,%1\n\tnop" : "=r"(result) : "m"(nativeValue))
 #define CTR_PSX_LOAD_WORD_VOLATILE(result, nativeValue)                      __asm__ volatile("lw %0,%1" : "=r"(result) : "m"(nativeValue))
 #define CTR_PSX_LOAD_SIGNED_BYTE(result, base, byteOffset, nativeValue) __asm__("lb %0,%2(%1)" : "=r"(result) : "r"(base), "I"(byteOffset), "m"(nativeValue))
