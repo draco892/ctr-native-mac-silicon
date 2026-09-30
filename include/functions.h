@@ -1254,7 +1254,7 @@ int CDSYS_XASeek(b32 boolCdControl, int categoryID, int xaID);
 void LibraryOfModels_Store(struct GameTracker *gGT, u32 numModels, struct Model **ptrModelArray);
 void LOAD_DramFileCallback(struct LoadQueueSlot *lqs);
 int LOAD_GetBigfileIndex(u32 levelID, int lod, int fileIndexInGroup);
-void LOAD_HubSwapPtrs(struct GameTracker *gGT);
+void LOAD_HubSwapPtrs(struct GameTracker *gGT, int unused);
 void LOAD_GlobalModelPtrs_MPK(void);
 void LOAD_OvrEndRace(u32 overlayIndex);
 void LOAD_OvrLOD(u32 numPlyrCurrGame);

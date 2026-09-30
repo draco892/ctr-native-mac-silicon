@@ -29,11 +29,13 @@ void LOAD_GlobalModelPtrs_MPK()
 	}
 }
 
-void LOAD_HubSwapPtrs(struct GameTracker *gGT)
+void LOAD_HubSwapPtrs(struct GameTracker *gGT, int unused)
 {
 	struct Level *oldLev1;
 	struct VisMem *oldVisMem1;
 	struct VisMem *oldVisMem2;
+	// NOTE(aalhendi): Retail passes a second argument that this callee does not use.
+	(void)unused;
 
 	// if no secondary lev exists, quit
 	if (gGT->level2 == 0)

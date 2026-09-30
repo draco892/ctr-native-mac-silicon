@@ -56,11 +56,21 @@
 #define CTR_PSX_OBSERVE_VALUE(value)                    ((void)(value))
 #define CTR_PSX_OBSERVE_MEMORY(value)                   ((void)sizeof(value))
 #define CTR_PSX_ZERO_VALUE(value)                       ((value) = 0)
+#define CTR_PSX_AND_MASK_NONZERO(result, mask, value)   ((result) = ((mask) & (value)), (result) != 0)
+#define CTR_PSX_ZERO_VALUE_AFTER(value, first, second)  ((void)(first), (void)(second), (value) = 0)
 #define CTR_PSX_MEMORY_BARRIER()                        ((void)0)
 #define CTR_PSX_FORGET_VALUE(value)                     ((void)(value))
 #define CTR_PSX_RELOAD(value)                           ((void)(value))
 #define CTR_PSX_CAPTURE_REGISTER(value, nativeValue)    ((value) = (nativeValue))
 #define CTR_PSX_COPY_VALUE(result, value)               ((result) = (value))
+#define CTR_PSX_WITH_RETAIL_PAGE(result, address, offset, nativeValue, expression) ((result) = (nativeValue), (expression))
+#define CTR_PSX_PREPARE_QUEUE_ARGS(bigfileOut, typeOut, indexOut, bigfileIn, queueType, indexIn) \
+	do                                                                                          \
+	{                                                                                           \
+		(bigfileOut) = (bigfileIn);                                                               \
+		(typeOut) = (queueType);                                                                  \
+		(indexOut) = (indexIn);                                                                   \
+	} while (0)
 #define CTR_PSX_LOAD_SYMBOL_PAGE(page, symbolExpression) \
 	do                                                   \
 	{                                                    \
@@ -187,11 +197,22 @@
 #define CTR_PSX_OBSERVE_VALUE(value)                                            __asm__ volatile("" : : "r"(value))
 #define CTR_PSX_OBSERVE_MEMORY(value)                                           __asm__("" : : "m"(value))
 #define CTR_PSX_ZERO_VALUE(value)                                               __asm__("move %0,$0" : "=r"(value))
+#define CTR_PSX_AND_MASK_NONZERO(result, mask, value)                            ({ (result) = (mask); __asm__ volatile("and %0,%1,%0" : "+r"(result) : "r"(value)); (result) != 0; })
+#define CTR_PSX_ZERO_VALUE_AFTER(value, first, second)                          __asm__("move %0,$0" : "=r"(value) : "r"(first), "r"(second))
 #define CTR_PSX_MEMORY_BARRIER()                                                __asm__ volatile("" : : : "memory")
 #define CTR_PSX_FORGET_VALUE(value)                                             __asm__ volatile("" : "=r"(value) : "0"(value))
 #define CTR_PSX_RELOAD(value)                                                   __asm__("" : "+m"(value))
 #define CTR_PSX_CAPTURE_REGISTER(value, nativeValue)                            __asm__("" : "=r"(value))
 #define CTR_PSX_COPY_VALUE(result, value)                                       __asm__("move %0,%1" : "=r"(result) : "r"(value))
+#define CTR_PSX_WITH_RETAIL_PAGE(result, address, offset, nativeValue, expression) \
+	({                                                                           \
+		(result) = (void *)(address);                                              \
+		CTR_PSX_KEEP_VALUE_RELAXED(result);                                       \
+		CTR_PSX_ADD_PAGE_OFFSET(result, result, offset, nativeValue);           \
+		(expression);                                                             \
+	})
+#define CTR_PSX_PREPARE_QUEUE_ARGS(bigfileOut, typeOut, indexOut, bigfileIn, queueType, indexIn) \
+	__asm__ volatile("move %0,%3\n\tli %1,%4\n\tmove %2,%5" : "=&r"(bigfileOut), "=&r"(typeOut), "=&r"(indexOut) : "r"(bigfileIn), "I"(queueType), "r"(indexIn))
 #define CTR_PSX_LOAD_SYMBOL_PAGE(page, symbolExpression)                        __asm__("lui %0,%%hi(" symbolExpression ")" : "=r"(page))
 #define CTR_PSX_LOAD_SYMBOL_PAGE_AFTER(page, symbolExpression, dependency)      __asm__("lui %0,%%hi(" symbolExpression ")" : "=r"(page) : "r"(dependency))
 #define CTR_PSX_LOAD_WORD_FROM_PAGE(value, page, symbolExpression, nativeValue) __asm__("lw %0,%%lo(" symbolExpression ")(%1)" : "=r"(value) : "r"(page))

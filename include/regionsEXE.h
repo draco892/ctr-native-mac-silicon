@@ -2593,7 +2593,7 @@ struct sData
 	// 8008D0B4
 	// used to get which lev file
 	// to load, depending on LOD
-	char levBigLodIndex[0x8];
+	u8 levBigLodIndex[0x8];
 
 	// 8008d0bc
 	int boolFirstBoot;
@@ -3524,7 +3524,7 @@ struct sData
 
 	// 8008d870
 	// ptr to array of model pointers (real ND name)
-	int **PLYROBJECTLIST; // maybe should be `struct Model**`
+	struct Model **PLYROBJECTLIST;
 
 	// 8008d874
 	// activated in FUN_80035e20,

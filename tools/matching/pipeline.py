@@ -956,10 +956,12 @@ def normalize_compiler_directives(assembly: Path) -> None:
     in_small_data = False
     for line in assembly.read_text().splitlines(keepends=True):
         directive = line.strip()
-        if re.fullmatch(r"\.extern\s+[^,]+[+-]\d+\s*,\s*\d+", directive):
+        if re.fullmatch(r"\.extern\s+[^,]+[+-]\d+\s*,\s*\d+", directive) or re.fullmatch(
+            r"\.extern\s+[+-]?\d+\(\$(?:28|gp)\)\s*,\s*\d+", directive
+        ):
             # GCC emits invalid .extern directives for declarations bound to
-            # a linker expression. The relocation itself retains that exact
-            # expression, so the declaration is redundant.
+            # a linker expression or a gp-relative slot. The load/store still
+            # carries that exact address, so the declaration is redundant.
             continue
         if directive == ".sdata":
             in_small_data = True

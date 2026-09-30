@@ -1,15 +1,26 @@
 #include <common.h>
 
+#ifndef CTR_NATIVE
+#include <psx/hwregs.h>
+#endif
+
 void LOAD_StringToUpper(char *path)
 {
-	for (u8 *letter = (u8 *)path; *letter != 0; letter++)
+	u8 *letter;
+	u8 character;
+
+	letter = (u8 *)path;
+	character = *letter;
+	while (character != 0)
 	{
 		// if lowercase letter
-		if ((u32)(*letter - 0x61) < 0x1a)
+		if ((u32)(character - 0x61) < 0x1a)
 		{
 			// uppercase
-			*letter -= 0x20;
+			*letter = character + 0xe0;
 		}
+		letter++;
+		character = *letter;
 	}
 }
 
@@ -68,23 +79,27 @@ void LOAD_InitCD()
 
 void *LOAD_ReadDirectory(char *filename)
 {
-	CdlFILE cdlFile;
 	u8 buf[8];
+	CdlFILE cdlFile;
+	CdlFILE *filePtr;
+	struct BigHeader *bh;
+	struct BigHeader *result;
 
+	filePtr = &cdlFile;
 	CDSYS_SetMode_StreamData();
 
-	if (CdSearchFile(&cdlFile, filename) == NULL)
+	if (CdSearchFile(filePtr, filename) == NULL)
 	{
 		return NULL;
 	}
 
-	struct BigHeader *bh = MEMPACK_AllocMem(LOAD_BIGFILE_HEADER_ALLOC_BYTES, NULL /* filename */);
+	bh = MEMPACK_AllocMem(LOAD_BIGFILE_HEADER_ALLOC_BYTES, filename);
 
 	// Search for file on disc
 	// Set Cd laser to file position
 	// Read the bigfile header
 	// Wait for read to end
-	CdControl(CdlSetloc, (u8 *)&cdlFile, buf);
+	CdControl(CdlSetloc, (u8 *)filePtr, buf);
 	if (CdRead(LOAD_BIGFILE_HEADER_SECTORS, (u32 *)bh, CdlModeSpeed) == 0)
 	{
 		return NULL;
@@ -96,13 +111,17 @@ void *LOAD_ReadDirectory(char *filename)
 	}
 
 	// Save position
-	bh->cdpos = CdPosToInt(&cdlFile.pos);
+	bh->cdpos = CdPosToInt(&filePtr->pos);
 
 	// undo header allocation, only use "needed" size
 	MEMPACK_ReallocMem(sizeof(struct BigHeader) + sizeof(struct BigEntry) * bh->numEntry);
 
-	sdata->ptrBigfileCdPos_2 = bh;
-	return bh;
+	// NOTE(aalhendi): Retail copies the result before publishing the pointer;
+	// keep the store out of the epilogue jump's delay slot.
+	CTR_PSX_COPY_VALUE(result, bh);
+	sdata->ptrBigfileCdPos_2 = result;
+	CTR_PSX_MEMORY_BARRIER();
+	return result;
 }
 
 void LOAD_DramFileCallback(struct LoadQueueSlot *lqs)
@@ -270,11 +289,13 @@ void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u3
 
 void LOAD_ReadFileASyncCallback(u8 result, u8 *unk)
 {
+	struct LoadQueueSlot *lqs;
+
 	(void)unk;
 	CdReadCallback(0);
 	result &= 0xff;
 
-	struct LoadQueueSlot *lqs = &data.currSlot;
+	lqs = &data.currSlot;
 
 	if (result == CdlComplete)
 	{
@@ -319,6 +340,10 @@ void *LOAD_ReadFile_ex(struct BigHeader *bigfile, u32 loadType, int subfileIndex
 	int sectorSize;
 	int sectorCount;
 	int readComplete;
+	struct BigEntry *entry;
+	int eSize;
+	int eOffs;
+	struct LoadQueueSlot *lqs;
 
 	(void)loadType;
 	CDSYS_SetMode_StreamData();
@@ -333,15 +358,15 @@ void *LOAD_ReadFile_ex(struct BigHeader *bigfile, u32 loadType, int subfileIndex
 #endif
 
 	// get size and offset of subfile
-	struct BigEntry *entry = BIG_GETENTRY(bigfile);
-	int eSize = entry[subfileIndex].size;
-	int eOffs = entry[subfileIndex].offset;
+	entry = BIG_GETENTRY(bigfile);
+	eSize = entry[subfileIndex].size;
+	eOffs = entry[subfileIndex].offset;
 
 	*sizePtr = eSize;
 
 	CdIntToPos(bigfile->cdpos + eOffs, &cdLoc);
 
-	struct LoadQueueSlot *lqs = &data.currSlot;
+	lqs = &data.currSlot;
 	originalDst = ptrDst;
 	sectorCount = (eSize + LOAD_CD_DATA_SECTOR_ROUND_MASK) >> LOAD_CD_DATA_SECTOR_SHIFT;
 	readComplete = 1;
@@ -422,6 +447,8 @@ void *LOAD_ReadFile_ex(struct BigHeader *bigfile, u32 loadType, int subfileIndex
 void *LOAD_XnfFile(char *filename, void *ptrDestination, int *size)
 {
 	CdlFILE cdlFile;
+	u8 buf[8];
+	int allocated;
 
 	LOAD_StringToUpper(filename);
 	CDSYS_SetMode_StreamData();
@@ -433,7 +460,7 @@ void *LOAD_XnfFile(char *filename, void *ptrDestination, int *size)
 
 	*size = cdlFile.size;
 
-	int allocated = ptrDestination == NULL;
+	allocated = ptrDestination == NULL;
 	if (allocated)
 	{
 		// allocate room for all sectors,
@@ -446,7 +473,6 @@ void *LOAD_XnfFile(char *filename, void *ptrDestination, int *size)
 		}
 	}
 
-	u8 buf[8];
 	CdControl(CdlSetloc, (u8 *)&cdlFile, buf);
 
 	if (CdRead((cdlFile.size + LOAD_CD_DATA_SECTOR_ROUND_MASK) >> LOAD_CD_DATA_SECTOR_SHIFT, ptrDestination, CdlModeSpeed) == 0)
@@ -469,11 +495,7 @@ void *LOAD_XnfFile(char *filename, void *ptrDestination, int *size)
 
 int LOAD_FindFile(char *filename, CdlFILE *cdlFile)
 {
-	if (filename == 0)
-	{
-		return 0;
-	}
-	if (cdlFile == 0)
+	if ((filename == 0) || (cdlFile == 0))
 	{
 		return 0;
 	}

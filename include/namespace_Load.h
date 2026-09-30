@@ -289,7 +289,8 @@ struct LoadQueueSlot
 	u16 flags;
 
 	// 0x6
-	u16 type_UNUSED;
+	// NOTE(aalhendi): Retail dispatch reads this queue type with signed lh.
+	s16 type_UNUSED;
 
 	// 0x8
 	u32 subfileIndex;

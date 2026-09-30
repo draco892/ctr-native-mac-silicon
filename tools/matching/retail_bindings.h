@@ -7,17 +7,52 @@
 #define RETAIL_LANGUAGE_STRINGS_ASM_NAME   "sdata_static+2316"
 #define RETAIL_CHARACTER_METADATA_ASM_NAME "data+25572"
 #define RETAIL_CHARACTER_IDS_ASM_NAME      "data+25828"
+#define RETAIL_2P_AI_SETS_ASM_NAME         "data+12468"
+#define RETAIL_OVERLAY_CALLBACKS_ASM_NAME  "data+12496"
+#define RETAIL_CURR_SLOT_ASM_NAME          "data+12444"
+#define RETAIL_QUEUE_SLOTS_ASM_NAME        "sdata_static+37848"
 #define RETAIL_LEVEL_METADATA_ASM_NAME     "data+12512"
 #define RETAIL_BOSS_WEAPON_META_ASM_NAME   "data+20528"
 #define RETAIL_GAME_SAVE_ASM_NAME          "sdata_static+6012"
 #define RETAIL_ADD_CONFIG_0_ASM_NAME       "sdata_static+404"
 #define RETAIL_HOWL_MAGIC_ASM_NAME         "sdata_static+244"
 
+// NOTE(aalhendi): LOAD_TenStages materializes these link addresses in a
+// particular order. Keep the retail page and signed lows in the private ABI;
+// native uses the corresponding GAME_* objects instead.
+#define RETAIL_LOAD_PREFIX_PAGE            0x80090000
+#define RETAIL_LOAD_PREFIX_ENDING_LOW      -12092
+#define RETAIL_LOAD_PREFIX_INTRO_LOW       -12084
+#define RETAIL_LOAD_PREFIX_SCREEN_LOW      -12076
+#define RETAIL_LOAD_PREFIX_GARAGE_LOW      -12068
+#define RETAIL_LOAD_PREFIX_HUB_LOW         -12060
+#define RETAIL_LOAD_PREFIX_CREDIT_LOW      -12056
+#define RETAIL_LOAD_PREFIX_GARAGE_ASM_NAME "sdata_static+368"
+#define RETAIL_LOAD_DRIVER_CALLBACK_ASM_NAME "LOAD_Callback_DriverModels"
+#define RETAIL_LOAD_DRIVER_CALLBACK_LOW    0x1b00
+#define RETAIL_LOAD_PATCH_MEMORY_ASM_NAME  "rdata+4552"
+#define RETAIL_LOAD_PATCH_MEMORY_LOW       4552
+
 #define GAME_TRACKER                       ctr_gameTrackerPtr
+#define GAME_LOADING_STAGE                 ctr_loadingStage
+#define GAME_LOAD_IN_PROGRESS              ctr_loadInProgress
 #define GAME_LANGUAGE_STRINGS              ctr_languageStrings
 #define GAME_CHARACTER_METADATA            ctr_characterMetadata
 #define GAME_CHARACTER_IDS                 ctr_characterIDs
+#define GAME_2P_AI_SETS                    ctr_2pAiSets
+#define GAME_OVERLAY_CALLBACKS             ctr_overlayCallbacks
+#define GAME_LEVEL_BIG_LOD_INDEX           ctr_levelBigLodIndex
 #define GAME_LEVEL_METADATA                ctr_levelMetadata
+#define GAME_LEVEL_PREFIX_NDI              ctr_levelPrefixNdi
+#define GAME_LEVEL_PREFIX_ENDING           ctr_levelPrefixEnding
+#define GAME_LEVEL_PREFIX_INTRO            ctr_levelPrefixIntro
+#define GAME_LEVEL_PREFIX_SCREEN           ctr_levelPrefixScreen
+#define GAME_LEVEL_PREFIX_GARAGE           ctr_levelPrefixGarage
+#define GAME_LEVEL_PREFIX_HUB              ctr_levelPrefixHub
+#define GAME_LEVEL_PREFIX_CREDIT           ctr_levelPrefixCredit
+#define GAME_RDATA_NAME(name)               ctr_retail_##name
+#define GAME_MAIN_MENU_STATE                ctr_mainMenuState
+#define GAME_XA_STATE                       ctr_xaState
 #define GAME_BOSS_WEAPON_METADATA          ctr_bossWeaponMetaPtr
 #define GAME_FRAMES_SINCE_RACE_ENDED       ctr_framesSinceRaceEnded
 #define GAME_MENU_READY                    ctr_menuReady
@@ -73,10 +108,35 @@
 // NOTE(aalhendi): These declarations name existing resident storage. Native
 // accesses the same fields through the canonical sData and Data aggregates.
 extern struct GameTracker *ctr_gameTrackerPtr asm(RETAIL_GAME_TRACKER_ASM_NAME);
+extern LoadStage ctr_loadingStage asm("sdata_static+396");
+extern s32 ctr_loadInProgress asm("312($28)");
 extern char **ctr_languageStrings asm(RETAIL_LANGUAGE_STRINGS_ASM_NAME);
 extern struct MetaDataCHAR ctr_characterMetadata[16] asm(RETAIL_CHARACTER_METADATA_ASM_NAME);
 extern s16 ctr_characterIDs[8] asm(RETAIL_CHARACTER_IDS_ASM_NAME);
+extern u8 ctr_2pAiSets[LOAD_2P_AI_SET_COUNT][LOAD_2P_AI_SET_RACER_COUNT] asm(RETAIL_2P_AI_SETS_ASM_NAME);
+extern void *ctr_overlayCallbacks[4] asm(RETAIL_OVERLAY_CALLBACKS_ASM_NAME);
+extern u8 ctr_levelBigLodIndex[8] asm("sdata_static+328");
 extern struct MetaDataLEV ctr_levelMetadata[0x41] asm(RETAIL_LEVEL_METADATA_ASM_NAME);
+extern char ctr_levelPrefixNdi[4] asm("sdata_static+340");
+extern char ctr_levelPrefixEnding[8] asm("sdata_static+344");
+extern char ctr_levelPrefixIntro[8] asm("sdata_static+352");
+extern char ctr_levelPrefixScreen[8] asm("sdata_static+360");
+extern char ctr_levelPrefixGarage[8] asm(RETAIL_LOAD_PREFIX_GARAGE_ASM_NAME);
+extern char ctr_levelPrefixHub[4] asm("sdata_static+376");
+extern char ctr_levelPrefixCredit[8] asm("sdata_static+380");
+extern char ctr_retail_s_circle[] asm("rdata+4572");
+extern char ctr_retail_s_HUB_ALLOC[] asm("rdata+4540");
+extern char ctr_retail_s_Patch_Table_Memory[] asm(RETAIL_LOAD_PATCH_MEMORY_ASM_NAME);
+extern char ctr_retail_s_clod[] asm("rdata+4588");
+extern char ctr_retail_s_dustpuff[] asm("rdata+4604");
+extern char ctr_retail_s_smokering[] asm("rdata+4620");
+extern char ctr_retail_s_sparkle[] asm("rdata+4636");
+extern char ctr_retail_s_lightredoff[] asm("rdata+4652");
+extern char ctr_retail_s_lightredon[] asm("rdata+4680");
+extern char ctr_retail_s_lightgreenoff[] asm("rdata+4708");
+extern char ctr_retail_s_lightgreenon[] asm("rdata+4740");
+extern s16 ctr_mainMenuState asm("sdata_static+2576");
+extern XAState ctr_xaState asm("sdata_static+1948");
 extern struct MetaDataBOSS *ctr_bossWeaponMetaPtr[5] asm(RETAIL_BOSS_WEAPON_META_ASM_NAME);
 
 extern s32 ctr_framesSinceRaceEnded asm("sdata_static+1472");

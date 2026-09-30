@@ -242,6 +242,7 @@ class ResidentNamespaceTests(unittest.TestCase):
             assembly.write_text(
                 "\t.sdata\nvalue:\n\t.word\t1\n"
                 "\t.extern\tsdata_static+832, 4\n"
+                "\t.extern\t312($28), 4\n"
                 '\t.section .Veh_Test,"ax",@progbits\n'
             )
 
