@@ -39,6 +39,7 @@
 #include "platform/native_assets.c"
 #include "platform/native_audio.c"
 #include "platform/native_memory.c"
+#include "platform/native_mempack_arena.c"
 #include "platform/native_checkpoint.c"
 #include "platform/native_checkpoint_file.c"
 #include "platform/native_cd.c"

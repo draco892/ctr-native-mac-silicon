@@ -4,11 +4,63 @@ include(CheckCCompilerFlag)
 
 set(CTR_NATIVE_VERSION "0.1.0-beta.7.1")
 
+option(CTR_BUILD_GAME "Build the game (currently requires 32-bit asset layouts)" ON)
+option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native memory tests" OFF)
+include(CTest)
+
+# Build actual production memory modules independently of resident game layouts
+# and SDL. This is the ARM64 porting entry point until asset decoding is ready.
+if(BUILD_TESTING)
+    add_executable(ctr_native_memory_tests
+        tests/native_memory_tests.c
+        game/MEMPACK.c
+        platform/native_mempack_arena.c
+        platform/native_gpu_links.c
+    )
+    set_target_properties(ctr_native_memory_tests PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_include_directories(ctr_native_memory_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_memory_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_memory_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_memory_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_memory_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    elseif(CTR_ENABLE_SANITIZERS)
+        message(FATAL_ERROR "Native memory sanitizers require a GCC or Clang frontend.")
+    endif()
+    add_test(NAME ctr_native_memory COMMAND ctr_native_memory_tests)
+
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(
+        NAME ctr_match_unit
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_SOURCE_DIR}/tools/matching
+            -p test_*.py
+    )
+    add_test(NAME ctr_native_memory_rejections
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native_memory_rejections.py
+            $<TARGET_FILE:ctr_native_memory_tests>
+    )
+endif()
+
+if(NOT CTR_BUILD_GAME)
+    if(NOT BUILD_TESTING)
+        message(FATAL_ERROR "CTR_BUILD_GAME=OFF requires BUILD_TESTING=ON.")
+    endif()
+    return()
+endif()
+
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR
         "CTR Native currently requires a 32-bit target. "
         "Select Win32 for MSVC, an i686 MinGW compiler on Windows, or pass -m32 "
-        "in the initial compiler and linker flags on Linux."
+        "in the initial compiler and linker flags on Linux. "
+        "For ARM64 porting tests, use the macos-arm64-memory preset."
     )
 endif()
 
@@ -109,8 +161,10 @@ if(CTR_NATIVE_MSVC_FRONTEND)
         /wd5287
     )
 else()
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86|x86_64|AMD64)$")
+        target_compile_options(ctr_native PRIVATE -msse)
+    endif()
     target_compile_options(ctr_native PRIVATE
-        -msse
         -Wenum-conversion
         -Wenum-compare
         -Wswitch-enum
@@ -135,18 +189,9 @@ if(MINGW)
     target_link_options(ctr_native PRIVATE -static)
 endif()
 
-include(CTest)
 if(BUILD_TESTING)
     add_test(NAME ctr_native_version COMMAND $<TARGET_FILE:ctr_native> --version)
     set_tests_properties(ctr_native_version PROPERTIES PASS_REGULAR_EXPRESSION "^CTR Native ")
-
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    add_test(
-        NAME ctr_match_unit
-        COMMAND ${Python3_EXECUTABLE} -m unittest discover
-            -s ${CMAKE_SOURCE_DIR}/tools/matching
-            -p test_*.py
-    )
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         add_executable(ctr_particle_renderer_smoke

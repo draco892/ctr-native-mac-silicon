@@ -1,28 +1,43 @@
+#if defined(CTR_NATIVE)
+#include <namespace_Mempack.h>
+#include <platform.h>
+#include <stdio.h>
+
+void CTR_ErrorScreen(u8 r, u8 g, u8 b);
+
+static s32 MEMPACK_NativeAlignSize(s32 size)
+{
+	if ((size < 0) || (size > INT32_MAX - MEMPACK_ALIGNMENT_MASK))
+	{
+		CTR_TRAP();
+	}
+	return MEMPACK_ALIGN_SIZE(size);
+}
+#else
 #include <common.h>
+#endif
 
 
 void MEMPACK_Init(s32 ramSize)
 {
-	u32 startPtr;
-
 #if defined(CTR_NATIVE)
 	// NOTE(aalhendi): Native uses host-backed RAM; PSX reserves the arena after the largest overlay.
 	s32 packSize;
 	const struct PlatformMempackArena *arena = Platform_InitMempackArena();
 	(void)ramSize;
 
-	startPtr = (u32)arena->start;
 	packSize = arena->size;
 
-	printf("[CTR] MEMPACK native backing: base=%08x\n", (u32)arena->base);
+	printf("[CTR] MEMPACK native backing: base=%p\n", arena->base);
 
-	MEMPACK_NewPack((void *)startPtr, packSize);
-	MEMPACK_ACTIVE->endOfAllocator = (void *)(startPtr + packSize);
+	MEMPACK_NewPack(arena->start, packSize);
+	MEMPACK_ACTIVE->endOfAllocator = (u8 *)arena->start + packSize;
 	MEMPACK_ACTIVE->endOfMemory = arena->endOfMemory;
 
-	printf("[CTR] MEMPACK native arena: start=%08x size=%08x end=%08x\n", startPtr, packSize, (u32)MEMPACK_ACTIVE->endOfAllocator);
+	printf("[CTR] MEMPACK native arena: start=%p size=%08x end=%p\n", arena->start, (u32)packSize, MEMPACK_ACTIVE->endOfAllocator);
 
 #else
+	u32 startPtr;
 	u32 maxOverlayEnd;
 	struct Mempack *ptrMempack;
 	register u32 addressMask CTR_PSX_REGISTER("$3");
@@ -86,6 +101,22 @@ void MEMPACK_SwapPacks(s32 index)
 
 void MEMPACK_NewPack(void *start, s32 size)
 {
+#if defined(CTR_NATIVE)
+	uintptr_t padding;
+	if ((start == NULL) || (size < 0))
+	{
+		CTR_TRAP();
+	}
+	// Subpacks can arrive with arbitrary bounds. Align inward so both allocation
+	// cursors stay aligned without exposing bytes outside the supplied window.
+	padding = (-(uintptr_t)start) & (uintptr_t)MEMPACK_ALIGNMENT_MASK;
+	if (padding > (uintptr_t)size)
+	{
+		CTR_TRAP();
+	}
+	start = (u8 *)start + padding;
+	size = (size - (s32)padding) & MEMPACK_ALIGNMENT_CLEAR_MASK;
+#endif
 	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
 	ptrMempack->start = start;
 	// NOTE(aalhendi): Preserve retail's start-pointer readback instead of forwarding the argument.
@@ -103,7 +134,11 @@ inline s32 MEMPACK_GetFreeBytes(void)
 {
 	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
 
+#if defined(CTR_NATIVE)
+	return (s32)((u8 *)ptrMempack->lastFreeByte - (u8 *)ptrMempack->firstFreeByte);
+#else
 	return (u32)ptrMempack->lastFreeByte - (u32)ptrMempack->firstFreeByte;
+#endif
 }
 
 
@@ -115,7 +150,12 @@ void *MEMPACK_AllocMem(s32 allocSize, const char *name)
 	u8 *cursor;
 	(void)name;
 
+#if defined(CTR_NATIVE)
+	newAllocSize = MEMPACK_NativeAlignSize(allocSize);
+	if (MEMPACK_GetFreeBytes() < newAllocSize)
+#else
 	if (MEMPACK_GetFreeBytes() < allocSize)
+#endif
 	{
 		CTR_ErrorScreen(0xFF, 0, 0);
 		for (;;)
@@ -125,9 +165,11 @@ void *MEMPACK_AllocMem(s32 allocSize, const char *name)
 	}
 
 	// NOTE(aalhendi): Keep rounding in a1 while the old cursor remains available for the return value.
+#if !defined(CTR_NATIVE)
 	newAllocSize = allocSize + MEMPACK_ALIGNMENT_MASK;
 	CTR_PSX_KEEP_VALUE_RELAXED(newAllocSize);
 	newAllocSize &= MEMPACK_ALIGNMENT_CLEAR_MASK;
+#endif
 	ptrMempack = MEMPACK_ACTIVE;
 	ptrMempack->sizeOfPrevAllocation = newAllocSize;
 
@@ -147,7 +189,12 @@ void *MEMPACK_AllocHighMem(s32 allocSize, const char *name)
 	struct Mempack *ptrMempack;
 	(void)name;
 
+#if defined(CTR_NATIVE)
+	newAllocSize = MEMPACK_NativeAlignSize(allocSize);
+	if (MEMPACK_GetFreeBytes() < newAllocSize)
+#else
 	if (MEMPACK_GetFreeBytes() < allocSize)
+#endif
 	{
 		for (;;)
 		{
@@ -155,7 +202,9 @@ void *MEMPACK_AllocHighMem(s32 allocSize, const char *name)
 		}
 	}
 
+#if !defined(CTR_NATIVE)
 	newAllocSize = MEMPACK_ALIGN_SIZE(allocSize);
+#endif
 	ptrMempack = MEMPACK_ACTIVE;
 	ptrMempack->sizeOfPrevAllocation = newAllocSize;
 
@@ -178,7 +227,15 @@ void *MEMPACK_ReallocMem(s32 allocSize)
 	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
 
 	// Resize the last low allocation in place; the return value is its new end, not its start.
+#if defined(CTR_NATIVE)
+	s32 newAllocSize = MEMPACK_NativeAlignSize(allocSize);
+	if ((newAllocSize - ptrMempack->sizeOfPrevAllocation) > MEMPACK_GetFreeBytes())
+	{
+		CTR_TRAP();
+	}
+#else
 	s32 newAllocSize = MEMPACK_ALIGN_SIZE(allocSize);
+#endif
 	ptrMempack->firstFreeByte = (void *)((u8 *)ptrMempack->firstFreeByte - ptrMempack->sizeOfPrevAllocation + newAllocSize);
 	ptrMempack->sizeOfPrevAllocation = newAllocSize;
 

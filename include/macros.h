@@ -6,6 +6,7 @@
 #if defined(CTR_NATIVE)
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #else
 typedef unsigned int size_t;
 #define NULL                   ((void *)0)
@@ -50,7 +51,11 @@ CTR_STATIC_ASSERT(sizeof(u32) == 4);
 CTR_STATIC_ASSERT(sizeof(s32) == 4);
 CTR_STATIC_ASSERT(sizeof(u64) == 8);
 CTR_STATIC_ASSERT(sizeof(s64) == 8);
+#if defined(CTR_NATIVE)
+CTR_STATIC_ASSERT(sizeof(void *) == 4 || sizeof(void *) == 8);
+#else
 CTR_STATIC_ASSERT(sizeof(void *) == 4);
+#endif
 
 #define SCREEN_HEIGHT                            216
 #define FPS                                      30

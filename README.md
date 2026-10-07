@@ -60,6 +60,21 @@ sudo apt install gcc-multilib
 sudo apt install libx11-dev libxext-dev libgl1-mesa-dev libasound2-dev libudev-dev libdbus-1-dev
 ```
 
+### macOS / Apple Silicon (port in progress)
+
+The first ARM64 milestone builds the C17 memory modules and tests, using Xcode
+Command Line Tools, CMake, Ninja and Python 3. The complete game still requires
+32-bit host pointers while its asset layouts are being ported.
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+```
+
+See [ARM64 port progress](docs/ARM64_PORT.md) for sanitizer builds, implemented
+contracts and remaining work.
+
 ## Building
 
 ```
