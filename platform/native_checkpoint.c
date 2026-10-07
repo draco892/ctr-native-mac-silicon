@@ -6,6 +6,7 @@
 #include <platform.h>
 #include "ctr_scratchpad.h"
 #include "platform/native_memory.h"
+#include "platform/native_lng.h"
 #include "platform/native_state.h"
 
 #include <string.h>
@@ -16,11 +17,13 @@
 // and retail globals are defined, so they can snapshot the same process-local
 // regions the game mutates.
 #define NATIVE_CHECKPOINT_MAGIC              NATIVE_CHECKPOINT_FOURCC('C', 'T', 'R', 'C')
-#define NATIVE_CHECKPOINT_VERSION            3u
+// Version 4 keeps LNG file offsets unmodified and its host table separately in
+// MEMPACK. Older payloads contain patched addresses inside the LNG file.
+#define NATIVE_CHECKPOINT_VERSION            4u
 #define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  19u
 #define NATIVE_CHECKPOINT_POINTER_SLOT_CAP   65536u
 #define NATIVE_CHECKPOINT_CREDITS_STRING_CAP 4096u
-#define NATIVE_CHECKPOINT_LNG_STRING_CAP     4096u
+#define NATIVE_CHECKPOINT_LNG_STRING_CAP     NATIVE_LNG_MAX_STRINGS
 
 enum NativeCheckpointRegionKind
 {

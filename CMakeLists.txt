@@ -5,7 +5,7 @@ include(CheckCCompilerFlag)
 set(CTR_NATIVE_VERSION "0.1.0-beta.7.1")
 
 option(CTR_BUILD_GAME "Build the game (currently requires 32-bit asset layouts)" ON)
-option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native memory tests" OFF)
+option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native porting tests" OFF)
 include(CTest)
 
 # Build actual production memory modules independently of resident game layouts
@@ -34,6 +34,24 @@ if(BUILD_TESTING)
         message(FATAL_ERROR "Native memory sanitizers require a GCC or Clang frontend.")
     endif()
     add_test(NAME ctr_native_memory COMMAND ctr_native_memory_tests)
+
+    add_executable(ctr_native_lng_tests
+        tests/native_lng_tests.c
+        platform/native_lng.c
+        game/MEMPACK.c
+        platform/native_mempack_arena.c
+    )
+    set_target_properties(ctr_native_lng_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_lng_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_lng_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_lng_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_lng_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_lng_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_lng COMMAND ctr_native_lng_tests)
 
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(

@@ -602,7 +602,11 @@ void StateZero()
 #endif
 
 	// English=1
+#if defined(CTR_NATIVE)
+	LOAD_LangFile(sdata->ptrBigfile1, 1);
+#else
 	LOAD_LangFile((int)sdata->ptrBigfile1, 1);
+#endif
 	GAMEPROG_NewGame_OnBoot();
 	gGT->overlayIndex_null_notUsed = 0;
 

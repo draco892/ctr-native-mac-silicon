@@ -1,5 +1,10 @@
 #include <common.h>
 
+#if defined(CTR_NATIVE)
+#include <platform/native_lng.h>
+#include <platform/native_log.h>
+#endif
+
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
 #include <platform/native_checkpoint.h>
 #endif
@@ -199,17 +204,77 @@ CheckHighAndPack:
 	}
 }
 
+#if !defined(CTR_NATIVE)
 struct LngFile
 {
 	int numStrings;
 	int offsetToPtrArr;
 	char strings[1];
 };
+#endif
 
 // param_1 - Pointer to "cd position of bigfile"
 // param_2 - language index - 0 ja, 1 en, 2 en2, 3 fr, 4 de, 5 it, 6 es, 7 ne
-void LOAD_LangFile(int bigfilePtr, int lang)
+void LOAD_LangFile(CTR_LNG_BIGFILE_TYPE bigfilePtr, int lang)
 {
+#if defined(CTR_NATIVE)
+	struct NativeLngStorageLayout layout;
+	struct BigEntry *entry;
+	size_t fileCapacity;
+	u32 size = 0;
+	u32 count;
+	char **strings;
+	void *file;
+	enum NativeLngResult result;
+
+	if (bigfilePtr == NULL)
+		bigfilePtr = sdata->ptrBigfile1;
+	if (bigfilePtr == NULL || lang < 0 || lang >= 8 ||
+	    bigfilePtr->numEntry <= BI_LANGUAGEFILE + lang || sdata->langBufferSize < NATIVE_LNG_HEADER_SIZE)
+	{
+		Platform_LogError("[CTR Native] Invalid LNG load request\n");
+		CTR_TRAP();
+	}
+	entry = BIG_GETENTRY(bigfilePtr);
+	entry += BI_LANGUAGEFILE + lang;
+	// Reject oversized files before LOAD_ReadFile_ex writes full CD sectors.
+	if (entry->size < NATIVE_LNG_HEADER_SIZE || entry->size > sdata->langBufferSize)
+	{
+		Platform_LogError("[CTR Native] LNG file exceeds language buffer bounds\n");
+		CTR_TRAP();
+	}
+	fileCapacity = ((size_t)sdata->langBufferSize + LOAD_CD_DATA_SECTOR_ROUND_MASK) & ~(size_t)LOAD_CD_DATA_SECTOR_ROUND_MASK;
+	result = NativeLng_GetStorageLayout(fileCapacity, &layout);
+	if (result != NATIVE_LNG_OK || layout.allocationSize > INT32_MAX)
+	{
+		Platform_LogError("[CTR Native] Invalid LNG storage size\n");
+		CTR_TRAP();
+	}
+	if (sdata->lngFile == NULL)
+		sdata->lngFile = MEMPACK_AllocMem((s32)layout.allocationSize, "language file and host table");
+	strings = (char **)((u8 *)sdata->lngFile + layout.tableOffset);
+	// The read overwrites the old file. Publish the new table only after all
+	// bounds and terminators are validated; reuse the same allocation on reload.
+	sdata->lngStrings = NULL;
+	sdata->numLngStrings = 0;
+	memset(strings, 0, layout.stringCapacity * sizeof(*strings));
+	file = LOAD_ReadFile_ex(bigfilePtr, LT_SETADDR, BI_LANGUAGEFILE + lang, sdata->lngFile, &size, NULL);
+	if (file == NULL || size > (u32)sdata->langBufferSize)
+	{
+		Platform_LogError("[CTR Native] LNG file read failed\n");
+		CTR_TRAP();
+	}
+	result = NativeLng_Decode(file, size, strings, layout.stringCapacity, &count);
+	if (result == NATIVE_LNG_OK && count == 0)
+		result = NATIVE_LNG_INVALID_COUNT;
+	if (result != NATIVE_LNG_OK)
+	{
+		Platform_LogError("[CTR Native] LNG decoding failed: %s\n", NativeLng_ResultString(result));
+		CTR_TRAP();
+	}
+	sdata->lngStrings = strings;
+	sdata->numLngStrings = (s32)count;
+#else
 	struct LngFile *lngFile;
 	u32 size;
 
@@ -241,6 +306,7 @@ void LOAD_LangFile(int bigfilePtr, int lang)
 	{
 		strArray[i] = (char *)((u32)strArray[i] + (u32)lngFile);
 	}
+#endif
 }
 
 // NOTE(aalhendi): Variable-stride group bases come last to preserve retail's return scheduling.
