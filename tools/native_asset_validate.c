@@ -1,6 +1,7 @@
 #include <platform/native_asset_loading.h>
 #include <platform/native_disc_image.h>
 #include <platform/native_model_library.h>
+#include <platform/native_model_animation.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -116,6 +117,7 @@ static int Validator_Index(const char *text, u32 *out)
 static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level)
 {
 	struct NativeModelLibrary library;
+	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;
 	NativeModelLibrary_Reset(&library);
 	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
 	    NativeModelLibrary_StoreLevel(&library, level);
@@ -136,8 +138,48 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 			return 0;
 		}
 		for (u32 j = 0; j < model.headerCount; j++)
+		{
 			if (NativeModel_GetHeader(&model, j, &header) != NATIVE_ASSET_OK)
 				return 0;
+			if (header.animationCount == 0)
+			{
+				struct NativeFrameView frame;
+				result = NativeModel_GetStaticFrame(&model, j, 0, &frame);
+				if (result != NATIVE_ASSET_OK && result != NATIVE_ASSET_NOT_FOUND) return 0;
+				if (result == NATIVE_ASSET_OK)
+				{
+					u32 delta;
+					result = NativeModel_ReadStaticDeltaWord(&model, j, 0, &delta);
+					if (result != NATIVE_ASSET_OK && result != NATIVE_ASSET_NOT_FOUND) return 0;
+					staticFrames++;
+				}
+			}
+			for (u32 k = 0; k < header.animationCount; k++)
+			{
+				struct NativeAnimationView animation;
+				result = NativeModel_GetAnimation(&model, j, k, &animation);
+				if (result == NATIVE_ASSET_NOT_FOUND) continue;
+				if (result != NATIVE_ASSET_OK)
+				{
+					fprintf(stderr, "Invalid animation: model %u, header %u, animation %u\n", i, j, k);
+					return 0;
+				}
+				for (u32 n = 0; n < animation.storedFrameCount; n++)
+				{
+					struct NativeFrameView frame;
+					if (NativeAnimation_GetStoredFrame(&animation, n, &frame) != NATIVE_ASSET_OK)
+					{
+						fprintf(stderr, "Invalid animation frame: model %u, header %u, animation %u, frame %u\n", i, j, k, n);
+						return 0;
+					}
+				}
+				// Verify final clamped selection, including an interpolation endpoint.
+				struct NativeFrameSelection selected;
+				if (NativeAnimation_SelectFrame(&animation, UINT32_MAX, &selected) != NATIVE_ASSET_OK) return 0;
+				animations++; frames += animation.storedFrameCount;
+				interpolated += animation.interpolated != 0;
+			}
+		}
 	}
 	u32 registered = 0;
 	for (s32 id = 0; id < NATIVE_MODEL_LIBRARY_SLOTS; id++)
@@ -160,6 +202,8 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 		}
 	printf("Model library OK: %u registered IDs; %u instance definitions decoded\n",
 	    registered, level != NULL ? level->instanceCount : 0);
+	printf("Animation data OK: %zu animations (%zu interpolated), %zu stored frames, %zu static frames\n",
+	    animations, interpolated, frames, staticFrames);
 	return 1;
 }
 
@@ -254,7 +298,7 @@ int main(int argc, char **argv)
 		    load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
 	}
 	result = 0;
-	printf("Validation covers roots, model headers and geometry spans; nested data and gameplay remain unverified.\n");
+	printf("Validation covers roots, model/animation/frame headers and spans; vertex decompression, textures and gameplay remain unverified.\n");
 	goto done;
 invalid:
 	if (status != NATIVE_PTRMAP_OK)

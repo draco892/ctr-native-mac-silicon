@@ -142,6 +142,31 @@ class ValidatorTests(unittest.TestCase):
         put32(lev, definition + 0x10, len(lev))
         self.run_tool('lev', self.write('instance.lev', lev), self.root / 'instance.ptr', expected=1)
 
+    def test_animation_frames_from_file(self):
+        payload = bytearray(self.mpk[4:132]) + bytearray(128)
+        put32(payload, 116, 1)  # Header animation count.
+        put32(payload, 120, 128)
+        put32(payload, 128, 132)
+        struct.pack_into('<HHI', payload, 148, 3, 32, 252)
+        for frame in range(3):
+            put32(payload, 156 + frame * 32 + 24, 28)
+        put32(payload, 252, 0x12345678)
+        ptr = ptr_map([4, 52, 120, 128, 152])
+
+        def write_animation(data):
+            return self.write('animated.mpk', struct.pack('<I', len(data)) + data + ptr)
+
+        text = self.run_tool('mpk', write_animation(payload))
+        self.assertIn('1 animations (0 interpolated), 3 stored frames', text)
+        struct.pack_into('<H', payload, 148, 0x8005)
+        self.assertIn('1 interpolated', self.run_tool('mpk', write_animation(payload)))
+        for field, value in [(180, 33), (152, 256), (120, 256)]:
+            malformed = bytearray(payload)
+            put32(malformed, field, value)
+            self.run_tool('mpk', write_animation(malformed), expected=1)
+        struct.pack_into('<H', payload, 148, 0)
+        self.run_tool('mpk', write_animation(payload), expected=1)
+
 
 if __name__ == '__main__':
     unittest.main()

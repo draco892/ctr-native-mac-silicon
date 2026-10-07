@@ -16,7 +16,8 @@ ctest --preset macos-arm64-memory
 
 The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
 `ctr_native_ptrmap_tests`, `ctr_native_assets_tests` and
-`ctr_native_model_library_tests` under `build-macos-arm64-memory/`. SDL and retail
+`ctr_native_model_library_tests` and `ctr_native_model_animation_tests` under
+`build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
 To run the same modules with AddressSanitizer and UndefinedBehaviorSanitizer:
@@ -175,9 +176,9 @@ nonnegative counts and complete quad, vertex and BSP spans using retail strides.
 Geometry is returned as wire bytes, never pointer-bearing runtime structs.
 
 Validation is staged: opening a level does not validate each model or its mesh;
-call the corresponding accessors. Header-internal animation/texture/command
-pointers, icon contents and the remaining Level fields are
-not decoded yet. Instance definitions are decoded by the later reader below.
+call the corresponding accessors. Texture/command pointers, icon contents and
+the remaining Level fields are not decoded yet. Animation/frame records and
+instance definitions are decoded by the later readers below.
 Bounds checks do not establish semantic validity or prohibit
 overlapping spans. Keep the decoded map, entries and asset alive and unchanged;
 reopen views after reload, release or Rebind. No global state or allocation is
@@ -229,8 +230,9 @@ conversion; this step does not enable an ARM64 game build.
 `ctr_native_asset_validate` reads extracted files, individual BIGFILE entries,
 or the supplied `assets/ctr-u.bin` directly using the production MODE2/2352
 disc reader. It checks root/table spans, every listed model/header, and LEV
-geometry spans. It does not decode nested animation/texture/command data or
-execute rendering/gameplay. Inputs are opened read-only; no asset extraction is
+geometry spans. It also checks animation/frame records as described below;
+vertex decompression, texture/command decoding and rendering/gameplay remain
+unimplemented in this path. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -267,8 +269,8 @@ ctr_native_asset_validate big-lev BIGFILE.BIG 1
 ctr_native_asset_validate big-lev-ptr BIGFILE.BIG 201 202
 ```
 
-The full presets run eight asset-independent CTest tests. If
-`assets/ctr-u.bin` exists **when configuring**, CMake adds a ninth,
+The full presets run nine asset-independent CTest tests. If
+`assets/ctr-u.bin` exists **when configuring**, CMake adds a tenth,
 `ctr_native_asset_retail`, which validates the four entries above. Disc contents
 remain local and ignored by Git. To rerun just loading/file validation or retail:
 
@@ -337,6 +339,74 @@ The existing native model-store and driver-extra paths now check the same ID
 domain before indexing their legacy table; their PS1 branches are unchanged.
 This step does not provide visual asset playback or enable the complete game.
 
+## Animation and frame wire readers
+
+`native_model_animation.c` reads animation tables through the decoded pointer
+map, preserving full host addresses. ModelAnim has a `0x18`-byte wire header;
+ModelFrame has a `0x1c`-byte prefix. Animation names, frame origins and scalar
+metadata are decoded independently of host struct packing. The frame stride
+is unsigned, matching the render bucket's access even though the old C field
+was signed.
+
+The high bit of `numFrames` selects interpolation, while the low 15 bits are
+the logical frame count. Direct animations store that many frames; interpolated
+animations require `floor(logicalCount/2)+1` stored records, including the next
+frame needed at an even-count endpoint. Opening checks the complete animation
+pointer table, animation header, nonzero logical count, stride of at least
+28 bytes, complete stored frame span and optional first delta-table word.
+Optional unlisted-zero pointers return `NOT_FOUND`; a relocated zero still
+references asset origin. Nonzero pointers absent from PTR are rejected.
+
+Frame access validates its relative vertex offset against the frame stride,
+and exposes only the remaining frame bytes. The offset need not be 28. For
+static frames the length is not serialized: the caller specifies how many
+vertex bytes it needs, and the reader validates only that requested span.
+The validator requests zero static vertex bytes, checking the prefix/offset
+without guessing a vertex count. The supplied LEV contains an offset-34 frame
+which passes this check. Delta metadata is read as checked little-endian words,
+with each requested index separately bounded against the asset; its semantic
+length and the compressed bitstream still need the vertex/command decoder.
+
+`NativeAnimation_SelectFrame` clamps a logical request before selecting the
+stored record(s). Odd interpolated requests return current and next frames;
+direct/even requests return only current. It does not advance time, wrap an
+animation or interpolate/decompress positions or vertices. Views borrow the
+unchanged map, entries and asset; reopen them after reload or Rebind, and
+discard any transient frame pointers before releasing the asset.
+
+The validator checks every stored frame and the final clamped selection in
+all listed animations. Real-disc results on Apple Silicon:
+
+| Entry | Animations | Interpolated | Stored frames | Static frames |
+| --- | ---: | ---: | ---: | ---: |
+| Shared MPK 259 | 82 | 2 | 1029 | 50 |
+| Crash 1P MPK 260 | 43 | 18 | 638 | 42 |
+| LEV 1 | 7 | 0 | 186 | 23 |
+| Hub LEV/PTR 201/202 | 1 | 1 | 16 | 14 |
+
+These are record visits per listed model/header/animation, not deduplicated
+counts of unique byte ranges. They establish bounded data access rather than
+rendered-animation parity.
+
+`ctr_native_model_animation` covers unaligned input, unsigned strides, direct
+and interpolated frames, odd/even endpoints, signed origins, clamping, static
+offsets, delta reads, rebind, file immutability, malformed tables/counts/strides/
+offsets, missing relocations and 2000 mutated fixtures. CLI file tests include
+valid/interpolated animation fixtures and malformed frame/table/delta targets.
+To repeat just the new decoder and real-disc checks with sanitizers:
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_animation$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+The module is included in the native unity chain and standalone validator.
+Gameplay and render bucket consumers still use their legacy structures;
+vertex decompression, texture/command decoding and renderer migration remain
+required before visual playback or an ARM64 game build.
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -350,8 +420,8 @@ runtime objects (host pointers). In particular:
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Extend the MPK/LEV wire readers to nested model animation/texture/command
-   data; connect the new library and instance-definition reader to resident
+2. Decode model vertex streams and texture/command data; connect the new
+   library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
    offsets; host structures must not overlap retail-sized scratchpad slots.
