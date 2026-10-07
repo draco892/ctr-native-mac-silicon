@@ -1,5 +1,6 @@
 #include <platform/native_asset_loading.h>
 #include <platform/native_disc_image.h>
+#include <platform/native_model_library.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -114,6 +115,15 @@ static int Validator_Index(const char *text, u32 *out)
 
 static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level)
 {
+	struct NativeModelLibrary library;
+	NativeModelLibrary_Reset(&library);
+	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
+	    NativeModelLibrary_StoreLevel(&library, level);
+	if (stored != NATIVE_ASSET_OK)
+	{
+		fprintf(stderr, "Model library rejected invalid model data or ID.\n");
+		return 0;
+	}
 	u32 count = mpk != NULL ? mpk->modelCount : level->modelCount;
 	for (u32 i = 0; i < count; i++)
 	{
@@ -129,6 +139,27 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 			if (NativeModel_GetHeader(&model, j, &header) != NATIVE_ASSET_OK)
 				return 0;
 	}
+	u32 registered = 0;
+	for (s32 id = 0; id < NATIVE_MODEL_LIBRARY_SLOTS; id++)
+	{
+		struct NativeModelView model;
+		enum NativeAssetResult result = NativeModelLibrary_Get(&library, id, &model);
+		if (result == NATIVE_ASSET_NOT_FOUND) continue;
+		if (result != NATIVE_ASSET_OK || model.id != id) return 0;
+		registered++;
+	}
+	if (level != NULL)
+		for (u32 i = 0; i < level->instanceCount; i++)
+		{
+			struct NativeInstanceDefView instance;
+			if (NativeLevel_GetInstance(level, i, &instance) != NATIVE_ASSET_OK)
+			{
+				fprintf(stderr, "Invalid instance/model reference at index %u\n", i);
+				return 0;
+			}
+		}
+	printf("Model library OK: %u registered IDs; %u instance definitions decoded\n",
+	    registered, level != NULL ? level->instanceCount : 0);
 	return 1;
 }
 

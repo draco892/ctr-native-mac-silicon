@@ -22,6 +22,7 @@ enum NativeAssetResult
 	NATIVE_ASSET_INVALID_ARGUMENT,
 	NATIVE_ASSET_INVALID_DATA,
 	NATIVE_ASSET_INDEX_OUT_OF_RANGE,
+	NATIVE_ASSET_NOT_FOUND,
 };
 
 struct NativeModelView
@@ -67,6 +68,16 @@ struct NativeModelHeaderView
 	const u8 *wire;
 };
 
+struct NativeInstanceDefView
+{
+	char name[17];
+	struct NativeModelView model;
+	s16 scale[3], position[3], rotation[3];
+	u32 colorRGBA, flags;
+	s32 unk24, unk28, modelID;
+	// The on-disk ptrInstance field is runtime scratch, never a host pointer.
+};
+
 // DRAM file envelope used by LOAD_DramFileCallback: four-byte signed map offset,
 // then asset bytes, then PTR. Positive/zero offsets are relative to the asset
 // start. Negative offsets denote the separate-PTR path and are rejected here;
@@ -87,6 +98,9 @@ enum NativeAssetResult NativeMpk_GetModel(const struct NativeMpkView *mpk, u32 i
 enum NativeAssetResult NativeLevel_Open(const struct NativePtrMapView *map, struct NativeLevelView *out);
 enum NativeAssetResult NativeLevel_GetModel(const struct NativeLevelView *level, u32 index, struct NativeModelView *out);
 enum NativeAssetResult NativeLevel_GetMesh(const struct NativeLevelView *level, struct NativeMeshView *out);
+enum NativeAssetResult NativeLevel_GetInstance(const struct NativeLevelView *level, u32 index, struct NativeInstanceDefView *out);
+// Checked reopening by an asset-relative offset, for persistent runtime refs.
+enum NativeAssetResult NativeModel_Open(const struct NativePtrMapView *map, u32 offset, struct NativeModelView *out);
 enum NativeAssetResult NativeModel_GetHeader(const struct NativeModelView *model, u32 index, struct NativeModelHeaderView *out);
 
 #endif

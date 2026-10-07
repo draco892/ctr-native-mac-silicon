@@ -68,14 +68,20 @@ static int NativeAsset_Array(const struct NativePtrMapView *map, u32 slot,
 	return NativeAsset_Resolve(map, slot, (size_t)count * stride, count == 0, target);
 }
 
-static enum NativeAssetResult NativeAsset_ModelAtSlot(const struct NativePtrMapView *map,
-    u32 slot, struct NativeModelView *out)
+enum NativeAssetResult NativeModel_Open(const struct NativePtrMapView *map,
+    u32 offset, struct NativeModelView *out)
 {
 	const u8 *model;
 	const u8 *headers;
 	s16 count;
-	if (!NativeAsset_Resolve(map, slot, NATIVE_MODEL_BYTES, 0, &model))
+	if (out == NULL)
+		return NATIVE_ASSET_INVALID_ARGUMENT;
+	memset(out, 0, sizeof(*out));
+	if (map == NULL || map->origin == NULL)
+		return NATIVE_ASSET_INVALID_ARGUMENT;
+	if (!NativeAsset_HasBytes(map, offset, NATIVE_MODEL_BYTES))
 		return NATIVE_ASSET_INVALID_DATA;
+	model = map->origin + offset;
 	count = NativeAsset_ReadS16(model + 0x12);
 	if (count < 0 || !NativeAsset_Array(map, (u32)(model - map->origin) + 0x14,
 	    (u32)count, NATIVE_MODEL_HEADER_BYTES, &headers))
@@ -87,6 +93,56 @@ static enum NativeAssetResult NativeAsset_ModelAtSlot(const struct NativePtrMapV
 	out->id = NativeAsset_ReadS16(model + 0x10);
 	memcpy(out->name, model, 16);
 	out->name[16] = '\0';
+	return NATIVE_ASSET_OK;
+}
+
+static enum NativeAssetResult NativeAsset_ModelAtSlot(const struct NativePtrMapView *map,
+    u32 slot, struct NativeModelView *out)
+{
+	const u8 *model;
+	if (!NativeAsset_Resolve(map, slot, NATIVE_MODEL_BYTES, 0, &model))
+		return NATIVE_ASSET_INVALID_DATA;
+	return NativeModel_Open(map, (u32)(model - map->origin), out);
+}
+
+static s32 NativeAsset_ReadS32(const u8 *p)
+{
+	u32 value = CTR_ReadU32LE(p);
+	return (s32)(value <= INT32_MAX ? (s64)value : (s64)value - 4294967296LL);
+}
+
+enum NativeAssetResult NativeLevel_GetInstance(const struct NativeLevelView *level,
+    u32 index, struct NativeInstanceDefView *out)
+{
+	struct NativeInstanceDefView result = {0};
+	u32 offset;
+	const u8 *wire;
+	if (out == NULL)
+		return NATIVE_ASSET_INVALID_ARGUMENT;
+	memset(out, 0, sizeof(*out));
+	if (level == NULL || level->map == NULL)
+		return NATIVE_ASSET_INVALID_ARGUMENT;
+	if (index >= level->instanceCount)
+		return NATIVE_ASSET_INDEX_OUT_OF_RANGE;
+	offset = level->instancesOffset + index * NATIVE_INSTANCE_DEF_BYTES;
+	if (!NativeAsset_HasBytes(level->map, offset, NATIVE_INSTANCE_DEF_BYTES) ||
+	    NativeAsset_ModelAtSlot(level->map, offset + 0x10, &result.model) != NATIVE_ASSET_OK)
+		return NATIVE_ASSET_INVALID_DATA;
+	wire = level->map->origin + offset;
+	memcpy(result.name, wire, 16);
+	result.name[16] = '\0';
+	for (int axis = 0; axis < 3; axis++)
+	{
+		result.scale[axis] = NativeAsset_ReadS16(wire + 0x14 + axis * 2);
+		result.position[axis] = NativeAsset_ReadS16(wire + 0x30 + axis * 2);
+		result.rotation[axis] = NativeAsset_ReadS16(wire + 0x36 + axis * 2);
+	}
+	result.colorRGBA = CTR_ReadU32LE(wire + 0x1c);
+	result.flags = CTR_ReadU32LE(wire + 0x20);
+	result.unk24 = NativeAsset_ReadS32(wire + 0x24);
+	result.unk28 = NativeAsset_ReadS32(wire + 0x28);
+	result.modelID = NativeAsset_ReadS32(wire + 0x3c);
+	*out = result;
 	return NATIVE_ASSET_OK;
 }
 

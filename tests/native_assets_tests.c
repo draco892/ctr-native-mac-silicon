@@ -101,8 +101,8 @@ static int TestMpk(void)
 	return 0;
 }
 
-enum { LEVEL_SIZE = 0x36c, LEVEL_MAP_COUNT = 9 };
-static const u32 LevelSlots[LEVEL_MAP_COUNT] = {0, 0x10, 0x18, 0x220, 0x224, 0x244, 0x20c, 0x210, 0x218};
+enum { LEVEL_SIZE = 0x36c, LEVEL_MAP_COUNT = 10 };
+static const u32 LevelSlots[LEVEL_MAP_COUNT] = {0, 0x10, 0x18, 0x220, 0x224, 0x244, 0x20c, 0x210, 0x218, 0x2a0};
 
 static void MakeLevel(u8 *asset)
 {
@@ -115,6 +115,17 @@ static void MakeLevel(u8 *asset)
 	CTR_WriteU32LE(asset + 0x220, 0x230);
 	CTR_WriteU32LE(asset + 0x224, 0x230);
 	MakeModel(asset, 0x230, 0x250);
+	memcpy(asset + 0x290, "instance_name_16", 16);
+	CTR_WriteU32LE(asset + 0x2a0, 0x230);
+	Put16(asset + 0x2a4, 0x8000);
+	Put16(asset + 0x2c0, 0xfffe);
+	Put16(asset + 0x2c6, 0x7fff);
+	CTR_WriteU32LE(asset + 0x2ac, 0x12345678);
+	CTR_WriteU32LE(asset + 0x2b0, 0x80000001);
+	CTR_WriteU32LE(asset + 0x2b4, 0x80000000);
+	CTR_WriteU32LE(asset + 0x2b8, 0xffffffff);
+	CTR_WriteU32LE(asset + 0x2bc, 0xdeadbeef); // Runtime scratch, never dereferenced.
+	CTR_WriteU32LE(asset + 0x2cc, 0xfffffffe);
 	CTR_WriteU32LE(asset + 0x200, 1);
 	CTR_WriteU32LE(asset + 0x204, 2);
 	CTR_WriteU32LE(asset + 0x20c, 0x2d0);
@@ -133,6 +144,7 @@ static int TestLevel(void)
 	struct NativeLevelView level;
 	struct NativeModelView model;
 	struct NativeMeshView mesh;
+	struct NativeInstanceDefView instance;
 	MakeLevel(asset);
 	MakeMap(map, LevelSlots, LEVEL_MAP_COUNT);
 	memcpy(snapshot, asset, LEVEL_SIZE);
@@ -140,6 +152,13 @@ static int TestLevel(void)
 	CHECK(NativeLevel_Open(&pointers, &level) == NATIVE_ASSET_OK);
 	CHECK(level.modelCount == 2 && level.modelsOffset == 0x220);
 	CHECK(level.instanceCount == 1 && level.instancesOffset == 0x290);
+	CHECK(NativeLevel_GetInstance(&level, 0, &instance) == NATIVE_ASSET_OK);
+	CHECK(instance.model.offset == 0x230 && instance.model.id == -1);
+	CHECK(strcmp(instance.name, "instance_name_16") == 0);
+	CHECK(instance.scale[0] == INT16_MIN && instance.position[0] == -2 && instance.rotation[0] == INT16_MAX);
+	CHECK(instance.colorRGBA == 0x12345678 && instance.flags == 0x80000001);
+	CHECK(instance.unk24 == INT32_MIN && instance.unk28 == -1 && instance.modelID == -2);
+	CHECK(NativeLevel_GetInstance(&level, 1, &instance) == NATIVE_ASSET_INDEX_OUT_OF_RANGE && instance.model.map == NULL);
 	CHECK(NativeLevel_GetModel(&level, 0, &model) == NATIVE_ASSET_OK && model.offset == 0x230);
 	CHECK(NativeLevel_GetModel(&level, 2, &model) == NATIVE_ASSET_INDEX_OUT_OF_RANGE && model.map == NULL);
 	CHECK(NativeLevel_GetMesh(&level, &mesh) == NATIVE_ASSET_OK);
@@ -147,6 +166,16 @@ static int TestLevel(void)
 	CHECK(mesh.vertexCount == 2 && mesh.vertices == asset + 0x32c);
 	CHECK(mesh.bspCount == 1 && mesh.bsp == asset + 0x34c); // Exact end of file.
 	CHECK(memcmp(snapshot, asset, LEVEL_SIZE) == 0);
+	// Missing instance-model relocation and a target at EOF are both rejected.
+	MakeMap(map, LevelSlots, LEVEL_MAP_COUNT - 1);
+	CHECK(NativePtrMap_Decode(asset, LEVEL_SIZE, map, sizeof(map), entries, LEVEL_MAP_COUNT, &pointers) == NATIVE_PTRMAP_OK);
+	CHECK(NativeLevel_GetInstance(&level, 0, &instance) == NATIVE_ASSET_INVALID_DATA && instance.model.map == NULL);
+	MakeMap(map, LevelSlots, LEVEL_MAP_COUNT);
+	CTR_WriteU32LE(asset + 0x2a0, LEVEL_SIZE);
+	CHECK(NativePtrMap_Decode(asset, LEVEL_SIZE, map, sizeof(map), entries, LEVEL_MAP_COUNT, &pointers) == NATIVE_PTRMAP_OK);
+	CHECK(NativeLevel_GetInstance(&level, 0, &instance) == NATIVE_ASSET_INVALID_DATA);
+	CTR_WriteU32LE(asset + 0x2a0, 0x230);
+	CHECK(NativePtrMap_Decode(asset, LEVEL_SIZE, map, sizeof(map), entries, LEVEL_MAP_COUNT, &pointers) == NATIVE_PTRMAP_OK);
 	// Counts must describe whole spans, with retail strides, not host sizeof.
 	CTR_WriteU32LE(asset + 0xc, UINT32_MAX);
 	CHECK(NativeLevel_Open(&pointers, &level) == NATIVE_ASSET_INVALID_DATA && level.map == NULL);

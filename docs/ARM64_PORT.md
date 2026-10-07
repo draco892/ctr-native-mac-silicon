@@ -15,7 +15,8 @@ ctest --preset macos-arm64-memory
 ```
 
 The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
-`ctr_native_ptrmap_tests` and `ctr_native_assets_tests` under `build-macos-arm64-memory/`. SDL and retail
+`ctr_native_ptrmap_tests`, `ctr_native_assets_tests` and
+`ctr_native_model_library_tests` under `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
 To run the same modules with AddressSanitizer and UndefinedBehaviorSanitizer:
@@ -175,8 +176,9 @@ Geometry is returned as wire bytes, never pointer-bearing runtime structs.
 
 Validation is staged: opening a level does not validate each model or its mesh;
 call the corresponding accessors. Header-internal animation/texture/command
-pointers, instance contents, icon contents and the remaining Level fields are
-not decoded yet. Bounds checks do not establish semantic validity or prohibit
+pointers, icon contents and the remaining Level fields are
+not decoded yet. Instance definitions are decoded by the later reader below.
+Bounds checks do not establish semantic validity or prohibit
 overlapping spans. Keep the decoded map, entries and asset alive and unchanged;
 reopen views after reload, release or Rebind. No global state or allocation is
 introduced. These readers are linked into the native unity chain, but loading
@@ -265,8 +267,8 @@ ctr_native_asset_validate big-lev BIGFILE.BIG 1
 ctr_native_asset_validate big-lev-ptr BIGFILE.BIG 201 202
 ```
 
-The full presets run seven asset-independent CTest tests. If
-`assets/ctr-u.bin` exists **when configuring**, CMake adds an eighth,
+The full presets run eight asset-independent CTest tests. If
+`assets/ctr-u.bin` exists **when configuring**, CMake adds a ninth,
 `ctr_native_asset_retail`, which validates the four entries above. Disc contents
 remain local and ignored by Git. To rerun just loading/file validation or retail:
 
@@ -279,6 +281,61 @@ Synthetic tests also cover two-stage completion, malformed PTR retry,
 insufficient record capacity, stale-view clearing, reset, duplicate completion,
 release of PTR storage after decoding, archive bounds and exact entry lengths
 when sector padding would otherwise hide truncation.
+
+## ARM64 model library and instance definitions
+
+`native_model_library.c` provides a runtime library of 227 model references.
+Each reference stores its borrowed decoded-map owner and a four-byte relative
+model offset, not a cached wire pointer. Lookup by ID uses `NativeModel_Open`
+to reopen and validate the model and header span against the current host base.
+Rebind of unchanged asset bytes therefore preserves references. Before
+re-decoding, overwriting or releasing an asset, call `DropOwner` while its map
+identity is still available. The map, entries and payload remain caller-owned;
+the library does not allocate or serialize pointers.
+
+Store accepts MPK, LEV or a single model. IDs `0..226` are valid; `-1` is skipped
+as in retail; other negative/oversized IDs are rejected before array indexing.
+Later entries/sources replace earlier IDs. MPK/LEV stores are transactional:
+if any model is invalid, no partial update becomes visible. Removing an owner
+only removes its current references and does not resurrect overridden models.
+`Clear` mirrors the retail function by clearing 226 entries and preserving slot
+226; `Reset` and owner removal also clear that final slot.
+
+`NativeLevel_GetInstance` decodes the 64-byte InstDef wire record into host
+values: name, validated direct model reference, signed scale/position/rotation,
+color, flags, the two unknown signed fields and the serialized model ID. It
+never copies the on-disk runtime `ptrInstance` field into a host pointer, and
+does not create a gameplay Instance or modify the asset. The model ID field is
+preserved independently of the model's ID; lookup ownership and renderer
+selection must not silently replace the direct model reference with another
+source's same-ID override.
+
+The validator now stores each MPK/LEV in the new library, looks up all registered
+IDs and decodes all LEV instance definitions. The supplied disc passes these
+checks for both MPKs and both levels above (66 and 13 instance definitions).
+`ctr_native_model_library` covers overrides, ignored/invalid IDs, duplicate IDs,
+transactional failure, clear/reset, owner release, rebind and 100 reloads.
+Asset tests cover signed instance fields, stale runtime-pointer bytes, missing
+model relocations, invalid model spans and cleared failure outputs. File tests
+also exercise model-ID boundaries and instance references through the CLI.
+
+To build and test this step with sanitizers:
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_library$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+The new library is linked into the native unity chain and used by the ARM64
+validator. The game's existing `GameTracker.modelPtr`, `LibraryOfModels_Store`
+and `INSTANCE_LevInitAll` still consume 32-bit patched structures; their switch
+requires migration of resident ownership and gameplay/rendering consumers.
+The existing native model-store and driver-extra paths now check the same ID
+domain before indexing their legacy table; their PS1 branches are unchanged.
+This step does not provide visual asset playback or enable the complete game.
 
 ## Remaining game work
 
@@ -294,8 +351,8 @@ runtime objects (host pointers). In particular:
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
 2. Extend the MPK/LEV wire readers to nested model animation/texture/command
-   data and instance contents; migrate model-library and rendering consumers
-   to host runtime objects. Validate these and the LNG integration with retail assets.
+   data; connect the new library and instance-definition reader to resident
+   gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
    offsets; host structures must not overlap retail-sized scratchpad slots.
 4. Port checkpoint pointer slots and address tables before enabling 64-bit

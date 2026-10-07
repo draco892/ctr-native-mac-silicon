@@ -119,6 +119,29 @@ class ValidatorTests(unittest.TestCase):
         self.run_tool('unknown', path, expected=2)
         self.run_tool('mpk', self.root / 'missing', expected=1)
 
+    def test_model_library_ids(self):
+        for model_id, expected in [(-1, 0), (226, 0), (-2, 1), (227, 1)]:
+            data = bytearray(self.mpk)
+            struct.pack_into('<h', data, 52, model_id)
+            text = self.run_tool('mpk', self.write('ids.mpk', data), expected=expected)
+            if model_id == -1:
+                self.assertIn('0 registered IDs', text)
+            elif model_id == 226:
+                self.assertIn('1 registered IDs', text)
+
+    def test_instance_model_reference(self):
+        lev = bytearray(self.lev) + bytearray(64 + 24)
+        definition, model = len(self.lev), len(self.lev) + 64
+        put32(lev, 0xc, 1)
+        put32(lev, 0x10, definition)
+        put32(lev, definition + 0x10, model)
+        struct.pack_into('<h', lev, model + 0x10, 27)
+        ptr = ptr_map([0, 0x210, 0x10, definition + 0x10])
+        text = self.run_tool('lev', self.write('instance.lev', lev), self.write('instance.ptr', ptr))
+        self.assertIn('1 instance definitions decoded', text)
+        put32(lev, definition + 0x10, len(lev))
+        self.run_tool('lev', self.write('instance.lev', lev), self.root / 'instance.ptr', expected=1)
+
 
 if __name__ == '__main__':
     unittest.main()

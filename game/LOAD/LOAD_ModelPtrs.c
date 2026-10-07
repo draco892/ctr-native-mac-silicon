@@ -1,5 +1,9 @@
 #include <common.h>
 
+#ifdef CTR_NATIVE
+#include <platform/native_model_library.h>
+#endif
+
 void LOAD_GlobalModelPtrs_MPK()
 {
 	struct GameTracker *gGT = GAME_TRACKER;
@@ -18,6 +22,14 @@ void LOAD_GlobalModelPtrs_MPK()
 		{
 			continue;
 		}
+
+#ifdef CTR_NATIVE
+		if ((u16)m->id >= NATIVE_MODEL_LIBRARY_SLOTS)
+		{
+			Platform_LogError("[CTR Native] Driver model ID outside library bounds\n");
+			CTR_TRAP();
+		}
+#endif
 
 		gGT->modelPtr[m->id] = m;
 	}
