@@ -26,6 +26,7 @@ void LOAD_StringToUpper(char *path)
 
 #ifdef CTR_NATIVE
 #include <platform/native_cd.h>
+#include <platform/native_asset_loading.h>
 #endif
 
 int LOAD_InitCDvol(void)
@@ -131,7 +132,19 @@ void LOAD_DramFileCallback(struct LoadQueueSlot *lqs)
 
 	if (fileBuf != NULL)
 	{
+#if defined(CTR_NATIVE)
+		struct NativeDramLayout nativeLayout;
+		// size_UNUSED is the actual BIGFILE entry size. Validate before either
+		// patching pointers or shrinking away the embedded PTR allocation.
+		if (!NativeAssetLoad_CheckDram(fileBuf, lqs->size_UNUSED, &nativeLayout))
+		{
+			Platform_LogError("[CTR Native] Invalid DRAM file or pointer map\n");
+			CTR_TRAP();
+		}
+		int ptrMapOffset = nativeLayout.ptr == NULL ? -1 : (int)nativeLayout.payloadBytes;
+#else
 		int ptrMapOffset = *(int *)&fileBuf[0];
+#endif
 		char *realFileBuf = &fileBuf[4];
 
 		if (ptrMapOffset >= 0)
@@ -155,6 +168,11 @@ void LOAD_DramFileCallback(struct LoadQueueSlot *lqs)
 		}
 
 		lqs->ptrDestination = &fileBuf[4];
+#if defined(CTR_NATIVE)
+		// Downstream callbacks receive bytes at ptrDestination, excluding both
+		// the DRAM prefix and any embedded PTR. Raw read callbacks retain eSize.
+		lqs->size_UNUSED = (u32)nativeLayout.payloadBytes;
+#endif
 	}
 
 #if defined(CTR_NATIVE)
@@ -355,12 +373,26 @@ void *LOAD_ReadFile_ex(struct BigHeader *bigfile, u32 loadType, int subfileIndex
 	{
 		bigfile = sdata->ptrBigfile1;
 	}
+	if (bigfile == NULL || sizePtr == NULL || subfileIndex < 0 || subfileIndex >= bigfile->numEntry)
+	{
+		Platform_LogError("[CTR Native] Invalid BIGFILE read request\n");
+		CTR_TRAP();
+	}
 #endif
 
 	// get size and offset of subfile
 	entry = BIG_GETENTRY(bigfile);
 	eSize = entry[subfileIndex].size;
 	eOffs = entry[subfileIndex].offset;
+
+#if defined(CTR_NATIVE)
+	if (eSize <= 0 || eSize > INT32_MAX - LOAD_CD_DATA_SECTOR_ROUND_MASK || eOffs < 0 ||
+	    bigfile->cdpos < 0 || eOffs > INT32_MAX - bigfile->cdpos)
+	{
+		Platform_LogError("[CTR Native] Invalid BIGFILE entry size or sector offset\n");
+		CTR_TRAP();
+	}
+#endif
 
 	*sizePtr = eSize;
 

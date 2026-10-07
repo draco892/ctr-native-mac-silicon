@@ -1,7 +1,7 @@
 # ARM64 port progress
 
 The port remains C17. Production memory modules, LNG decoding and bounded
-pointer-map resolution build and run in tests natively on macOS ARM64. It does
+pointer-map resolution and MPK/LEV readers build and run in tests natively on macOS ARM64. It does
 **not** build a playable game yet.
 
 ## Build and test the memory milestone
@@ -14,8 +14,8 @@ cmake --build --preset macos-arm64-memory
 ctest --preset macos-arm64-memory
 ```
 
-The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests` and
-`ctr_native_ptrmap_tests` under `build-macos-arm64-memory/`. SDL and retail
+The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
+`ctr_native_ptrmap_tests` and `ctr_native_assets_tests` under `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
 To run the same modules with AddressSanitizer and UndefinedBehaviorSanitizer:
@@ -142,8 +142,143 @@ current pointer fields would break the existing game.
 Tests cover unaligned buffers, unsorted maps, normalized flags, repeated loads,
 origin/end references, cycles, shared targets, buffer relocation, duplicate
 slots, invalid lengths/offsets/object sizes and 2000 malformed inputs. Synthetic
-fixtures establish the relative-address contract; retail MPK/LEV maps and the
-full game's loading callbacks remain to be validated.
+fixtures establish the relative-address contract; the real MPK/LEV map checks
+below supplement them. Full game loading still requires runtime validation.
+
+## MPK/LEV wire readers
+
+`platform/native_asset_readers.c` uses the pointer-map resolver to read assets without
+casting on-disk data to `struct Level`, `struct Model` or host pointer arrays.
+All scalar reads are little-endian and tolerate unaligned input. Retail byte
+sizes are explicit: Level `0x1f4`, Model `0x18`, ModelHeader `0x40`, InstDef
+`0x40`, mesh info `0x20`, QuadBlock `0x5c`, vertex `0x10` and BSP `0x20`.
+
+`NativeAsset_DecodeDram` reads the four-byte envelope used by
+`LOAD_DramFileCallback`. It checks the embedded PTR offset and passes the exact
+payload length, excluding the prefix and PTR, to `NativePtrMap_Decode`.
+Negative offsets select the legacy separate-PTR path and are rejected by this
+helper; that path needs separately known asset and PTR lengths.
+
+`NativeMpk_Open` checks optional icon metadata and scans the inline four-byte
+model-offset table from byte four to its unrelocated zero terminator. Each
+listed model must fit completely. A relocated zero references the asset start,
+as in retail; only an unlisted zero means NULL or terminates the MPK list.
+Nonzero pointers absent from PTR are rejected.
+
+`NativeLevel_Open` checks the complete root and the counted model-pointer and
+instance-definition spans. Indexed MPK/LEV model access checks the model and
+all its header records, preserving signed IDs (including `-1`) and copying
+16-byte names into terminated host strings. Header access exposes signed LOD
+distance, flags, scale and animation count. `NativeLevel_GetMesh` validates
+nonnegative counts and complete quad, vertex and BSP spans using retail strides.
+Geometry is returned as wire bytes, never pointer-bearing runtime structs.
+
+Validation is staged: opening a level does not validate each model or its mesh;
+call the corresponding accessors. Header-internal animation/texture/command
+pointers, instance contents, icon contents and the remaining Level fields are
+not decoded yet. Bounds checks do not establish semantic validity or prohibit
+overlapping spans. Keep the decoded map, entries and asset alive and unchanged;
+reopen views after reload, release or Rebind. No global state or allocation is
+introduced. These readers are linked into the native unity chain, but loading
+callbacks and renderer consumers still use the guarded 32-bit compatibility path.
+
+The new `ctr_native_assets` test covers the DRAM-to-PTR-to-MPK pipeline,
+shared models, LEV tables, signed fields, unterminated fixed-width names,
+unaligned buffers, pointers above 4 GiB on Apple Silicon, file immutability,
+exact-end geometry spans, rebind, 100 reloads and 2000 mutated fixtures.
+Rejection cases include missing relocations/terminators, truncated roots,
+headers and envelopes, references into appended PTR, negative/oversized counts,
+insufficient output capacity and spans extending past the asset. These are
+synthetic fixtures, supplemented by the retail checks below. Complete game
+loading remains untested.
+
+To run only the new reader tests with full output and sanitizers:
+
+```sh
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_assets$' -V
+```
+
+## Loading completion and real-asset validation
+
+`native_asset_loading.c` accepts exact file lengths at the loading boundary.
+Embedded DRAM completion publishes a decoded map only after all relocation
+records validate. Negative prefixes enter `WAITING_PTR`, with the four-byte
+prefix removed. Raw payload completion is also available for already unwrapped
+LEV data. A separate PTR completion requires a pending payload, preserves it
+for retry on error, and publishes `READY` only on success. Repeated PTR
+completion is rejected. Reset/new DRAM completion clears old published state.
+The payload and decoded records are borrowed; PTR bytes can be freed immediately
+after successful decoding. No runtime structure or queue-layout changes are made.
+
+The actual native `LOAD_DramFileCallback` now preflights the exact BIGFILE entry
+length and pointer map before legacy relocation or MEMPACK shrinking. Scratch
+relocation records are temporarily heap-allocated and freed before patching.
+Downstream callbacks receive `size_UNUSED` as the payload length, excluding the
+DRAM prefix and embedded PTR. `LOAD_ReadFile_ex` also rejects invalid entry
+indices, nonpositive/overflowing sizes and invalid sector arithmetic before
+issuing reads. The PS1 branch retains its original source behavior.
+
+The 32-bit game still patches pointers and uses its existing callbacks and
+consumers. The new completion adapters execute the unpatched ARM64 path in
+tests and the standalone validator. Persistent wire-view publication from the
+game's LEV/PTR callbacks, resident state and checkpoint ownership still needs
+conversion; this step does not enable an ARM64 game build.
+
+`ctr_native_asset_validate` reads extracted files, individual BIGFILE entries,
+or the supplied `assets/ctr-u.bin` directly using the production MODE2/2352
+disc reader. It checks root/table spans, every listed model/header, and LEV
+geometry spans. It does not decode nested animation/texture/command data or
+execute rendering/gameplay. Inputs are opened read-only; no asset extraction is
+needed and CD padding is excluded from the decoder's payload size.
+
+Build with either preset above. From the project root, validate real NTSC-U
+assets with sanitizers:
+
+```sh
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-mpk assets 259
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-mpk assets 260
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev assets 1
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-ptr assets 201 202
+```
+
+Validated with the supplied disc on Apple Silicon:
+
+| Entry/path | Models | Instances | Quads | Vertices | BSP nodes | Payload bytes | Relocations |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Shared MPK, 259 | 52 | — | — | — | — | 295032 | 3562 |
+| 1P Crash MPK, 260 | 44 | — | — | — | — | 277892 | 4389 |
+| LEV, 1 | 15 | 66 | 1250 | 7652 | 515 | 487924 | 15900 |
+| Hub LEV/PTR, 201/202 | 14 | 13 | 1583 | 7179 | 648 | 421164 | 12007 |
+
+The hub entry includes a negative DRAM prefix: apply its separate PTR relative
+to the payload **after** that prefix, not to the BIGFILE entry start.
+
+Other validator forms (indices are decimal):
+
+```sh
+ctr_native_asset_validate mpk pack.mpk
+ctr_native_asset_validate lev-dram track.dram
+ctr_native_asset_validate lev track.payload track.ptr
+ctr_native_asset_validate lev-external track.dram track.ptr
+ctr_native_asset_validate big-mpk BIGFILE.BIG 259
+ctr_native_asset_validate big-lev BIGFILE.BIG 1
+ctr_native_asset_validate big-lev-ptr BIGFILE.BIG 201 202
+```
+
+The full presets run seven asset-independent CTest tests. If
+`assets/ctr-u.bin` exists **when configuring**, CMake adds an eighth,
+`ctr_native_asset_retail`, which validates the four entries above. Disc contents
+remain local and ignored by Git. To rerun just loading/file validation or retail:
+
+```sh
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_asset' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+Synthetic tests also cover two-stage completion, malformed PTR retry,
+insufficient record capacity, stale-view clearing, reset, duplicate completion,
+release of PTR storage after decoding, archive bounds and exact entry lengths
+when sector padding would otherwise hide truncation.
 
 ## Remaining game work
 
@@ -155,11 +290,12 @@ unsafe 64-bit game build.
 Next, separate binary asset layouts (four-byte addresses and offsets) from
 runtime objects (host pointers). In particular:
 
-1. Connect the bounded pointer-map decoder to MPK/LEV loading callbacks with
-   actual asset lengths, then replace their direct host-pointer consumers.
-2. Apply the LNG separation to MPK/LEV/model tables without interpreting
-   four-byte entries as host-pointer arrays. Keep binary sizes and strides
-   explicitly verified; validate the LNG game integration with retail assets.
+1. Replace persistent MPK/LEV callback publications and direct host-pointer
+   consumers with decoded wire views and explicit ownership. The native DRAM
+   callback now retains actual payload lengths and validates embedded maps.
+2. Extend the MPK/LEV wire readers to nested model animation/texture/command
+   data and instance contents; migrate model-library and rendering consumers
+   to host runtime objects. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
    offsets; host structures must not overlap retail-sized scratchpad slots.
 4. Port checkpoint pointer slots and address tables before enabling 64-bit
