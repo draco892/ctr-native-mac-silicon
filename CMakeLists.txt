@@ -53,6 +53,19 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ctr_native_lng COMMAND ctr_native_lng_tests)
 
+    add_executable(ctr_native_ptrmap_tests tests/native_ptrmap_tests.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_ptrmap_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_ptrmap_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_ptrmap_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_ptrmap_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_ptrmap_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_ptrmap_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_ptrmap COMMAND ctr_native_ptrmap_tests)
+
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(
         NAME ctr_match_unit

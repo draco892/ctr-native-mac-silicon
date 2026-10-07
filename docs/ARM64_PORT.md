@@ -1,7 +1,8 @@
 # ARM64 port progress
 
-The port remains C17. Production memory modules and the LNG decoder build and
-run in tests natively on macOS ARM64. It does **not** build a playable game yet.
+The port remains C17. Production memory modules, LNG decoding and bounded
+pointer-map resolution build and run in tests natively on macOS ARM64. It does
+**not** build a playable game yet.
 
 ## Build and test the memory milestone
 
@@ -13,9 +14,9 @@ cmake --build --preset macos-arm64-memory
 ctest --preset macos-arm64-memory
 ```
 
-The executables are `build-macos-arm64-memory/ctr_native_memory_tests` and
-`build-macos-arm64-memory/ctr_native_lng_tests`. SDL and retail assets are not
-needed for these tests.
+The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests` and
+`ctr_native_ptrmap_tests` under `build-macos-arm64-memory/`. SDL and retail
+assets are not needed for these tests.
 
 To run the same modules with AddressSanitizer and UndefinedBehaviorSanitizer:
 
@@ -101,6 +102,49 @@ reloads without further allocation, and MEMPACK release/reset. The native
 decoder and arena are linked directly; the complete game's CD-loading path and
 retail language files still need runtime validation once the game can build.
 
+## Pointer-map decoding and resolution
+
+`NativePtrMap_Decode` replaces in-place relocation for new ARM64 asset readers.
+It accepts explicit asset and PTR byte lengths and decodes the PTR header's
+little-endian byte count, followed by four-byte slot offsets. As in retail,
+the low two bits of each slot offset are cleared. Each slot must contain a
+complete four-byte relative target within the asset. A zero target resolves
+to the asset start, preserving retail addition semantics; a target equal to
+the asset size is an allowed end sentinel.
+
+The caller supplies an array of `(slotOffset, targetOffset)` records. Decode
+sorts it by slot and rejects duplicate normalized slots, incomplete maps,
+out-of-bounds fields and invalid targets. On failure the view is cleared; the
+record array is scratch until success. Neither asset nor PTR bytes change.
+No global registry, heap allocation or packed host addresses are introduced.
+
+`NativePtrMap_Resolve` looks up an exact slot by binary search and converts its
+relative target to a full host pointer. The caller specifies the required object
+size: a complete object must fit inside the buffer; zero bytes permits an end
+sentinel. Resolution does not recursively traverse objects, so cycles and
+shared targets are supported without extra ownership rules.
+
+The view borrows its asset and record array. Keep both alive, clear/re-decode
+the view after reload or release, and call `NativePtrMap_Rebind` after copying
+or restoring the same asset at a new address. Records contain offsets only;
+Rebind replaces the transient host base. It does not implement checkpoint
+serialization or accept a file with different contents or length.
+
+The existing `LOAD_RunPtrMap` remains a guarded 32-bit compatibility path:
+native slot addressing now uses byte-pointer arithmetic and little-endian
+unsigned writes, while the PS1 branch is retained. The ARM64 decoder is linked
+into the platform unity chain and independently tested, but is deliberately
+not substituted under the old MPK/LEV consumers. Those consumers directly
+dereference pointer-bearing C structures and must first be converted into
+explicit wire layouts plus runtime accessors. Putting offsets back into their
+current pointer fields would break the existing game.
+
+Tests cover unaligned buffers, unsorted maps, normalized flags, repeated loads,
+origin/end references, cycles, shared targets, buffer relocation, duplicate
+slots, invalid lengths/offsets/object sizes and 2000 malformed inputs. Synthetic
+fixtures establish the relative-address contract; retail MPK/LEV maps and the
+full game's loading callbacks remain to be validated.
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -111,8 +155,8 @@ unsafe 64-bit game build.
 Next, separate binary asset layouts (four-byte addresses and offsets) from
 runtime objects (host pointers). In particular:
 
-1. Replace in-place host-address patching in `LOAD_RunPtrMap` with explicit
-   decoding or address resolution, then update consumers of the affected assets.
+1. Connect the bounded pointer-map decoder to MPK/LEV loading callbacks with
+   actual asset lengths, then replace their direct host-pointer consumers.
 2. Apply the LNG separation to MPK/LEV/model tables without interpreting
    four-byte entries as host-pointer arrays. Keep binary sizes and strides
    explicitly verified; validate the LNG game integration with retail assets.

@@ -62,7 +62,8 @@ sudo apt install libx11-dev libxext-dev libgl1-mesa-dev libasound2-dev libudev-d
 
 ### macOS / Apple Silicon (port in progress)
 
-The ARM64 port builds the C17 memory modules, LNG decoder and tests, using Xcode
+The ARM64 port builds the C17 memory modules, LNG and pointer-map decoders and
+tests, using Xcode
 Command Line Tools, CMake, Ninja and Python 3. The complete game still requires
 32-bit host pointers while its asset layouts are being ported.
 

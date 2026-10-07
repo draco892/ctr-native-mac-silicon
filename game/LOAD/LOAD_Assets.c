@@ -18,8 +18,16 @@ void LOAD_RunPtrMap(char *origin, int *patchArr, int numPtrs)
 	{
 		int offset = (*ptrCurrOffset >> 2) << 2;
 		// NOTE(aalhendi): Retail adds the aligned offset before the 32-bit base address.
+#if defined(CTR_NATIVE)
+		// Legacy native consumers still require four-byte host-pointer slots.
+		// ARM64 readers use NativePtrMap_Decode/Resolve with explicit asset sizes.
+		CTR_STATIC_ASSERT(sizeof(void *) == 4);
+		u8 *location = (u8 *)(void *)(origin + offset);
+		CTR_WriteU32LE(location, CTR_ReadU32LE(location) + (u32)(uintptr_t)origin);
+#else
 		int *location = (int *)((u32)offset + (u32)origin);
 		*location = *location + (int)origin;
+#endif
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
 		NativeCheckpoint_RegisterPointerSlot((char *)location);
 #endif
