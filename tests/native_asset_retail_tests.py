@@ -44,6 +44,41 @@ for arguments, expected in [
         raise SystemExit(result.stderr)
     print(result.stdout, end='')
 
+# Local instance groups use one camera/depth target and retain authored placement.
+with tempfile.TemporaryDirectory(prefix='ctr-scene-') as directory:
+    for mode, indices, expected, selected in [
+        ('disc-scene-near', ['1', '258,0', '0', '6'], 6, [0, 22, 3, 14, 15, 27]),
+        ('disc-scene', ['1', '258,0', '0', '1'], 1, [0]),
+        ('disc-scene-ptr', ['201', '202', '258,200', '0', '13'], 13, list(range(13))),
+        ('disc-scene-ptr-near', ['201', '202', '258,200', '12', '1'], 1, [12]),
+        ('disc-scene-terrain', ['1', '258,0', '0', '6'], 6, [0, 22, 3, 14, 15, 27]),
+        ('disc-scene-ptr-terrain', ['201', '202', '258,200', '12', '1'], 1, [12]),
+    ]:
+        output = pathlib.Path(directory) / f'{mode}.ppm'
+        result = subprocess.run([validator, mode, assets, *indices, str(output), 'iso'],
+                                capture_output=True, text=True)
+        if result.returncode != 0 or f'rendered {expected} instances' not in result.stdout:
+            raise SystemExit(f'Retail scene failed:\n{result.stdout}{result.stderr}')
+        actual = [int(line.split()[2].rstrip(':')) for line in result.stdout.splitlines()
+                  if line.startswith('Scene instance ')]
+        if actual != selected:
+            raise SystemExit(f'Unexpected scene selection: {actual} != {selected}')
+        if mode.endswith('-terrain'):
+            terrain = [line for line in result.stdout.splitlines() if line.startswith('Terrain OK:')]
+            if len(terrain) != 1 or int(terrain[0].split()[2]) <= 0:
+                raise SystemExit('Retail scene did not visit any terrain quad blocks.')
+            if int(terrain[0].split()[8]) <= 0:
+                raise SystemExit('Retail terrain produced no fragments.')
+        image = output.read_bytes()
+        header = b'P6\n512 512\n255\n'
+        if not image.startswith(header) or len(image) != len(header) + 512 * 512 * 3:
+            raise SystemExit('Invalid scene RGB payload.')
+        if image[len(header):] == bytes([24, 28, 36]) * (512 * 512):
+            raise SystemExit('Scene contains only background.')
+        if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
+            raise SystemExit(result.stderr)
+        print(result.stdout, end='')
+
 # These assert bounded image production and ordered uploads, not retail parity.
 with tempfile.TemporaryDirectory(prefix='ctr-preview-') as directory:
     images = {}

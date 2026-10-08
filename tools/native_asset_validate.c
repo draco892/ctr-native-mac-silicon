@@ -11,6 +11,7 @@
 #include <platform/native_model_draw.h>
 #include <platform/native_raster.h>
 #include <platform/native_instance_transform.h>
+#include <platform/native_mesh_geometry.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -502,6 +503,8 @@ static int Validator_PreviewView(const char *name,struct NativeModelMatrix *out)
 	return 1;
 }
 
+#include "native_scene_preview.h"
+
 static int Validator_Preview(const struct NativeMpkView *mpk,const struct NativeVramView *vram,
     u32 modelIndex,u32 headerIndex,const char *animationText,u32 frameIndex,u32 frameCount,int sequence,const char *path,const char *viewName)
 {
@@ -629,18 +632,33 @@ int main(int argc, char **argv)
 	u32 vramIndices[16]; size_t vramCount=0;
 	const char *previewView="front";
 	u32 assetIndex = 0, ptrIndex = 0, previewModel = 0, previewHeader = 0, previewFrame = 0, previewFrames = 1;
-	int indexed = 0, disc = 0, separate = 0, externalDram = 0, mpk = 0, result = 1, withVram = 0, onlyVram = 0, preview = 0, listModels = 0, sequence = 0, listAnimations = 0;
+	int indexed = 0, disc = 0, separate = 0, externalDram = 0, mpk = 0, result = 1, withVram = 0, onlyVram = 0, preview = 0, listModels = 0, sequence = 0, listAnimations = 0, scene = 0, sceneNearby = 0, sceneTerrain = 0;
 	enum NativePtrMapResult status;
 	if (argc < 3)
 		goto usage;
 	if ((strcmp(argv[1],"disc-preview")==0 && argc==11) || (strcmp(argv[1],"preview")==0 && argc==10) ||
-	    (strcmp(argv[1],"disc-sequence")==0 && argc==12) || (strcmp(argv[1],"sequence")==0 && argc==11))
+	    (strcmp(argv[1],"disc-sequence")==0 && argc==12) || (strcmp(argv[1],"sequence")==0 && argc==11) ||
+	    (strcmp(argv[1],"disc-scene")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr")==0 && argc==10) ||
+	    (strcmp(argv[1],"scene")==0 && argc==9) || (strcmp(argv[1],"scene-dram")==0 && argc==8) ||
+	    (strcmp(argv[1],"disc-scene-terrain")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr-terrain")==0 && argc==10) ||
+	    (strcmp(argv[1],"scene-terrain")==0 && argc==9) || (strcmp(argv[1],"scene-dram-terrain")==0 && argc==8) ||
+	    (strcmp(argv[1],"disc-scene-near")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr-near")==0 && argc==10))
 	{
 		struct NativeModelMatrix checkedView;
 		previewView=argv[--argc];
 		if(!Validator_PreviewView(previewView,&checkedView)) goto usage;
 	}
-	if(strcmp(argv[1],"disc-animations")==0 && argc==6) { listAnimations=1; indexed=1; disc=1; mpk=1; }
+	if(strcmp(argv[1],"disc-scene-terrain")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; indexed=1; disc=1; }
+	else if(strcmp(argv[1],"disc-scene-ptr-terrain")==0 && argc==9) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; indexed=1; disc=1; separate=1; externalDram=1; }
+	else if(strcmp(argv[1],"scene-terrain")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; separate=1; }
+	else if(strcmp(argv[1],"scene-dram-terrain")==0 && argc==7) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; }
+	else if(strcmp(argv[1],"disc-scene-near")==0 && argc==8) { scene=1; sceneNearby=1; withVram=1; indexed=1; disc=1; }
+	else if(strcmp(argv[1],"disc-scene-ptr-near")==0 && argc==9) { scene=1; sceneNearby=1; withVram=1; indexed=1; disc=1; separate=1; externalDram=1; }
+	else if(strcmp(argv[1],"disc-scene")==0 && argc==8) { scene=1; withVram=1; indexed=1; disc=1; }
+	else if(strcmp(argv[1],"disc-scene-ptr")==0 && argc==9) { scene=1; withVram=1; indexed=1; disc=1; separate=1; externalDram=1; }
+	else if(strcmp(argv[1],"scene")==0 && argc==8) { scene=1; withVram=1; separate=1; }
+	else if(strcmp(argv[1],"scene-dram")==0 && argc==7) { scene=1; withVram=1; }
+	else if(strcmp(argv[1],"disc-animations")==0 && argc==6) { listAnimations=1; indexed=1; disc=1; mpk=1; }
 	else if(strcmp(argv[1],"animations")==0 && argc==5) { listAnimations=1; mpk=1; }
 	else if(strcmp(argv[1],"disc-sequence")==0 && argc==11) { sequence=1; preview=1; withVram=1; indexed=1; disc=1; mpk=1; }
 	else if(strcmp(argv[1],"sequence")==0 && argc==10) { sequence=1; preview=1; withVram=1; mpk=1; }
@@ -668,6 +686,7 @@ int main(int argc, char **argv)
 		goto usage;
 	if (withVram && disc && !Validator_VramIndices(argv[separate ? 5 : 4], vramIndices, &vramCount)) goto usage;
 	if (preview && (!Validator_Index(argv[argc-5-sequence], &previewModel) || !Validator_Index(argv[argc-4-sequence], &previewHeader) || !Validator_Index(argv[argc-2-sequence], &previewFrame))) goto usage;
+	if(scene && (!Validator_Index(argv[argc-3],&previewFrame) || !Validator_Index(argv[argc-2],&previewFrames) || previewFrames==0 || previewFrames>256)) goto usage;
 	if(sequence && (!Validator_Index(argv[argc-2],&previewFrames) || previewFrames==0 || previewFrames>256)) goto usage;
 	if(listAnimations && (!Validator_Index(argv[argc-2],&previewModel) || !Validator_Index(argv[argc-1],&previewHeader))) goto usage;
 	if (disc && !NativeDiscImage_Init(argv[2]))
@@ -689,7 +708,7 @@ int main(int argc, char **argv)
 		for(size_t i=0;i<uploads;i++)
 		{
 			free(vramFile.bytes); vramFile=(struct ValidatorInput){0};
-			if(withVram && !(disc ? Validator_ReadDisc(vramIndices[i],&vramFile) : Validator_Read(argv[3],0,0,&vramFile)))
+			if(withVram && !(disc ? Validator_ReadDisc(vramIndices[i],&vramFile) : Validator_Read(argv[scene && separate ? 4 : 3],0,0,&vramFile)))
 			{ fprintf(stderr,"Cannot read VRAM upload %zu.\n",i); goto done; }
 			struct ValidatorInput *source=onlyVram ? &asset : &vramFile;
 			if(NativeVram_Load(&vram,source->bytes,source->size,&info)!=NATIVE_ASSET_OK)
@@ -780,6 +799,11 @@ int main(int argc, char **argv)
 	{
 		struct NativeLevelView view;
 		struct NativeMeshView mesh;
+		if(scene) {
+			if(NativeLevel_Open(&load.pointers,&view)!=NATIVE_ASSET_OK) goto invalid;
+			result=Validator_Scene(&view,&vram,previewFrame,previewFrames,sceneNearby,sceneTerrain,argv[argc-1],previewView) ? 0 : 1;
+			goto done;
+		}
 		if (NativeLevel_Open(&load.pointers, &view) != NATIVE_ASSET_OK || !Validator_Models(NULL, &view, withVram ? &vram : NULL) ||
 		    NativeLevel_GetMesh(&view, &mesh) != NATIVE_ASSET_OK)
 			goto invalid;
@@ -806,6 +830,12 @@ usage:
 	fprintf(stderr,"  ctr_native_asset_validate disc-animations ASSETS_DIR MPK_INDEX MODEL_INDEX HEADER_INDEX | animations MPK_FILE MODEL_INDEX HEADER_INDEX\n");
 	fprintf(stderr,"  ctr_native_asset_validate disc-sequence ASSETS_DIR MPK_INDEX VRAM_INDEX[,INDEX...] MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto FIRST COUNT OUTPUT_PREFIX [front|side|top|iso]\n");
 	fprintf(stderr,"  ctr_native_asset_validate sequence MPK_FILE VRAM_FILE MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto FIRST COUNT OUTPUT_PREFIX [front|side|top|iso]\n");
+	fprintf(stderr,"  ctr_native_asset_validate disc-scene ASSETS_DIR LEV_INDEX VRAM_INDEX[,INDEX...] FIRST COUNT OUTPUT.ppm [front|side|top|iso]\n");
+	fprintf(stderr,"  ctr_native_asset_validate disc-scene-ptr ASSETS_DIR LEV_INDEX PTR_INDEX VRAM_INDEX[,INDEX...] FIRST COUNT OUTPUT.ppm [front|side|top|iso]\n");
+	fprintf(stderr,"  ctr_native_asset_validate scene LEV_FILE PTR_FILE VRAM_FILE FIRST COUNT OUTPUT.ppm [front|side|top|iso]\n");
+	fprintf(stderr,"  ctr_native_asset_validate scene-dram LEV_FILE VRAM_FILE FIRST COUNT OUTPUT.ppm [front|side|top|iso]\n");
+	fprintf(stderr,"  disc-scene-near / disc-scene-ptr-near: same arguments, FIRST is anchor; choose COUNT nearest authored positions\n");
+	fprintf(stderr,"  disc-scene-terrain / disc-scene-ptr-terrain / scene-terrain / scene-dram-terrain: same scene arguments; FIRST is anchor, nearest instances plus coarse terrain within 2048 units\n");
 	result = 2;
 done:
 	NativeAssetLoad_Reset(&load);

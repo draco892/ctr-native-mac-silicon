@@ -143,12 +143,12 @@ class ValidatorTests(unittest.TestCase):
         self.run_tool('lev', self.write('instance.lev', lev), self.root / 'instance.ptr', expected=1)
 
     def test_authored_instance_draw(self):
-        lev = bytearray(self.lev) + bytearray(64 + 24 + 64 + 20 + 40 + 4)
+        lev = bytearray(self.lev) + bytearray(128 + 24 + 64 + 20 + 40 + 4)
         definition = len(self.lev)
-        model = definition + 64
+        model = definition + 128
         header, commands = model + 24, model + 24 + 64
         frame, colors = commands + 20, commands + 20 + 40
-        put32(lev, 0xc, 1)
+        put32(lev, 0xc, 2)
         put32(lev, 0x10, definition)
         put32(lev, definition + 0x10, model)
         struct.pack_into('<hhh', lev, definition + 0x14, 4096, 8192, 2048)
@@ -164,12 +164,170 @@ class ValidatorTests(unittest.TestCase):
         put32(lev, frame + 24, 28)
         lev[frame + 28:frame + 37] = bytes([0, 0, 0, 16, 0, 0, 0, 8, 16])
         put32(lev, colors, 0x112233)
-        ptr = ptr_map([0, 0x210, 0x10, definition + 16, model + 20, header + 32, header + 36, header + 44])
+        lev[definition + 64:definition + 128] = lev[definition:definition + 64]
+        struct.pack_into('<hhh', lev, definition + 64 + 0x30, 522, 20, 100)
+        slots = [0, 0x210, 0x10, definition + 16, definition + 80, model + 20, header + 32, header + 36, header + 44]
+        ptr = ptr_map(slots)
         source = bytes(lev)
         file = self.write('authored.lev', lev)
         text = self.run_tool('lev', file, self.write('authored.ptr', ptr))
-        self.assertIn('Instance draw OK: 1 definitions, 1 projected triangles', text)
+        self.assertIn('Instance draw OK: 2 definitions, 2 projected triangles', text)
         self.assertEqual(pathlib.Path(file).read_bytes(), source)
+
+        # Broad, unrotated triangles make connectivity a stable raster assertion.
+        for index in range(2):
+            start = definition + index * 64
+            struct.pack_into('<hhh', lev, start + 20, 4096, 4096, 4096)
+            struct.pack_into('<hhh', lev, start + 54, 0, 0, 0)
+        self.write('authored.lev', lev)
+        vram = bytearray(22)
+        put32(vram, 0, 0x10)
+        struct.pack_into('<HHHHH', vram, 12, 0, 0, 1, 1, 0)
+        vram_file = self.write('scene.vrm', vram)
+        output = self.root / 'scene.ppm'
+        args = ['scene', file, self.root / 'authored.ptr', vram_file, '0', '2', output, 'front']
+        self.assertIn('rendered 2 instances', self.run_tool(*args))
+        prefix = b'P6\n512 512\n255\n'
+        image = output.read_bytes()
+        self.assertTrue(image.startswith(prefix))
+        self.assertEqual(len(image), len(prefix) + 512 * 512 * 3)
+        # Separate silhouettes prove both instances share one uncleared target.
+        pixels = {i for i in range(512 * 512) if image[len(prefix) + i * 3:len(prefix) + i * 3 + 3] != bytes([24, 28, 36])}
+        components = 0
+        while pixels:
+            components += 1
+            stack = [pixels.pop()]
+            while stack:
+                point = stack.pop()
+                x, y = point % 512, point // 512
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                    nx, ny = x + dx, y + dy
+                    neighbor = ny * 512 + nx
+                    if 0 <= nx < 512 and 0 <= ny < 512 and neighbor in pixels:
+                        pixels.remove(neighbor)
+                        stack.append(neighbor)
+        self.assertEqual(components, 2)
+        dram = struct.pack('<I', len(lev)) + lev + ptr
+        self.run_tool('scene-dram', self.write('scene.dram', dram), vram_file,
+                      '0', '2', output, 'front')
+        self.assertEqual(output.read_bytes(), image)
+        self.assertEqual(pathlib.Path(file).read_bytes(), lev)
+        put32(lev, definition + 0x20, 0x800)  # Custom matrix path is counted/skipped.
+        self.write('authored.lev', lev)
+        self.assertIn('rendered 1 instances, unsupported 1', self.run_tool(*args))
+        output.unlink()
+        put32(lev, definition + 64 + 0x20, 0x400)
+        self.write('authored.lev', lev)
+        self.run_tool(*args, expected=1)
+        self.assertFalse(output.exists())
+        put32(lev, definition + 0x20, 0)
+        put32(lev, definition + 64 + 0x20, 0)
+        # Overlapping red near model and green far model, reversed traversal:
+        # the nearest surface must win regardless of instance iteration order.
+        second_model = len(lev)
+        delta = second_model - model
+        lev.extend(lev[model:])
+        second_header = header + delta
+        put32(lev, second_model + 20, second_header)
+        for field, target in [(32, commands), (36, frame), (44, colors)]:
+            put32(lev, second_header + field, target + delta)
+        put32(lev, colors, 0x0000ff)
+        put32(lev, colors + delta, 0x00ff00)
+        put32(lev, definition + 80, second_model)
+        slots.extend([second_model + 20, second_header + 32, second_header + 36, second_header + 44])
+        for index, z in enumerate([100, 300]):
+            start = definition + index * 64
+            struct.pack_into('<hhh', lev, start + 20, 4096, 4096, 4096)
+            struct.pack_into('<hhh', lev, start + 48, 0, 0, z)
+            struct.pack_into('<hhh', lev, start + 54, 0, 0, 0)
+        self.write('authored.ptr', ptr_map(slots))
+        self.write('authored.lev', lev)
+        args[-1] = 'front'
+        self.run_tool(*args)
+        occluded = output.read_bytes()
+        rgb = occluded[len(prefix):]
+        self.assertIn(bytes([255, 0, 0]), rgb)
+        self.assertFalse(any(rgb[i:i + 3] == bytes([0, 255, 0]) for i in range(0, len(rgb), 3)))
+        first_record = bytes(lev[definition:definition + 64])
+        lev[definition:definition + 64] = lev[definition + 64:definition + 128]
+        lev[definition + 64:definition + 128] = first_record
+        self.write('authored.lev', lev)
+        self.run_tool(*args)
+        self.assertEqual(output.read_bytes(), occluded)
+        # Blue coarse terrain lies between the red near and green far model.
+        # Near model GTE depth is x4 and must be normalized before comparison.
+        quads = len(lev)
+        vertices = quads + 0x5c
+        lev.extend(bytes(0x5c + 4 * 16))
+        put32(lev, 0x200, 1)
+        put32(lev, 0x204, 4)
+        put32(lev, 0x20c, quads)
+        put32(lev, 0x210, vertices)
+        slots.append(0x20c)
+        struct.pack_into('<9H', lev, quads, 0, 1, 2, 3, 0, 0, 0, 0, 0)
+        for index, position in enumerate([(0, 0, 200), (64, 0, 200), (0, 64, 232), (64, 64, 232)]):
+            struct.pack_into('<hhh', lev, vertices + index * 16, *position)
+            put32(lev, vertices + index * 16 + 8, 0xff0000)
+        self.write('authored.ptr', ptr_map(slots))
+        self.write('authored.lev', lev)
+        terrain_args = ['scene-terrain', *args[1:]]
+        self.assertIn('Terrain OK: 1 quad blocks, 2 coarse triangles', self.run_tool(*terrain_args))
+        terrain_image = output.read_bytes()
+        rgb = terrain_image[len(prefix):]
+        colors = {rgb[i:i + 3] for i in range(0, len(rgb), 3)}
+        self.assertIn(bytes([255, 0, 0]), colors)
+        self.assertIn(bytes([0, 0, 255]), colors)
+        self.assertNotIn(bytes([0, 255, 0]), colors)
+        snapshot = bytes(lev)
+        self.assertEqual(pathlib.Path(file).read_bytes(), snapshot)
+        # Both PTR forms must produce identical terrain composition.
+        dram = struct.pack('<I', len(lev)) + lev + ptr_map(slots)
+        self.run_tool('scene-dram-terrain', self.write('terrain.dram', dram), vram_file,
+                      '0', '2', output, 'front')
+        self.assertEqual(output.read_bytes(), terrain_image)
+        # Exclude the red model, so terrain alone must hide the green model.
+        # Put green beyond the far threshold to also exercise mixed depth units.
+        put32(lev, definition + 64 + 0x20, 0x800)
+        struct.pack_into('<hhh', lev, definition + 48, 0, 0, 5000)
+        self.write('authored.lev', lev)
+        terrain_args[4] = '1'  # Anchor remains at the excluded near model.
+        self.assertIn('rendered 1 instances, unsupported 1', self.run_tool(*terrain_args))
+        rgb = output.read_bytes()[len(prefix):]
+        colors = {rgb[i:i + 3] for i in range(0, len(rgb), 3)}
+        self.assertIn(bytes([0, 0, 255]), colors)
+        self.assertNotIn(bytes([0, 255, 0]), colors)
+        lev[:] = snapshot
+        terrain_args[4] = '0'
+        # Reversing instance traversal also preserves mixed terrain/model depth.
+        lev[definition:definition + 64], lev[definition + 64:definition + 128] = (
+            lev[definition + 64:definition + 128], lev[definition:definition + 64])
+        self.write('authored.lev', lev)
+        self.run_tool(*terrain_args)
+        self.assertEqual(output.read_bytes(), terrain_image)
+        output.unlink()
+        struct.pack_into('<H', lev, quads + 16, 4)  # Invalid unused midpoint.
+        self.write('authored.lev', lev)
+        self.run_tool(*terrain_args, expected=1)
+        self.assertFalse(output.exists())
+        struct.pack_into('<H', lev, quads + 16, 0)
+        put32(lev, 0x204, 0x7fffffff)
+        self.write('authored.lev', lev)
+        self.run_tool(*terrain_args, expected=1)
+        self.assertFalse(output.exists())
+        put32(lev, 0x204, 4)
+        self.write('authored.lev', lev)
+        args[5] = '3'
+        self.run_tool(*args, expected=1)
+        self.assertFalse(output.exists())
+        args[5] = '0'
+        self.run_tool(*args, expected=2)
+        args[5] = '257'
+        self.run_tool(*args, expected=2)
+        args[5] = '2'
+        put32(lev, header + 32, len(lev))  # Corrupt later model command pointer.
+        self.write('authored.lev', lev)
+        self.run_tool(*args, expected=1)
+        self.assertFalse(output.exists())
 
     def test_animation_frames_from_file(self):
         payload = bytearray(self.mpk[4:132]) + bytearray(128)

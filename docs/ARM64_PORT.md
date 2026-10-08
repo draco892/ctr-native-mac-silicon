@@ -1074,6 +1074,147 @@ build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-vram asset
 build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-ptr-vram assets 201 202 258,200
 ```
 
+## Diagnostic multi-instance LEV scenes
+
+The validator now renders selected authored LEV instances into one 512x512 RGB
+and depth target. Each object retains its decoded position, rotation and scale;
+the target is cleared once and the nearest opaque fragment wins across objects.
+This connects LEV definitions to the existing native projection, draw iterator,
+VRAM sampler and software rasterizer without publishing runtime host pointers
+inside binary records. Source assets remain immutable.
+
+```text
+disc-scene ASSETS_DIR LEV_INDEX VRAM_INDICES FIRST COUNT OUTPUT.ppm [VIEW]
+disc-scene-ptr ASSETS_DIR LEV_INDEX PTR_INDEX VRAM_INDICES FIRST COUNT OUTPUT.ppm [VIEW]
+disc-scene-near ASSETS_DIR LEV_INDEX VRAM_INDICES ANCHOR COUNT OUTPUT.ppm [VIEW]
+disc-scene-ptr-near ASSETS_DIR LEV_INDEX PTR_INDEX VRAM_INDICES ANCHOR COUNT OUTPUT.ppm [VIEW]
+scene LEV_FILE PTR_FILE VRAM_FILE FIRST COUNT OUTPUT.ppm [VIEW]
+scene-dram LEV_FILE VRAM_FILE FIRST COUNT OUTPUT.ppm [VIEW]
+```
+
+VIEW defaults to front and accepts front, side, top or iso. VRAM_INDICES is the
+existing ordered comma-separated upload list. COUNT is 1..256 and FIRST/ANCHOR
+is a zero-based instance ordinal. Consecutive selection must fit the remaining
+instance range. Nearest selection includes the anchor, then ranks all definitions
+by squared distance between authored positions, before filtering unsupported
+paths; ties retain anchor first and then source order. COUNT cannot exceed the
+level's instance count. Logs identify the actual selected ordinals and positions.
+
+Each supported instance uses its first available normal header and static frame
+or frame 0 of the first present animation. The diagnostic camera fits aggregate
+world bounds using the far matrix scale, then each instance goes through the
+normal adapter's actual near/far matrix and translation rules. This is a synthetic
+inspection camera, with no gameplay visibility or LOD selection. Instances with
+PIXEL_LOD, SCREENSPACE, CUSTOM_MATRIX or DRAW_HUGE and always-north headers are
+skipped and counted; missing usable frames/headers are counted separately.
+Malformed selected data and zero fragment writes fail before opening the output.
+The PPM replaces an existing output on success; an I/O failure may leave a partial
+file, as with the single-model preview.
+
+To inspect six nearby Dingo Canyon objects with the supplied NTSC-U disc:
+
+```sh
+cmake --build --preset macos-arm64-memory
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-near assets 1 258,0 0 6 build-macos-arm64-memory/dingo-near.ppm iso
+sips -s format png build-macos-arm64-memory/dingo-near.ppm --out build-macos-arm64-memory/dingo-near.png
+open build-macos-arm64-memory/dingo-near.png
+```
+
+This selects instances 0, 22, 3, 14, 15 and 27: the C collectible, a cow skull,
+three cacti and a question crate. The diagnostic visits 320 triangles with
+25 skipped triangles and 4015 opaque fragment writes. Consecutive records can
+be far apart; fitting the entire level can yield tiny objects and GTE clipping
+or wrapping. Nearest selection provides a more useful local inspection.
+
+Terrain/track quads, instance materials/colors, transparency, lighting,
+billboards, native visibility, camera behavior and gameplay remain unverified
+and outside this scene mode. This image is a group of level objects, not a
+playable level or evidence of renderer parity.
+
+CLI fixtures verify two separate silhouettes survive in one target, embedded
+and external PTR routes agree, shared-depth occlusion is independent of instance
+order, unsupported paths are counted, and bad ranges/pointers publish no image.
+Retail smoke tests cover both LEV/PTR forms, nearest selection and nonempty RGB.
+Run the complete checks with:
+
+```sh
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory --output-on-failure
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized --output-on-failure
+```
+
+## Coarse terrain geometry in diagnostic scenes
+
+`native_mesh_geometry.c` reads LEV vertex and quad-block values through validated
+wire spans. It decodes signed XYZ/flags/high and low colors from each 16-byte
+vertex and nine vertex indices/flags/draw-order words from each 92-byte quad.
+All nine indices are checked against the vertex count, including midpoints not
+used by coarse rendering. Outputs contain values, not pointer-bearing game
+structures; unaligned little-endian source bytes remain immutable.
+
+`NativeMesh_GetLowTriangle` exposes the two low-LOD triangles in quad index slots
+2/0/3 and 0/1/3, following `sDrawLevelOvr1PLowLodIndices` in the resident level
+renderer. This approximates curved blocks with their four corner vertices.
+Draw-order masks, special face modes, high-LOD midpoints and subdivision are
+not interpreted. Degenerate triangles are permitted and skipped by the rasterizer.
+
+New scene modes accept the same arguments as the corresponding earlier modes:
+
+```text
+disc-scene-terrain ASSETS_DIR LEV_INDEX VRAM_INDICES ANCHOR COUNT OUTPUT.ppm [VIEW]
+disc-scene-ptr-terrain ASSETS_DIR LEV_INDEX PTR_INDEX VRAM_INDICES ANCHOR COUNT OUTPUT.ppm [VIEW]
+scene-terrain LEV_FILE PTR_FILE VRAM_FILE ANCHOR COUNT OUTPUT.ppm [VIEW]
+scene-dram-terrain LEV_FILE VRAM_FILE ANCHOR COUNT OUTPUT.ppm [VIEW]
+```
+
+These modes choose COUNT nearest authored instances, plus quad blocks whose
+axis-aligned bounds (computed from all nine indexed vertices) lie within 2048
+world units of the anchor position. They validate all quad indices while scanning
+the mesh, even outside the chosen neighborhood. The radius is currently fixed;
+intersecting blocks are included whole, so the resulting view is not a clipped
+sphere. An excluded instance can still serve as the positional anchor.
+
+The inspection camera fits both coarse terrain and supported models. Terrain
+uses world XYZ directly, the common Q12 view, GTE-compatible projection and
+interpolated `color_hi` RGB, without terrain textures. Both geometry types share
+the cleared RGB/depth target. Near model projection produces four times world
+depth: this mode divides its corner depths by four before the rasterizer compares
+them with terrain/far-model depth. This is an integer diagnostic approximation
+with affine depth and no near clipping, not ordering-table or renderer parity.
+The previous object-only scene commands retain their behavior.
+
+With the supplied NTSC-U assets, Dingo Canyon anchor 0 with six nearby objects
+selects 62 of 1250 quad blocks, draws 124 coarse terrain triangles and visits
+444 triangles total. The iso view produces 19684 terrain fragment writes,
+20040 total writes, and 126 skipped triangles. These are write counts, not final
+visible pixel counts. Road and walls are visible with vertex shading; terrain
+textures, special face handling, native visibility and gameplay remain pending.
+
+```sh
+cmake --build --preset macos-arm64-memory
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-terrain assets 1 258,0 0 6 build-macos-arm64-memory/dingo-terrain.ppm iso
+sips -s format png build-macos-arm64-memory/dingo-terrain.ppm --out build-macos-arm64-memory/dingo-terrain.png
+open build-macos-arm64-memory/dingo-terrain.png
+```
+
+`ctr_native_mesh_geometry` checks unaligned spans, signed extrema, RGB words,
+coarse topology, source immutability, invalid indices and cleared errors.
+CLI tests put blue terrain between red/green models, exercise both near and far
+model depths, reverse traversal, compare external/embedded PTR routes, and reject
+invalid midpoint indices and truncated mesh spans without publishing an image.
+Retail tests cover terrain through both disc LEV/PTR routes with nonempty output.
+The suite now contains 20 tests with the disc, 19 without it.
+
+```sh
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory --output-on-failure
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized --output-on-failure
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_mesh_geometry$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -1081,7 +1222,9 @@ assertion in `game_layouts.h`. Retail layout assertions remain enabled. The
 memory-only preset is a migration/test target, not a switch that permits an
 unsafe 64-bit game build.
 
-Next, connect the authored instance bridge to scene rendering and runtime camera consumers, and separate binary asset layouts (four-byte addresses and offsets) from
+Next, add terrain texture/face handling to the diagnostic scene and connect the authored
+instance bridge to runtime camera consumers. Separate binary asset layouts
+(four-byte addresses and offsets) from
 runtime objects (host pointers). In particular:
 
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
