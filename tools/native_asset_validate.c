@@ -3,6 +3,7 @@
 #include <platform/native_model_library.h>
 #include <platform/native_model_animation.h>
 #include <platform/native_model_vertices.h>
+#include <platform/native_model_commands.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -167,7 +168,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 {
 	struct NativeModelLibrary library;
 	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;
-	size_t decodedVertices = 0;
+	size_t decodedVertices = 0, triangles = 0, textured = 0;
 	NativeModelLibrary_Reset(&library);
 	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
 	    NativeModelLibrary_StoreLevel(&library, level);
@@ -190,6 +191,20 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 		for (u32 j = 0; j < model.headerCount; j++)
 		{
 			if (!Validator_Vertices(&model, j, &decodedVertices)) return 0;
+			struct NativeModelCommands commands;
+			struct NativeModelTriangle triangle;
+			enum NativeAssetResult commandStatus = NativeModelCommands_Open(&model, j, &commands);
+			if (commandStatus != NATIVE_ASSET_OK && commandStatus != NATIVE_ASSET_NOT_FOUND) return 0;
+			if (commandStatus == NATIVE_ASSET_OK)
+			{
+				while ((commandStatus = NativeModelCommands_Next(&commands, &triangle)) == NATIVE_ASSET_OK)
+				{ triangles++; textured += triangle.textured != 0; }
+				if (commandStatus != NATIVE_ASSET_NOT_FOUND)
+				{
+					fprintf(stderr, "Invalid draw commands: %s, header %u, cursor %zu (status %d)\n", model.name, j, commands.cursor, commandStatus);
+					return 0;
+				}
+			}
 			if (NativeModel_GetHeader(&model, j, &header) != NATIVE_ASSET_OK)
 				return 0;
 			if (header.animationCount == 0)
@@ -255,6 +270,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 	    registered, level != NULL ? level->instanceCount : 0);
 	printf("Animation data OK: %zu animations (%zu interpolated), %zu stored frames, %zu static frames\n",
 	    animations, interpolated, frames, staticFrames);
+	printf("Draw commands OK: %zu triangles (%zu textured)\n", triangles, textured);
 	printf("Vertex streams OK: %zu decoded vertices\n", decodedVertices);
 	return 1;
 }
@@ -350,7 +366,7 @@ int main(int argc, char **argv)
 		    load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
 	}
 	result = 0;
-	printf("Validation includes bounded vertex decompression; transforms, textures, rendering and gameplay remain unverified.\n");
+	printf("Validation includes vertices, triangles, source colors and texture metadata; transforms, VRAM pixels, rendering and gameplay remain unverified.\n");
 	goto done;
 invalid:
 	if (status != NATIVE_PTRMAP_OK)

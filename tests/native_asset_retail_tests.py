@@ -21,6 +21,8 @@ for arguments, expected in [
         raise SystemExit('Retail validation did not reach animation/frame checks.')
     if 'Vertex streams OK:' not in result.stdout:
         raise SystemExit('Retail validation did not reach vertex decompression checks.')
+    if 'Draw commands OK:' not in result.stdout:
+        raise SystemExit('Retail validation did not reach triangle/color/texture checks.')
     if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
         raise SystemExit(result.stderr)
     print(result.stdout, end='')

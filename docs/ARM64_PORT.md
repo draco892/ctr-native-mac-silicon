@@ -17,7 +17,7 @@ ctest --preset macos-arm64-memory
 The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
 `ctr_native_ptrmap_tests`, `ctr_native_assets_tests`,
 `ctr_native_model_library_tests`, `ctr_native_model_animation_tests` and
-`ctr_native_model_vertices_tests` under
+`ctr_native_model_vertices_tests` and `ctr_native_model_commands_tests` under
 `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
@@ -232,8 +232,8 @@ conversion; this step does not enable an ARM64 game build.
 or the supplied `assets/ctr-u.bin` directly using the production MODE2/2352
 disc reader. It checks root/table spans, every listed model/header, and LEV
 geometry spans. It also checks animation/frame records and decompresses model
-vertex streams as described below. Texture/draw-command decoding, transforms
-and rendering/gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
+vertex streams as described below. Triangle/color/texture metadata is decoded too; transforms, VRAM pixel
+sampling and rendering/gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -404,7 +404,7 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 
 The module is included in the native unity chain and standalone validator.
 Gameplay and render bucket consumers still use their legacy structures;
-texture/draw-command decoding, transforms and renderer migration remain
+VRAM pixel sampling, transforms and renderer migration remain
 required before visual playback or an ARM64 game build.
 
 ## Bounded model vertex decoding
@@ -454,7 +454,7 @@ state, and 2000 streams against an independent bit-by-bit oracle. Synthetic
 asset tests cover fresh/cache/color command counts, raw and compressed static
 and animated decoding, output capacity, truncated frames/delta tables and a
 missing command terminator. The retail test requires vertex decoding output.
-With the supplied disc present, both presets run 11 tests; without it, 10 run.
+With the supplied disc present, both presets run 12 tests; without it, 11 run.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -462,6 +462,67 @@ cmake --build --preset macos-arm64-memory-sanitized
 ctest --preset macos-arm64-memory-sanitized
 # Focused vertex and real-disc checks:
 ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_vertices$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+## Model triangles, source colors and texture metadata
+
+`native_model_commands.c` reconstructs triangle topology before projection or
+culling. It follows `RenderBucket_DrawFunc_Normal`: fresh vertices populate a
+256-slot cache, cached references retain their original fresh-vertex indices,
+and each vertex advances a four-entry rolling FIFO. Bit 31 restarts a strip;
+its first triangle uses the restart command's material/flags. Later triangles
+use the current command. Bit 30 continuations replace the triangle's first
+vertex with the preceding FIFO entry. Color-only commands update the rolling
+colors without consuming vertex data. No winding swap is introduced; original
+command bits remain available for the renderer's culling and material rules.
+
+Open requires a command terminator within the asset and validates the color
+cache prefix/span (at most 128 indexed words). Each direct source RGB word is
+checked against the asset; cached reads also require an index below the copied
+prefix count. Referencing an unwritten vertex cache slot fails. Palette and
+texture-table lengths are not serialized: only the accessed ranges can be
+validated, not their semantic ownership within the asset.
+
+Triangle indices refer to the array produced by the previous vertex decoder.
+One-based texture indices resolve four-byte table slots through PTR, followed
+by a complete 12-byte TextureLayout. UV bytes, CLUT and texture-page words are
+decoded explicitly, independent of host packing. Index zero and unlisted-zero
+table entries give untextured triangles; listed zero still means asset origin.
+Nonzero pointers missing from PTR are invalid. UV metadata does not include
+VRAM pixels, animated-texture updates or material/lighting execution.
+
+The iterator allocates nothing and borrows the unchanged asset/map/entries.
+Reopen after reload or Rebind. Successful `Next` returns one triangle; exhaustion
+returns `NOT_FOUND` and consumes trailing commands. Errors clear output and
+preserve iterator state. The validator runs one command-list pass per listed
+model/header, independently of repeated frame vertex decoding:
+
+| Entry | Triangles | Textured |
+| --- | ---: | ---: |
+| Shared MPK 259 | 4396 | 3320 |
+| Crash 1P MPK 260 | 6376 | 4354 |
+| LEV 1 | 1402 | 685 |
+| Hub LEV/PTR 201/202 | 1620 | 668 |
+
+These are 13794 triangle visits (9027 textured), not unique faces or terrain
+quads. All referenced source colors and texture metadata pass bounds checks;
+this does not confirm their rendered appearance. Legacy render consumers still
+use their resident structures, and the complete ARM64 game remains guarded.
+
+`ctr_native_model_commands` checks golden triangle indices, restart-material
+selection, bit-30 continuation, cache reuse, color-only commands, UV/CLUT/page
+endianness, immutable unaligned buffers, full host addresses and Rebind. It also
+checks missing terminators, unwritten cache slots, cached color bounds, truncated
+color/texture spans, absent relocations, null versus origin pointers, exhaustion
+and 2000 mutated command lists with transactional error-state checks.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+# Focused command and real-disc checks:
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_commands$' -V
 ctest --preset macos-arm64-memory-sanitized -L retail -V
 ```
 
@@ -478,8 +539,8 @@ runtime objects (host pointers). In particular:
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Decode texture/draw-command data and apply vertex transforms; connect the
-   new vertex decoder, library, animation and instance-definition readers to resident
+2. Apply vertex transforms and decode VRAM pixels; connect the new triangle,
+   vertex, library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
    offsets; host structures must not overlap retail-sized scratchpad slots.
