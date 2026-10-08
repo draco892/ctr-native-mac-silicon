@@ -41,3 +41,6 @@ __pycache__/
 
 # Qt Creator ide works direcotries
 .qtcreator/
+
+# mac files
+.DS_Store

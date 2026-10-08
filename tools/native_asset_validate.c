@@ -7,6 +7,10 @@
 #include <platform/native_model_matrix.h>
 #include <platform/native_model_projection.h>
 #include <platform/native_model_commands.h>
+#include <platform/native_vram.h>
+#include <platform/native_model_draw.h>
+#include <platform/native_raster.h>
+#include <platform/native_instance_transform.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -264,11 +268,75 @@ done:
 	return success;
 }
 
-static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level)
+struct ValidatorDrawStats { size_t triangles, pixels, flagged, degenerate; };
+static int Validator_Draw(const struct NativeModelView *model,u32 headerIndex,
+    const struct NativeVramView *vram,const struct NativeInstanceDefView *instance,struct ValidatorDrawStats *stats)
+{
+	struct NativeModelHeaderView header;
+	struct NativeModelDrawWorkspace workspace={0};
+	struct NativeModelDraw draw;
+	struct NativeDrawTriangle triangle;
+	u32 vertices,animationIndex=UINT32_MAX,logicalIndex=0;
+	int success=0;
+	enum NativeAssetResult status=NativeModel_GetVertexCount(model,headerIndex,&vertices);
+	if(status==NATIVE_ASSET_NOT_FOUND) return 1;
+	if(status!=NATIVE_ASSET_OK || NativeModel_GetHeader(model,headerIndex,&header)!=NATIVE_ASSET_OK) return 0;
+	if(header.animationCount!=0)
+	{
+		for(u32 i=0;i<header.animationCount;i++)
+		{
+			struct NativeAnimationView animation;
+			status=NativeModel_GetAnimation(model,headerIndex,i,&animation);
+			if(status==NATIVE_ASSET_NOT_FOUND) continue;
+			if(status!=NATIVE_ASSET_OK) return 0;
+			animationIndex=i;
+			logicalIndex=animation.interpolated && animation.logicalFrameCount>1 ? 1 : 0;
+			break;
+		}
+		if(animationIndex==UINT32_MAX) return 1;
+	}
+	size_t records=vertices;
+	if(records>SIZE_MAX/sizeof(*workspace.packed) || records>SIZE_MAX/sizeof(*workspace.current)) return 0;
+	if(records!=0)
+	{
+		workspace.current=malloc(records*sizeof(*workspace.current));
+		workspace.next=malloc(records*sizeof(*workspace.next));
+		workspace.packed=malloc(records*sizeof(*workspace.packed));
+		if(workspace.current==NULL || workspace.next==NULL || workspace.packed==NULL) goto done;
+	}
+	workspace.capacity=records;
+	const struct NativeModelMatrix identity={.m={{4096,0,0},{0,4096,0},{0,0,4096}}};
+	const s16 instanceScale[3]={4096,4096,4096};
+	struct NativeProjectionConfig projection={.translation={0,0,4096},.offset={160*65536,120*65536},.h=256};
+	if(instance!=NULL) {
+		const struct NativeInstanceCamera camera={.view=identity,.position={0,0,-4096},.offset={160*65536,120*65536},.h=256}; s32 rawDepth;
+		status=NativeInstance_Projection(instance,headerIndex,&camera,&projection,&rawDepth);
+	} else status=NativeModelMatrix_Build(&identity,header.scale,instanceScale,4096,0,&projection.rotation);
+	if(status!=NATIVE_ASSET_OK) goto done;
+	status=NativeModelDraw_Open(model,headerIndex,animationIndex,logicalIndex,&projection,&workspace,vram,&draw);
+	if(status==NATIVE_ASSET_NOT_FOUND) { success=1; goto done; }
+	if(status!=NATIVE_ASSET_OK) goto done;
+	while((status=NativeModelDraw_Next(&draw,&triangle))==NATIVE_ASSET_OK)
+	{
+		stats->triangles++;
+		stats->pixels+=triangle.hasCornerPixels ? 3 : 0;
+		stats->flagged+=triangle.projectionFlags!=0;
+		stats->degenerate+=triangle.signedArea==0;
+	}
+	if(status!=NATIVE_ASSET_NOT_FOUND) goto done;
+	success=1;
+done:
+	if(!success) fprintf(stderr,"Invalid connected draw pipeline: %s header %u (status %d)\n",model->name,headerIndex,status);
+	free(workspace.current); free(workspace.next); free(workspace.packed);
+	return success;
+}
+
+static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level, const struct NativeVramView *vram)
 {
 	struct NativeModelLibrary library;
+	struct ValidatorDrawStats drawStats={0},instanceStats={0};
 	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;
-	size_t decodedVertices = 0, transformedVertices = 0, matrixVertices = 0, projectedVertices = 0, triangles = 0, textured = 0;
+	size_t decodedVertices = 0, transformedVertices = 0, matrixVertices = 0, projectedVertices = 0, triangles = 0, textured = 0, pixels = 0;
 	NativeModelLibrary_Reset(&library);
 	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
 	    NativeModelLibrary_StoreLevel(&library, level);
@@ -291,6 +359,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 		for (u32 j = 0; j < model.headerCount; j++)
 		{
 			if (!Validator_Vertices(&model, j, &decodedVertices)) return 0;
+			if (!Validator_Draw(&model,j,vram,NULL,&drawStats)) return 0;
 			if (!Validator_Transforms(&model, j, &transformedVertices, &matrixVertices, &projectedVertices)) return 0;
 			struct NativeModelCommands commands;
 			struct NativeModelTriangle triangle;
@@ -299,7 +368,20 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 			if (commandStatus == NATIVE_ASSET_OK)
 			{
 				while ((commandStatus = NativeModelCommands_Next(&commands, &triangle)) == NATIVE_ASSET_OK)
-				{ triangles++; textured += triangle.textured != 0; }
+				{
+					triangles++; textured += triangle.textured != 0;
+					if (vram != NULL && triangle.textured) for (unsigned corner = 0; corner < 3; corner++)
+					{
+						struct NativeTexturePixel pixel;
+						if (NativeVram_Sample(vram, triangle.texture.tpage, triangle.texture.clut,
+						    triangle.texture.u[corner], triangle.texture.v[corner], &pixel) != NATIVE_ASSET_OK)
+						{
+							fprintf(stderr, "Invalid texture pixel address: %s header %u\n", model.name, j);
+							return 0;
+						}
+						pixels++;
+					}
+				}
 				if (commandStatus != NATIVE_ASSET_NOT_FOUND)
 				{
 					fprintf(stderr, "Invalid draw commands: %s, header %u, cursor %zu (status %d)\n", model.name, j, commands.cursor, commandStatus);
@@ -366,7 +448,10 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 				fprintf(stderr, "Invalid instance/model reference at index %u\n", i);
 				return 0;
 			}
+			for(u32 h=0;h<instance.model.headerCount;h++)
+				if(!Validator_Draw(&instance.model,h,vram,&instance,&instanceStats)) return 0;
 		}
+	if(level!=NULL) printf("Instance draw OK: %u definitions, %zu projected triangles, %zu flagged, %zu degenerate (authored transforms, synthetic camera)\n",level->instanceCount,instanceStats.triangles,instanceStats.flagged,instanceStats.degenerate);
 	printf("Model library OK: %u registered IDs; %u instance definitions decoded\n",
 	    registered, level != NULL ? level->instanceCount : 0);
 	printf("Animation data OK: %zu animations (%zu interpolated), %zu stored frames, %zu static frames\n",
@@ -374,24 +459,201 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 	printf("Projection probes OK: %zu projected vertex visits (synthetic camera)\n", projectedVertices);
 	printf("Matrix probes OK: %zu linear vertex applications (synthetic identity camera/instance, actual model scale)\n", matrixVertices);
 	printf("Local transforms OK: %zu packed vertices across logical frames\n", transformedVertices);
+	if (vram != NULL) printf("Texture pixels OK: %zu sampled triangle corners (unloaded VRAM starts zero)\n", pixels);
+	printf("Draw pipeline OK: %zu projected triangles, %zu corner pixels, %zu flagged, %zu degenerate (one frame/header, synthetic camera, no culling)\n",
+	    drawStats.triangles,drawStats.pixels,drawStats.flagged,drawStats.degenerate);
 	printf("Draw commands OK: %zu triangles (%zu textured)\n", triangles, textured);
 	printf("Vertex streams OK: %zu decoded vertices\n", decodedVertices);
 	return 1;
 }
 
+// Ordered uploads mirror shared VRAM followed by level VRAM; later rectangles
+// overwrite earlier ones. Limit CLI stacks without modifying source assets.
+static int Validator_VramIndices(const char *text,u32 indices[16],size_t *count)
+{
+	*count=0;
+	while(*text)
+	{
+		if(*count==16) return 0;
+		u32 value=0; unsigned digits=0;
+		while(*text>='0' && *text<='9')
+		{
+			u32 digit=(u32)(*text++-'0');
+			if(value>(UINT32_MAX-digit)/10) return 0;
+			value=value*10+digit; digits++;
+		}
+		if(!digits) return 0;
+		indices[(*count)++]=value;
+		if(!*text) return 1;
+		if(*text++!=',' || !*text) return 0;
+	}
+	return 0;
+}
+
+static int Validator_PreviewView(const char *name,struct NativeModelMatrix *out)
+{
+	// Input is already GTE/model XYZ = stored X,Z,Y. Preserve its axes;
+	// flip screen Y for the image coordinate convention, then rotate the view.
+	if(strcmp(name,"front")==0) *out=(struct NativeModelMatrix){.m={{4096,0,0},{0,-4096,0},{0,0,4096}}};
+	else if(strcmp(name,"side")==0) *out=(struct NativeModelMatrix){.m={{0,0,4096},{0,-4096,0},{-4096,0,0}}};
+	else if(strcmp(name,"top")==0) *out=(struct NativeModelMatrix){.m={{4096,0,0},{0,0,4096},{0,4096,0}}};
+	else if(strcmp(name,"iso")==0) *out=(struct NativeModelMatrix){.m={{2896,0,2896},{1448,-3547,-1448},{-2508,-2048,2508}}};
+	else return 0;
+	return 1;
+}
+
+static int Validator_Preview(const struct NativeMpkView *mpk,const struct NativeVramView *vram,
+    u32 modelIndex,u32 headerIndex,const char *animationText,u32 frameIndex,u32 frameCount,int sequence,const char *path,const char *viewName)
+{
+	struct NativeModelView model; struct NativeModelHeaderView header;
+	struct NativeModelDrawWorkspace workspace={0}; struct NativeModelDraw draw;
+	struct NativeRasterView target; struct NativeDrawTriangle triangle;
+	u8 *rgb=NULL; u32 *depth=NULL; FILE *file=NULL; int success=0;
+	char outputPath[4096];
+	u32 animationIndex=UINT32_MAX,count;
+	enum NativeAssetResult status=NativeMpk_GetModel(mpk,modelIndex,&model);
+	if(status!=NATIVE_ASSET_OK) goto done;
+	status=NativeModel_GetHeader(&model,headerIndex,&header);
+	if(status!=NATIVE_ASSET_OK) goto done;
+	if(strcmp(animationText,"auto")==0)
+	{
+		for(u32 i=0;i<header.animationCount;i++)
+		{
+			struct NativeAnimationView animation;
+			status=NativeModel_GetAnimation(&model,headerIndex,i,&animation);
+			if(status==NATIVE_ASSET_NOT_FOUND) continue;
+			if(status!=NATIVE_ASSET_OK) goto done;
+			animationIndex=i; break;
+		}
+	}
+	else if(strcmp(animationText,"static")!=0 && !Validator_Index(animationText,&animationIndex)) goto done;
+	if(frameCount==0 || frameCount>256) goto done;
+	if(animationIndex!=UINT32_MAX)
+	{
+		struct NativeAnimationView animation;
+		status=NativeModel_GetAnimation(&model,headerIndex,animationIndex,&animation);
+		if(status!=NATIVE_ASSET_OK) goto done;
+		if(sequence && (frameIndex>=animation.logicalFrameCount || frameCount>animation.logicalFrameCount-frameIndex)) goto done;
+		printf("Animation selected: index %u, name %s, %u logical frames, %u stored frames, interpolated=%d\n",
+		    animationIndex,animation.name,animation.logicalFrameCount,animation.storedFrameCount,animation.interpolated);
+	}
+	else if(sequence) goto done; // Static previews have no playback sequence.
+	status=NativeModel_GetVertexCount(&model,headerIndex,&count);
+	if(status!=NATIVE_ASSET_OK || count==0) goto done;
+	size_t records=count;
+	if(records>SIZE_MAX/sizeof(*workspace.packed) || records>SIZE_MAX/sizeof(*workspace.current)) goto done;
+	workspace.current=malloc(records*sizeof(*workspace.current)); workspace.next=malloc(records*sizeof(*workspace.next));
+	workspace.packed=malloc(records*sizeof(*workspace.packed)); workspace.capacity=records;
+	rgb=malloc(512*512*3); depth=malloc(512*512*sizeof(*depth));
+	if(workspace.current==NULL || workspace.next==NULL || workspace.packed==NULL || rgb==NULL || depth==NULL) goto done;
+	const struct NativeModelMatrix identity={.m={{4096,0,0},{0,4096,0},{0,0,4096}}};
+	struct NativeModelMatrix view;
+	if(!Validator_PreviewView(viewName,&view)) goto done;
+	const s16 instanceScale[3]={4096,4096,4096};
+	struct NativeModelMatrix scaled;
+	struct NativeProjectionConfig projection={.h=256,.offset={256*65536,256*65536}};
+	status=NativeModelMatrix_Build(&identity,header.scale,instanceScale,0,0,&scaled);
+	if(status!=NATIVE_ASSET_OK || NativeModelMatrix_Compose(&view,&scaled,&projection.rotation)!=NATIVE_ASSET_OK) goto done;
+	// Fit once over the entire requested range: no per-frame camera drift.
+	s32 minimum[3]={INT32_MAX,INT32_MAX,INT32_MAX},maximum[3]={INT32_MIN,INT32_MIN,INT32_MIN};
+	for(u32 f=0;f<frameCount;f++)
+	{
+		status=NativeModelDraw_Open(&model,headerIndex,animationIndex,frameIndex+f,&projection,&workspace,NULL,&draw);
+		if(status!=NATIVE_ASSET_OK) goto done;
+		for(u32 i=0;i<count;i++)
+		{
+			struct NativeMatrixVector v;
+			if(NativeModelMatrix_Apply(&projection.rotation,&workspace.packed[i],&v)!=NATIVE_ASSET_OK) goto done;
+			for(unsigned axis=0;axis<3;axis++)
+			{ if(v.mac[axis]<minimum[axis]) minimum[axis]=v.mac[axis]; if(v.mac[axis]>maximum[axis]) maximum[axis]=v.mac[axis]; }
+		}
+	}
+	s32 span=maximum[0]-minimum[0]; if(maximum[1]-minimum[1]>span) span=maximum[1]-minimum[1];
+	// Keep the fitted near depth above H/2, including very small models.
+	s32 distance=span>256 ? span : 256;
+	projection.translation[0]=-(minimum[0]+maximum[0])/2;
+	projection.translation[1]=-(minimum[1]+maximum[1])/2;
+	projection.translation[2]=distance-minimum[2];
+	if(NativeRaster_Bind(rgb,512*512*3,depth,512*512,512,512,&target)!=NATIVE_ASSET_OK) goto done;
+	// Sequence names are logical indices. Preflight existing files to preserve
+	// prior exports; a single-image command retains its replacement behavior.
+	if(sequence) for(u32 f=0;f<frameCount;f++)
+	{
+		int length=snprintf(outputPath,sizeof(outputPath),"%s-%06u.ppm",path,frameIndex+f);
+		if(length<0 || (size_t)length>=sizeof(outputPath)) goto done;
+		FILE *existing=fopen(outputPath,"rb");
+		if(existing!=NULL) { fclose(existing); fprintf(stderr,"Sequence output already exists: %s\n",outputPath); goto done; }
+	}
+	printf("Preview camera: shared across %u frames, translation %d %d %d, view %s\n",
+	    frameCount,projection.translation[0],projection.translation[1],projection.translation[2],viewName);
+	for(u32 f=0;f<frameCount;f++)
+	{
+		status=NativeModelDraw_Open(&model,headerIndex,animationIndex,frameIndex+f,&projection,&workspace,vram,&draw);
+		if(status!=NATIVE_ASSET_OK) goto done;
+		const u8 background[3]={24,28,36}; NativeRaster_Clear(&target,background);
+		size_t triangles=0,writes=0;
+		while((status=NativeModelDraw_Next(&draw,&triangle))==NATIVE_ASSET_OK)
+		{
+			struct NativeRasterStats stats;
+			status=NativeRaster_Draw(&target,&triangle,vram,&stats);
+			if(status!=NATIVE_ASSET_OK) goto done;
+			triangles++; writes+=stats.written;
+		}
+		if(status!=NATIVE_ASSET_NOT_FOUND || writes==0) goto done;
+		const char *output=path;
+		if(sequence) { snprintf(outputPath,sizeof(outputPath),"%s-%06u.ppm",path,frameIndex+f); output=outputPath; }
+		file=fopen(output,sequence ? "wbx" : "wb"); if(file==NULL) goto done;
+		if(fprintf(file,"P6\n512 512\n255\n")<0 || fwrite(rgb,1,512*512*3,file)!=512*512*3) goto done;
+		if(fclose(file)!=0) { file=NULL; goto done; } file=NULL;
+		printf("Preview OK: model %s (index %u), header %u, animation %s, frame request %u, view %s, %zu triangles, %zu opaque fragment writes -> %s\n",
+		    model.name,modelIndex,headerIndex,animationText,frameIndex+f,viewName,triangles,writes,output);
+	}
+	printf("Diagnostic opaque software preview, synthetic fitted camera, affine sampling/depth; full game/render parity remains unverified.\n");
+	success=1;
+done:
+	if(!success) fprintf(stderr,"Preview failed (model index %u, status %d).\n",modelIndex,status);
+	if(file!=NULL) fclose(file);
+	free(workspace.current); free(workspace.next); free(workspace.packed); free(rgb); free(depth);
+	return success;
+}
+
 int main(int argc, char **argv)
 {
-	struct ValidatorInput asset = {0}, ptr = {0};
+	struct ValidatorInput asset = {0}, ptr = {0}, vramFile = {0};
+	struct NativeVramView vram = {0};
+	u8 *vramStorage = NULL;
 	struct NativeAssetLoad load = {0};
 	struct NativePtrMapEntry *entries = NULL;
 	struct NativeDramLayout layout;
 	size_t count = 0;
-	u32 assetIndex = 0, ptrIndex = 0;
-	int indexed = 0, disc = 0, separate = 0, externalDram = 0, mpk = 0, result = 1;
+	u32 vramIndices[16]; size_t vramCount=0;
+	const char *previewView="front";
+	u32 assetIndex = 0, ptrIndex = 0, previewModel = 0, previewHeader = 0, previewFrame = 0, previewFrames = 1;
+	int indexed = 0, disc = 0, separate = 0, externalDram = 0, mpk = 0, result = 1, withVram = 0, onlyVram = 0, preview = 0, listModels = 0, sequence = 0, listAnimations = 0;
 	enum NativePtrMapResult status;
 	if (argc < 3)
 		goto usage;
-	if (strcmp(argv[1], "mpk") == 0 && argc == 3) mpk = 1;
+	if ((strcmp(argv[1],"disc-preview")==0 && argc==11) || (strcmp(argv[1],"preview")==0 && argc==10) ||
+	    (strcmp(argv[1],"disc-sequence")==0 && argc==12) || (strcmp(argv[1],"sequence")==0 && argc==11))
+	{
+		struct NativeModelMatrix checkedView;
+		previewView=argv[--argc];
+		if(!Validator_PreviewView(previewView,&checkedView)) goto usage;
+	}
+	if(strcmp(argv[1],"disc-animations")==0 && argc==6) { listAnimations=1; indexed=1; disc=1; mpk=1; }
+	else if(strcmp(argv[1],"animations")==0 && argc==5) { listAnimations=1; mpk=1; }
+	else if(strcmp(argv[1],"disc-sequence")==0 && argc==11) { sequence=1; preview=1; withVram=1; indexed=1; disc=1; mpk=1; }
+	else if(strcmp(argv[1],"sequence")==0 && argc==10) { sequence=1; preview=1; withVram=1; mpk=1; }
+	else if (strcmp(argv[1], "disc-models") == 0 && argc == 4) { listModels = 1; indexed = 1; disc = 1; mpk = 1; }
+	else if (strcmp(argv[1], "models") == 0 && argc == 3) { listModels = 1; mpk = 1; }
+	else if (strcmp(argv[1], "disc-preview") == 0 && argc == 10) { preview = 1; withVram = 1; indexed = 1; disc = 1; mpk = 1; }
+	else if (strcmp(argv[1], "preview") == 0 && argc == 9) { preview = 1; withVram = 1; mpk = 1; }
+	else if (strcmp(argv[1], "vram") == 0 && argc == 3) onlyVram = 1;
+	else if (strcmp(argv[1], "disc-vram") == 0 && argc == 4) { onlyVram = 1; indexed = 1; disc = 1; }
+	else if (strcmp(argv[1], "disc-mpk-vram") == 0 && argc == 5) { withVram = 1; indexed = 1; disc = 1; mpk = 1; }
+	else if (strcmp(argv[1], "disc-lev-vram") == 0 && argc == 5) { withVram = 1; indexed = 1; disc = 1; }
+	else if (strcmp(argv[1], "disc-lev-ptr-vram") == 0 && argc == 6) { withVram = 1; indexed = 1; disc = 1; separate = 1; externalDram = 1; }
+	else if (strcmp(argv[1], "mpk") == 0 && argc == 3) mpk = 1;
 	else if (strcmp(argv[1], "lev-dram") == 0 && argc == 3) { }
 	else if (strcmp(argv[1], "lev") == 0 && argc == 4) separate = 1;
 	else if (strcmp(argv[1], "lev-external") == 0 && argc == 4) { separate = 1; externalDram = 1; }
@@ -404,6 +666,10 @@ int main(int argc, char **argv)
 	else goto usage;
 	if (indexed && (!Validator_Index(argv[3], &assetIndex) || (separate && !Validator_Index(argv[4], &ptrIndex))))
 		goto usage;
+	if (withVram && disc && !Validator_VramIndices(argv[separate ? 5 : 4], vramIndices, &vramCount)) goto usage;
+	if (preview && (!Validator_Index(argv[argc-5-sequence], &previewModel) || !Validator_Index(argv[argc-4-sequence], &previewHeader) || !Validator_Index(argv[argc-2-sequence], &previewFrame))) goto usage;
+	if(sequence && (!Validator_Index(argv[argc-2],&previewFrames) || previewFrames==0 || previewFrames>256)) goto usage;
+	if(listAnimations && (!Validator_Index(argv[argc-2],&previewModel) || !Validator_Index(argv[argc-1],&previewHeader))) goto usage;
 	if (disc && !NativeDiscImage_Init(argv[2]))
 	{
 		fprintf(stderr, "Cannot read MODE2/2352 ctr-u.bin in %s\n", argv[2]);
@@ -413,6 +679,25 @@ int main(int argc, char **argv)
 	{
 		if (disc) fprintf(stderr, "Cannot read BIGFILE asset index %u from disc.\n", assetIndex);
 		goto done;
+	}
+	if (onlyVram || withVram)
+	{
+		struct NativeVramLoadInfo info;
+		vramStorage = calloc(1, NATIVE_VRAM_BYTES);
+		if (vramStorage == NULL || NativeVram_Bind(vramStorage, NATIVE_VRAM_BYTES, &vram) != NATIVE_ASSET_OK) goto done;
+		size_t uploads=withVram && disc ? vramCount : 1;
+		for(size_t i=0;i<uploads;i++)
+		{
+			free(vramFile.bytes); vramFile=(struct ValidatorInput){0};
+			if(withVram && !(disc ? Validator_ReadDisc(vramIndices[i],&vramFile) : Validator_Read(argv[3],0,0,&vramFile)))
+			{ fprintf(stderr,"Cannot read VRAM upload %zu.\n",i); goto done; }
+			struct ValidatorInput *source=onlyVram ? &asset : &vramFile;
+			if(NativeVram_Load(&vram,source->bytes,source->size,&info)!=NATIVE_ASSET_OK)
+			{ fprintf(stderr,"Invalid VRAM rectangle asset at upload %zu.\n",i); goto done; }
+			if(withVram && disc) printf("VRAM upload %zu: index %u\n",i,vramIndices[i]);
+			printf("VRAM OK: %zu rectangles, %zu uploaded words, %zu input bytes\n",info.rectangles,info.words,source->size);
+		}
+		if (onlyVram) { result = 0; goto done; }
 	}
 	if (separate)
 	{
@@ -453,7 +738,40 @@ int main(int argc, char **argv)
 	if (mpk)
 	{
 		struct NativeMpkView view;
-		if (NativeMpk_Open(&load.pointers, &view) != NATIVE_ASSET_OK || !Validator_Models(&view, NULL))
+		if (NativeMpk_Open(&load.pointers, &view) != NATIVE_ASSET_OK) goto invalid;
+		if(listAnimations)
+		{
+			struct NativeModelView model; struct NativeModelHeaderView header;
+			if(NativeMpk_GetModel(&view,previewModel,&model)!=NATIVE_ASSET_OK || NativeModel_GetHeader(&model,previewHeader,&header)!=NATIVE_ASSET_OK) goto invalid;
+			for(u32 i=0;i<header.animationCount;i++)
+			{
+				struct NativeAnimationView animation;
+				enum NativeAssetResult ar=NativeModel_GetAnimation(&model,previewHeader,i,&animation);
+				if(ar==NATIVE_ASSET_NOT_FOUND) { printf("%u: absent\n",i); continue; }
+				if(ar!=NATIVE_ASSET_OK) goto invalid;
+				printf("%u: %s logical=%u stored=%u interpolated=%d compressed=%d\n",i,animation.name,animation.logicalFrameCount,animation.storedFrameCount,animation.interpolated,animation.hasDelta);
+			}
+			result=0; goto done;
+		}
+		if (listModels)
+		{
+			for (u32 i=0;i<view.modelCount;i++)
+			{
+				struct NativeModelView model; struct NativeModelHeaderView header;
+				if (NativeMpk_GetModel(&view,i,&model)!=NATIVE_ASSET_OK) goto invalid;
+				printf("%u: %s id=%d headers=%u",i,model.name,model.id,model.headerCount);
+				if (model.headerCount && NativeModel_GetHeader(&model,0,&header)==NATIVE_ASSET_OK)
+					printf(" animations=%u",header.animationCount);
+				printf("\n");
+			}
+			result=0; goto done;
+		}
+		if (preview)
+		{
+			result = Validator_Preview(&view,&vram,previewModel,previewHeader,argv[argc-3-sequence],previewFrame,previewFrames,sequence,argv[argc-1],previewView) ? 0 : 1;
+			goto done;
+		}
+		if (!Validator_Models(&view, NULL, withVram ? &vram : NULL))
 			goto invalid;
 		printf("MPK OK: %u models, %zu payload bytes, %zu relocations, %zu-bit pointers\n",
 		    view.modelCount, load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
@@ -462,7 +780,7 @@ int main(int argc, char **argv)
 	{
 		struct NativeLevelView view;
 		struct NativeMeshView mesh;
-		if (NativeLevel_Open(&load.pointers, &view) != NATIVE_ASSET_OK || !Validator_Models(NULL, &view) ||
+		if (NativeLevel_Open(&load.pointers, &view) != NATIVE_ASSET_OK || !Validator_Models(NULL, &view, withVram ? &vram : NULL) ||
 		    NativeLevel_GetMesh(&view, &mesh) != NATIVE_ASSET_OK)
 			goto invalid;
 		printf("LEV OK: %u models, %u instances, %u quads, %u vertices, %u BSP nodes, %zu payload bytes, %zu relocations, %zu-bit pointers\n",
@@ -470,7 +788,7 @@ int main(int argc, char **argv)
 		    load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
 	}
 	result = 0;
-	printf("Validation includes local vertex packing/interpolation, triangles, source colors and texture metadata; Q12 matrices and synthetic camera projection included; actual camera integration, VRAM pixels, rendering and gameplay remain unverified.\n");
+	printf("Validation includes local vertex packing/interpolation, triangles, source colors and texture metadata; Q12 matrices and synthetic camera projection included; actual camera integration, rendering and gameplay remain unverified; pixel sampling requires a VRAM mode.\n");
 	goto done;
 invalid:
 	if (status != NATIVE_PTRMAP_OK)
@@ -479,9 +797,20 @@ invalid:
 	goto done;
 usage:
 	fprintf(stderr, "Usage:\n  ctr_native_asset_validate mpk FILE\n  ctr_native_asset_validate lev-dram FILE\n  ctr_native_asset_validate lev FILE PTR (unprefixed payload)\n  ctr_native_asset_validate lev-external FILE PTR (negative DRAM prefix)\n  ctr_native_asset_validate big-mpk BIGFILE INDEX\n  ctr_native_asset_validate big-lev BIGFILE INDEX\n  ctr_native_asset_validate big-lev-ptr BIGFILE LEV_INDEX PTR_INDEX\n  ctr_native_asset_validate disc-mpk ASSETS_DIR INDEX\n  ctr_native_asset_validate disc-lev ASSETS_DIR INDEX\n  ctr_native_asset_validate disc-lev-ptr ASSETS_DIR LEV_INDEX PTR_INDEX\n");
+	fprintf(stderr, "  ctr_native_asset_validate vram FILE | disc-vram ASSETS_DIR VRAM_INDEX\n");
+	fprintf(stderr, "  ctr_native_asset_validate disc-mpk-vram|disc-lev-vram ASSETS_DIR MODEL_INDEX VRAM_INDEX[,INDEX...]\n");
+	fprintf(stderr, "  ctr_native_asset_validate disc-lev-ptr-vram ASSETS_DIR LEV_INDEX PTR_INDEX VRAM_INDEX[,INDEX...]\n");
+	fprintf(stderr, "  ctr_native_asset_validate disc-preview ASSETS_DIR MPK_INDEX VRAM_INDEX[,INDEX...] MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto|static FRAME OUTPUT.ppm [front|side|top|iso]\n");
+	fprintf(stderr, "  ctr_native_asset_validate preview MPK_FILE VRAM_FILE MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto|static FRAME OUTPUT.ppm [front|side|top|iso]\n");
+	fprintf(stderr, "  ctr_native_asset_validate disc-models ASSETS_DIR MPK_INDEX | models MPK_FILE\n");
+	fprintf(stderr,"  ctr_native_asset_validate disc-animations ASSETS_DIR MPK_INDEX MODEL_INDEX HEADER_INDEX | animations MPK_FILE MODEL_INDEX HEADER_INDEX\n");
+	fprintf(stderr,"  ctr_native_asset_validate disc-sequence ASSETS_DIR MPK_INDEX VRAM_INDEX[,INDEX...] MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto FIRST COUNT OUTPUT_PREFIX [front|side|top|iso]\n");
+	fprintf(stderr,"  ctr_native_asset_validate sequence MPK_FILE VRAM_FILE MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto FIRST COUNT OUTPUT_PREFIX [front|side|top|iso]\n");
 	result = 2;
 done:
 	NativeAssetLoad_Reset(&load);
+	free(vramStorage);
+	free(vramFile.bytes);
 	free(entries);
 	free(ptr.bytes);
 	free(asset.bytes);

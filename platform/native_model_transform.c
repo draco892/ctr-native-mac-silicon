@@ -1,14 +1,11 @@
 #include <platform/native_model_transform.h>
 #include <string.h>
 
-static s32 NativeTransform_Byte(u8 value, int compressed)
+// RenderBucketVertex stores decoded components as u8 even when the delta
+// accumulator is signed. Pack the stored bytes, not the accumulator values.
+static u32 NativeTransform_XZ(const struct NativeModelVertex *vertex)
 {
-	return compressed && value > 127 ? (s32)value - 256 : (s32)value;
-}
-static u32 NativeTransform_XZ(const struct NativeModelVertex *vertex, int compressed)
-{
-	return (u32)NativeTransform_Byte(vertex->x, compressed) |
-	    ((u32)NativeTransform_Byte(vertex->z, compressed) << 16);
+	return (u32)vertex->x | ((u32)vertex->z << 16);
 }
 enum NativeAssetResult NativeModel_PackVertex(const struct NativeFrameView *frame,
     const struct NativeModelVertex *vertex, int compressed,
@@ -19,8 +16,8 @@ enum NativeAssetResult NativeModel_PackVertex(const struct NativeFrameView *fram
 	memset(out, 0, sizeof(*out));
 	if (frame == NULL || vertex == NULL || (compressed != 0 && compressed != 1) ||
 	    ((nextFrame == NULL) != (nextVertex == NULL))) return NATIVE_ASSET_INVALID_ARGUMENT;
-	u32 origin, xz = NativeTransform_XZ(vertex, compressed);
-	s32 y = frame->position[2] + NativeTransform_Byte(vertex->y, compressed);
+	u32 origin, xz = NativeTransform_XZ(vertex);
+	s32 y = frame->position[2] + vertex->y;
 	if (nextFrame == NULL)
 	{
 		origin = ((u16)frame->position[0] & 0x7fffu) | ((u32)(u16)frame->position[1] << 16);
@@ -31,8 +28,8 @@ enum NativeAssetResult NativeModel_PackVertex(const struct NativeFrameView *fram
 	{
 		origin = (u16)(frame->position[0] + nextFrame->position[0]) |
 		    ((u32)(u16)(frame->position[1] + nextFrame->position[1]) << 16);
-		xz += NativeTransform_XZ(nextVertex, compressed);
-		y += nextFrame->position[2] + NativeTransform_Byte(nextVertex->y, compressed);
+		xz += NativeTransform_XZ(nextVertex);
+		y += nextFrame->position[2] + nextVertex->y;
 		out->xy = ((xz + origin) << 1) & 0xfff8ffffu;
 		out->z = (u32)y << 1;
 	}

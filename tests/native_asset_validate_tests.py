@@ -142,6 +142,35 @@ class ValidatorTests(unittest.TestCase):
         put32(lev, definition + 0x10, len(lev))
         self.run_tool('lev', self.write('instance.lev', lev), self.root / 'instance.ptr', expected=1)
 
+    def test_authored_instance_draw(self):
+        lev = bytearray(self.lev) + bytearray(64 + 24 + 64 + 20 + 40 + 4)
+        definition = len(self.lev)
+        model = definition + 64
+        header, commands = model + 24, model + 24 + 64
+        frame, colors = commands + 20, commands + 20 + 40
+        put32(lev, 0xc, 1)
+        put32(lev, 0x10, definition)
+        put32(lev, definition + 0x10, model)
+        struct.pack_into('<hhh', lev, definition + 0x14, 4096, 8192, 2048)
+        struct.pack_into('<hhh', lev, definition + 0x30, 10, 20, 100)
+        struct.pack_into('<hhh', lev, definition + 0x36, 0, 1024, 0)
+        struct.pack_into('<hhI', lev, model + 16, 27, 1, header)
+        struct.pack_into('<hhh', lev, header + 24, 4096, 4096, 4096)
+        put32(lev, header + 32, commands)
+        put32(lev, header + 36, frame)
+        put32(lev, header + 44, colors)
+        for offset, command in [(4, 0x80010000), (8, 0x00020000), (12, 0x00030000), (16, 0xffffffff)]:
+            put32(lev, commands + offset, command)
+        put32(lev, frame + 24, 28)
+        lev[frame + 28:frame + 37] = bytes([0, 0, 0, 16, 0, 0, 0, 8, 16])
+        put32(lev, colors, 0x112233)
+        ptr = ptr_map([0, 0x210, 0x10, definition + 16, model + 20, header + 32, header + 36, header + 44])
+        source = bytes(lev)
+        file = self.write('authored.lev', lev)
+        text = self.run_tool('lev', file, self.write('authored.ptr', ptr))
+        self.assertIn('Instance draw OK: 1 definitions, 1 projected triangles', text)
+        self.assertEqual(pathlib.Path(file).read_bytes(), source)
+
     def test_animation_frames_from_file(self):
         payload = bytearray(self.mpk[4:132]) + bytearray(128)
         put32(payload, 116, 1)  # Header animation count.
@@ -166,6 +195,137 @@ class ValidatorTests(unittest.TestCase):
             self.run_tool('mpk', write_animation(malformed), expected=1)
         struct.pack_into('<H', payload, 148, 0)
         self.run_tool('mpk', write_animation(payload), expected=1)
+
+    def test_vram_rectangle_files_and_truncation(self):
+        data = bytearray(24)
+        put32(data, 0, 0x10)
+        struct.pack_into('<HHHH', data, 12, 1022, 511, 2, 1)
+        struct.pack_into('<HH', data, 20, 0x001f, 0x8000)
+        file = self.write('texture.vrm', data)
+        self.assertIn('1 rectangles, 2 uploaded words', self.run_tool('vram', file))
+        self.assertEqual(pathlib.Path(file).read_bytes(), data)
+        self.run_tool('vram', self.write('short.vrm', data[:-1]), expected=1)
+        packed = struct.pack('<II', 0x20, 24) + data + struct.pack('<I', 0)
+        self.assertIn('VRAM OK:', self.run_tool('vram', self.write('packed.vrm', packed)))
+        self.run_tool('vram', self.write('unterminated.vrm', packed[:-4]), expected=1)
+        struct.pack_into('<H', data, 16, 3)
+        self.run_tool('vram', self.write('outside.vrm', data), expected=1)
+
+    def test_connected_draw_pipeline(self):
+        payload = bytearray(320)
+        put32(payload, 4, 32)
+        struct.pack_into('<hhI', payload, 48, 7, 1, 64)
+        struct.pack_into('<hhh', payload, 88, 4096, 4096, 4096)
+        put32(payload, 96, 128)
+        put32(payload, 100, 160)
+        put32(payload, 108, 220)
+        for offset, command in [(132, 0x80010000), (136, 0x00020000), (140, 0x00030000), (144, 0xffffffff)]:
+            put32(payload, offset, command)
+        put32(payload, 184, 28)
+        payload[188:197] = bytes([0, 0, 0, 16, 0, 0, 0, 0, 16])
+        put32(payload, 220, 0x112233)
+        relocations = ptr_map([4, 52, 96, 100, 108])
+        def write_draw(data):
+            return self.write('draw.mpk', struct.pack('<I', len(data)) + data + relocations)
+        self.assertIn('Draw pipeline OK: 1 projected triangles', self.run_tool('mpk', write_draw(payload)))
+        # Untextured fixture: exercise the entire file -> projected RGB path.
+        payload[195] = 8  # Stored Y is depth; stored Z (16) is GTE/model height.
+        model_file = write_draw(payload)
+        vram = bytearray(22)
+        put32(vram, 0, 0x10)
+        struct.pack_into('<HHHHH', vram, 12, 0, 0, 1, 1, 0)
+        vram_file = self.write('preview.vrm', vram)
+        output = self.root / 'preview.ppm'
+        args = ['preview', model_file, vram_file, '0', '0', 'static', '0', output]
+        self.assertIn('Preview OK:', self.run_tool(*args))
+        image = output.read_bytes()
+        prefix = b'P6\n512 512\n255\n'
+        self.assertTrue(image.startswith(prefix))
+        self.assertEqual(len(image), len(prefix) + 512 * 512 * 3)
+        self.assertNotEqual(image[len(prefix):], bytes([24, 28, 36]) * (512 * 512))
+        # Explicit camera-axis regression: this pixel is covered only when
+        # stored Z remains image height, rather than being swapped with depth.
+        pixel = len(prefix) + (275 * 512 + 247) * 3
+        self.assertEqual(image[pixel:pixel + 3], bytes([0x33, 0x22, 0x11]))
+        self.assertIn('view top', self.run_tool(*args, 'top'))
+        self.assertNotEqual(output.read_bytes(), image)
+        self.assertEqual(pathlib.Path(model_file).read_bytes(), struct.pack('<I', len(payload)) + payload + relocations)
+        self.assertEqual(pathlib.Path(vram_file).read_bytes(), vram)
+        output.unlink()
+        args[4] = '1'  # Invalid header cannot publish an image.
+        self.run_tool(*args, expected=1)
+        self.assertFalse(output.exists())
+        args[4] = '0'
+        self.run_tool(*args, 'invalid-view', expected=2)
+        self.assertFalse(output.exists())
+        put32(payload, 132, 0x84010000)  # Cached vertex before any write.
+        self.run_tool('mpk', write_draw(payload), expected=1)
+        self.run_tool(*args, expected=1)
+        self.assertFalse(output.exists())
+
+    def test_animation_sequence_with_fixed_camera(self):
+        payload = bytearray(512)
+        put32(payload, 4, 32)
+        struct.pack_into('<hhI', payload, 48, 7, 1, 64)
+        struct.pack_into('<hhh', payload, 88, 4096, 4096, 4096)
+        put32(payload, 96, 128)
+        put32(payload, 108, 220)
+        put32(payload, 116, 1)
+        put32(payload, 120, 320)
+        for offset, command in [(132, 0x80010000), (136, 0x00020000), (140, 0x00030000), (144, 0xffffffff)]:
+            put32(payload, offset, command)
+        put32(payload, 220, 0x112233)
+        put32(payload, 320, 324)
+        payload[324:329] = b'moveX'
+        struct.pack_into('<HH', payload, 340, 0x8005, 40)
+        for frame in range(3):
+            start = 348 + frame * 40
+            struct.pack_into('<h', payload, start, frame * 8)
+            put32(payload, start + 24, 28)
+            payload[start + 28:start + 37] = bytes([0, 0, 0, 16, 0, 0, 0, 8, 16])
+        relocations = ptr_map([4, 52, 96, 108, 120, 320])
+        def write_model():
+            return self.write('sequence.mpk', struct.pack('<I', len(payload)) + payload + relocations)
+        model_file = write_model()
+        vram = bytearray(22)
+        put32(vram, 0, 0x10)
+        struct.pack_into('<HHHHH', vram, 12, 0, 0, 1, 1, 0)
+        vram_file = self.write('sequence.vrm', vram)
+        prefix = self.root / 'motion'
+        args = ['sequence', model_file, vram_file, '0', '0', '0', '0', '5', prefix]
+        self.assertIn('moveX logical=5 stored=3 interpolated=1', self.run_tool('animations', model_file, '0', '0'))
+        text = self.run_tool(*args)
+        self.assertIn('shared across 5 frames, translation -64 32 256', text)
+        images = [self.root / f'motion-{index:06d}.ppm' for index in range(5)]
+        contents = [image.read_bytes() for image in images]
+        self.assertEqual(len(set(contents)), 5)  # Includes distinct halfway frames.
+        self.run_tool(*args, expected=1)  # Existing exports are preserved.
+        self.assertEqual([image.read_bytes() for image in images], contents)
+        for image in images:
+            image.unlink()
+        images[-1].write_bytes(b'preserve-me')  # Preflight a later collision.
+        self.run_tool(*args, expected=1)
+        self.assertFalse(images[0].exists())
+        self.assertEqual(images[-1].read_bytes(), b'preserve-me')
+        images[-1].unlink()
+        args[7] = '6'  # Sequence ranges reject clamping/duplicate tail frames.
+        self.run_tool(*args, expected=1)
+        self.assertFalse(images[0].exists())
+        args[7] = '257'
+        self.run_tool(*args, expected=2)
+        args[7] = '5'
+        put32(payload, 428 + 24, 41)  # Invalid later frame: no output yet.
+        write_model()
+        self.run_tool(*args, expected=1)
+        self.assertFalse(images[0].exists())
+
+    def test_vram_upload_index_list_validation(self):
+        output = self.root / 'rejected.ppm'
+        for indices in ['', ',0', '0,', '0,,258', '-1', '4294967296',
+                        '0,1x', '0, 258', ','.join(['0'] * 17)]:
+            self.run_tool('disc-preview', self.root, '260', indices,
+                          '36', '0', 'auto', '0', output, expected=2)
+            self.assertFalse(output.exists())
 
 
 if __name__ == '__main__':

@@ -7,8 +7,9 @@
 // Position components are signed low16(XY), high16(XY), low16(Z), in that order.
 struct NativePackedModelVertex { u32 xy, z; };
 
-// compressed=1 interprets stored bytes as signed, matching the delta decoder;
-// raw coordinates remain unsigned. Optional next frame AND vertex select the
+// Raw and compressed stored bytes are both unsigned, as in RenderBucketVertex.
+// compressed must be 0/1; it describes the source, not packing signedness.
+// Optional next frame AND vertex select the
 // retail halfway pack. Uses unsigned shifts/adds, preserving packed carries.
 // Frame scalar positions suffice; no source bytes are accessed by this helper.
 enum NativeAssetResult NativeModel_PackVertex(const struct NativeFrameView *frame,

@@ -11,8 +11,8 @@ static int TestGolden(void)
 	CHECK(NativeModel_PackVertex(&f,&v,0,NULL,NULL,&out)==NATIVE_ASSET_OK);
 	CHECK(out.xy==0x02000400 && out.z==524);
 	CHECK(NativeModel_PackVertex(&f,&v,1,NULL,NULL,&out)==NATIVE_ASSET_OK);
-	CHECK(out.xy==0x00080000 && out.z==0xfffffe0c);
-	CHECK(NativeModel_UnpackPosition(&out,pos)==NATIVE_ASSET_OK && pos[0]==0 && pos[1]==8 && pos[2]==-500);
+	CHECK(out.xy==0x02000400 && out.z==524);
+	CHECK(NativeModel_UnpackPosition(&out,pos)==NATIVE_ASSET_OK && pos[0]==1024 && pos[1]==512 && pos[2]==524);
 	CHECK(NativeModel_PackVertex(&f,&a,0,&n,&b,&out)==NATIVE_ASSET_OK && out.xy==0x00100008 && out.z==12);
 	f.position[0]=-32768; f.position[1]=-32768; f.position[2]=-32768; v=(struct NativeModelVertex){0,0,0};
 	CHECK(NativeModel_PackVertex(&f,&v,0,NULL,NULL,&out)==NATIVE_ASSET_OK && out.xy==0 && out.z==0xfffe0000);
@@ -22,15 +22,28 @@ static int TestGolden(void)
 	CHECK(NativeModel_UnpackPosition(NULL,pos)==NATIVE_ASSET_INVALID_ARGUMENT && pos[0]==0 && pos[1]==0 && pos[2]==0);
 	return 0;
 }
+// Regression: high-bit X must not sign-extend into the packed Z half.
+// High-bit vertical bytes must also remain positive before signed frame origin.
+static int TestStoredByteBoundary(void)
+{
+	const struct NativeFrameView frame={0};
+	const struct NativeModelVertex vertices[]={{127,127,17},{128,128,17},{255,255,128}};
+	const u32 xy[]={0x004001fc,0x00400200,0x020003fc}, z[]={508,512,1020};
+	for(unsigned i=0;i<3;i++)
+	{
+		struct NativePackedModelVertex raw,compressed;
+		CHECK(NativeModel_PackVertex(&frame,&vertices[i],0,NULL,NULL,&raw)==NATIVE_ASSET_OK);
+		CHECK(NativeModel_PackVertex(&frame,&vertices[i],1,NULL,NULL,&compressed)==NATIVE_ASSET_OK);
+		CHECK(compressed.xy==xy[i] && compressed.z==z[i]);
+		CHECK(raw.xy==compressed.xy && raw.z==compressed.z);
+	}
+	return 0;
+}
 // Independent wide-integer oracle: explicit packed halves, modulo arithmetic
 // and multiplication instead of the production packed bitwise-add/shift path.
-static int Byte(u8 n,int compressed) { return compressed && n>=128 ? (int)n-256 : n; }
-static unsigned long long Word(const struct NativeModelVertex *v,int compressed)
+static unsigned long long Word(const struct NativeModelVertex *v)
 {
-	int x=Byte(v->x,compressed), z=Byte(v->z,compressed);
-	unsigned low=(unsigned)((x+65536)%65536);
-	unsigned high=x<0 ? 65535 : (unsigned)((z+65536)%65536);
-	return high*65536ull+low;
+	return v->z*65536ull+v->x;
 }
 static int TestDifferential(void)
 {
@@ -45,9 +58,9 @@ static int TestDifferential(void)
 			random=random*1664525u+1013904223u; n.position[axis]=(s16)((int)(random%65536)-32768); bbytes[axis]=(u8)(random>>24);
 		}
 		int compressed=trial%2, interpolate=(trial/2)%2;
-		int x=f.position[0],y=f.position[1],z=f.position[2]+Byte(v.y,compressed);
-		unsigned long long packed=Word(&v,compressed);
-		if(interpolate) { x+=n.position[0]; y+=n.position[1]; z+=n.position[2]+Byte(b.y,compressed); packed+=Word(&b,compressed); }
+		int x=f.position[0],y=f.position[1],z=f.position[2]+v.y;
+		unsigned long long packed=Word(&v);
+		if(interpolate) { x+=n.position[0]; y+=n.position[1]; z+=n.position[2]+b.y; packed+=Word(&b); }
 		unsigned low=interpolate ? (unsigned)((x+65536)%65536) : (unsigned)(x+65536)%32768;
 		unsigned high=(unsigned)((y+65536)%65536);
 		unsigned multiplier=interpolate ? 2 : 4;
@@ -83,7 +96,7 @@ static int TestIntegration(void)
 	// Rebind then reopen; packed output retains no borrowed addresses.
 	CHECK(NativePtrMap_Rebind(&map,copy,320)==NATIVE_PTRMAP_OK); CHECK(NativeModel_Open(&map,0,&model)==NATIVE_ASSET_OK);
 	CHECK(NativeModel_PackStaticVertices(&model,0,curr,packed,2,&count)==NATIVE_ASSET_OK && packed[0].z==20);
-	// Compression requires signed coordinate promotion before packed OR/add.
+	// Delta accumulators wrap into unsigned stored bytes before packing.
 	const u32 compressedSlots[]={20,56,60,72,80,168,192};
 	CTR_WriteU32LE(copy+72,280); CTR_WriteU32LE(copy+192,280);
 	CTR_WriteU32LE(copy+280,0x1ff); CTR_WriteU32LE(copy+284,0x1ff);
@@ -92,8 +105,8 @@ static int TestIntegration(void)
 	CTR_WriteU32LE(ptr,28); for(unsigned i=0;i<7;i++) CTR_WriteU32LE(ptr+4+i*4,compressedSlots[i]);
 	CHECK(NativePtrMap_Decode(copy,320,ptr,32,entries,7,&map)==NATIVE_PTRMAP_OK);
 	CHECK(NativeModel_Open(&map,0,&model)==NATIVE_ASSET_OK);
-	CHECK(NativeModel_PackStaticVertices(&model,0,curr,packed,2,&count)==NATIVE_ASSET_OK && packed[0].xy==0x00080000 && packed[0].z==0xfffffe0c);
-	CHECK(NativeModel_PackAnimationVertices(&model,0,0,1,curr,next,packed,2,&count)==NATIVE_ASSET_OK && packed[0].xy==0xfff8fffc && packed[0].z==0xfffffe00);
+	CHECK(NativeModel_PackStaticVertices(&model,0,curr,packed,2,&count)==NATIVE_ASSET_OK && packed[0].xy==0x02000400 && packed[0].z==524);
+	CHECK(NativeModel_PackAnimationVertices(&model,0,0,1,curr,next,packed,2,&count)==NATIVE_ASSET_OK && packed[0].xy==0x01f803fc && packed[0].z==512);
 	// Even logical count requires the final stored endpoint for odd requests.
 	Put16(copy+188,0x8002);
 	CHECK(NativeModel_PackAnimationVertices(&model,0,0,UINT32_MAX,curr,next,packed,2,&count)==NATIVE_ASSET_OK && count==2);
@@ -108,6 +121,6 @@ static int TestIntegration(void)
 }
 int main(void)
 {
-	if(TestGolden() || TestDifferential() || TestIntegration()) return 1;
-	puts("Native model transforms: signed/raw packed coordinates, halfway interpolation, 10000 wide-integer comparisons and bounded asset integration passed."); return 0;
+	if(TestGolden() || TestStoredByteBoundary() || TestDifferential() || TestIntegration()) return 1;
+	puts("Native model transforms: unsigned stored bytes, signed frame origins, halfway interpolation, 10000 wide-integer comparisons and bounded asset integration passed."); return 0;
 }

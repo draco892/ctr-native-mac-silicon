@@ -66,7 +66,8 @@ The ARM64 port builds the C17 memory modules, LNG and pointer-map decoders,
 bounded MPK/LEV model, instance, mesh and animation/frame readers, and a runtime
 model library, bounded raw/compressed model vertex decoding and triangle/color/texture
 metadata decoding, local vertex packing/interpolation, Q12 matrices and GTE-compatible camera
-translation/projection,
+translation/projection, bounded VRAM loading and 4/8/16-bit texel sampling,
+a connected projected-triangle iterator and a diagnostic software rasterizer/PPM preview with inspection cameras, ordered VRAM uploads and fixed-camera animation sequences and authored LEV instance transforms,
 using Xcode
 Command Line Tools, CMake, Ninja and Python 3. The complete game still requires
 32-bit host pointers while its asset layouts are being ported.

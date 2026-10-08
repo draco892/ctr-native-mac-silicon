@@ -19,7 +19,8 @@ The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
 `ctr_native_model_library_tests`, `ctr_native_model_animation_tests` and
 `ctr_native_model_vertices_tests`, `ctr_native_model_commands_tests` and
 `ctr_native_model_transform_tests`, `ctr_native_model_matrix_tests` and
-`ctr_native_model_projection_tests` under
+`ctr_native_model_projection_tests`, `ctr_native_vram_tests` and
+`ctr_native_model_draw_tests` and `ctr_native_raster_tests` and `ctr_native_instance_transform_tests` under
 `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
@@ -237,8 +238,8 @@ geometry spans. It also checks animation/frame records and decompresses model
 vertex streams as described below. Triangle/color/texture metadata and local vertex packing/interpolation are
 decoded too. Q12 matrix probes use real model scales with synthetic identity
 rotation/view/instance inputs. Projection probes use a declared synthetic
-camera. Actual game camera integration, VRAM pixel sampling and rendering/
-gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
+camera. Optional VRAM modes load retail rectangles and sample triangle-corner
+texels. Actual game camera/rendering integration and gameplay remain unverified. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -409,7 +410,7 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 
 The module is included in the native unity chain and standalone validator.
 Gameplay and render bucket consumers still use their legacy structures;
-VRAM pixel sampling, camera/renderer integration and resident migration remain
+Camera/renderer integration and resident migration remain
 required before visual playback or an ARM64 game build.
 
 ## Bounded model vertex decoding
@@ -417,8 +418,8 @@ required before visual playback or an ARM64 game build.
 `native_model_vertices.c` decodes raw XYZ byte triples and compressed model
 streams without patching assets or casting bytes to host structures. Output
 coordinates retain the encoded byte representation, before frame origin/scale,
-packed-coordinate transforms or interpolation. Packing promotes compressed
-bytes as signed and raw bytes as unsigned; these are distinct contracts. Stream words are
+packed-coordinate transforms or interpolation. Packing promotes both raw and compressed stored bytes as unsigned; signed
+delta accumulators have already been wrapped into the stored byte representation. Stream words are
 little-endian; fields are consumed most-significant bit first in X,Z,Y order.
 Eight-bit fields reset an axis; shorter signed fields accumulate the temporal
 base and delta, wrapping through a signed byte. Cross-word reads require both
@@ -460,7 +461,7 @@ state, and 2000 streams against an independent bit-by-bit oracle. Synthetic
 asset tests cover fresh/cache/color command counts, raw and compressed static
 and animated decoding, output capacity, truncated frames/delta tables and a
 missing command terminator. The retail test requires vertex decoding output.
-With the supplied disc present, both presets run 15 tests; without it, 14 run.
+With the supplied disc present, both presets run 19 tests; without it, 18 run.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -538,8 +539,9 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 render bucket before GTE matrix/projection operations. It follows the existing
 `PackModelVertexXY`, `PackInterpolatedModelVertexXY`, `ModelVertexZ` and
 `InterpolatedModelVertexZ` functions. Input uses the byte representation from
-the vertex decoder: compressed axes are sign-extended; raw axes are unsigned.
-This distinction matters both for negative coordinates and packed OR carries.
+the vertex decoder: raw and compressed axes are unsigned stored bytes. Signed
+delta accumulators wrap into u8 before packing, as in RenderBucketVertex.
+Signed frame origins and packed carries remain separate from byte signedness.
 
 For direct frames the first origin component is masked with `0x7fff`. The
 X/Z vertex pair is combined with the first two origin components in a single
@@ -580,12 +582,12 @@ These total 225679 vertex visits, not unique geometry. Successful calculation
 and bounds checks establish no visual parity until matrix/render consumers run.
 
 `ctr_native_model_transform` checks golden packed words and signed position
-halves, negative origins, signed compressed versus unsigned raw coordinates,
+halves, negative origins, unsigned raw/compressed stored coordinates,
 and 10000 randomized comparisons with a wide-integer reference calculation.
 Synthetic assets exercise static/direct/interpolated bulk packing, odd/even
 logical endpoints, clamping, missing next scratch, capacity, unaligned buffers,
 immutability, Rebind, compressed stream integration and a malformed next frame.
-Both complete preset suites pass 15 tests with the supplied disc present.
+Both complete preset suites pass 19 tests with the supplied disc present.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -640,7 +642,7 @@ fractional rounding, signed-halfword narrowing, saturation and extreme depth/
 product wrap. It also compares 10000 randomized matrix compositions, packed
 vertex applications and scale builds with independent wide-integer reference
 calculations, checking that inputs remain unchanged. Complete normal and
-ASan/UBSan preset suites pass 15 tests with the supplied disc present.
+ASan/UBSan preset suites pass 19 tests with the supplied disc present.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -700,7 +702,7 @@ the core and independently check adjustment/wrap. Golden tests cover screen
 coordinates, three-vertex FIFO order, divide threshold/zero/negative depth,
 screen saturation, screenspace bypass, near/far and DRAW_HUGE, full signed depth
 extremes and transactional argument failures. The new module leaves global GTE
-state unchanged. Complete normal and ASan/UBSan suites pass 15 tests with the
+state unchanged. Complete normal and ASan/UBSan suites pass 19 tests with the
 supplied disc present.
 
 ```sh
@@ -712,6 +714,366 @@ ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_projection$' -
 ctest --preset macos-arm64-memory-sanitized -L retail -V
 ```
 
+## VRAM rectangle loading and integer texel sampling
+
+`native_vram.c` binds caller-owned 1 MiB storage containing 1024x512 little-endian
+16-bit words. No host alignment or resident renderer structures are required.
+Bind preserves storage; the standalone validator explicitly zero-initializes it.
+Loads cannot alias destination storage and must use immutable source bytes.
+
+The reader follows LOAD_VramFileCallback: a single 20-byte VramHeader has its
+rectangle at byte 12; a first word of `0x20` selects concatenated chunks with
+four-byte lengths and a final zero length. Chunk size uses `size & ~3`. Header
+metadata in the first 12 bytes is opaque, matching the loader. Positive width/
+height, the complete word span and the physical 1024x512 rectangle are checked.
+A full preflight precedes every write, so malformed later chunks leave VRAM
+unchanged. Ordered overlapping rectangles overwrite earlier pixels. Unused
+trailing bytes are allowed; CD padding cannot complete a truncated input span.
+
+Sample interprets byte UV coordinates and TPAGE/CLUT: mode 0 extracts one of
+four nibbles per word, mode 1 one of two bytes, and both resolve a palette word.
+Mode 2 is direct 16-bit, while reserved mode 3 preserves the native renderer's
+16-bit fallback. The sampler bounds physical addresses; it deliberately does
+not emulate the renderer's edge clamping, UV filtering, texture windows,
+blending, modulation or texture animation. Out-of-range source/palette addresses
+return invalid data. Only color word zero is transparent; `0x8000` is visible
+black with STP set. RGB8 uses five-bit replication, alpha is 0/255, and STP is
+reported separately rather than folded into alpha.
+
+New validator modes load raw VRAM assets, or combine one VRAM entry with model
+validation. Shared model probes use VRAM entry 258; LEV probes use their VRAM
+entry. They sample three integer UV corners per textured triangle, not every
+texel in each triangle. Unloaded VRAM stays zero; a successful sample confirms
+an address and decoding, not that all runtime texture residency is reproduced.
+
+| Model entry | VRAM entry | Rectangles | Uploaded words | Sampled corners |
+| --- | ---: | ---: | ---: | ---: |
+| Shared MPK 259 | 258 | 2 | 57344 | 9960 |
+| Crash MPK 260 | 258 | 2 | 57344 | 13062 |
+| LEV 1 | 0 | 2 | 229376 | 2055 |
+| Hub LEV/PTR 201/202 | 200 | 2 | 114688 | 2004 |
+
+The four passes total 27081 corner samples; VRAM 258 is loaded twice into
+independent buffers. No asset extraction, export or changes to the image occur.
+The new module is in the native unity chain and validator. Resident loading,
+GPU upload and render consumers still require ARM64 integration.
+
+`ctr_native_vram` checks single/list formats, low-bit chunk rounding, ordered
+overlap, complete preflight, unaligned storage/input, truncated/sentinel/rectangle
+failures, source alias rejection, palette indices, nibble/byte order, direct and
+reserved modes, RGB/STP/transparent-black semantics and physical boundaries.
+10000 randomized samples compare with an independent byte-address/index oracle.
+CLI tests check valid and truncated rectangle files and source immutability.
+The optional retail test runs all four VRAM/model combinations. Complete normal
+and ASan/UBSan suites pass 19 tests with the supplied disc present.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_vram$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+# From the project root:
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-vram assets 258
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-mpk-vram assets 259 258
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-mpk-vram assets 260 258
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-vram assets 1 0
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-ptr-vram assets 201 202 200
+# Extracted raw VRAM input:
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate vram path/to/asset.vrm
+```
+
+## Connected frame-to-triangle preparation
+
+`native_model_draw.c` joins frame decoding/packing, command topology, projection
+and optional VRAM sampling behind Open/Next. Open takes a model/header, static
+selection (`animationIndex=UINT32_MAX`) or a logical animation frame, a caller
+projection configuration and disjoint caller-owned current/next/packed arrays.
+Animation clamping/interpolation and unsigned stored-byte packing retain the earlier
+modules' contracts. No allocations or resident game layouts enter the module.
+
+Next returns one NativeDrawTriangle with source fresh-vertex indices, RGB words,
+material command bits, UV/CLUT/page metadata, three projected screen/depth corners,
+projection flags and optional integer corner texels. Source indices are checked
+against the prepared packed array before access. A projection/texture failure
+clears output and preserves the entire command iterator; trailing command
+exhaustion commits normally and returns NOT_FOUND. Projection config is copied;
+assets/maps/entries, packed storage and VRAM remain borrowed and immutable during
+iteration. Reopen after reload or Rebind.
+
+Each triangle deliberately uses a fresh RTPT projection of all three vertices.
+Screen/depth geometry can therefore feed a preview consumer, but flags aggregate
+all corners and differ from the legacy continuation RTPS optimization. Original
+command bits and corner order remain intact. Signed area and arithmetic average
+depth are diagnostics, not native NCLIP/AVSZ3/ordering-table policy. This module
+does not cull, clip, light, blend, sample triangle interiors or rasterize. It is
+not yet a renderer or a playable ARM64 game.
+
+The validator runs the connected path for each listed header: static models or
+the first present animation, choosing logical frame 1 when halfway interpolation
+is available and otherwise frame 0. It uses actual model scale with synthetic
+identity rotation/instance scale, depth 4096, H=256 and offsets (160,120). The
+existing separate readers still validate all frames. Results for one pass (updated after the unsigned stored-byte packing correction):
+
+| Entry | Prepared/projected triangles | Corner pixels with VRAM | Zero screen area |
+| --- | ---: | ---: | ---: |
+| Shared MPK 259 | 4396 | 9960 | 1986 |
+| Crash MPK 260 | 6376 | 13062 | 3477 |
+| LEV 1 | 1402 | 2055 | 684 |
+| Hub LEV/PTR 201/202 | 1620 | 2004 | 316 |
+
+All 13794 topology visits now pass the connected path; VRAM modes additionally
+sample 27081 corners through it. Screen degeneracy is reported, not an asset
+failure: the synthetic camera and integer rounding can collapse small faces.
+No visibility or rendered appearance is established. Existing no-VRAM CLI modes
+exercise the same triangle path and omit pixel sampling.
+
+`ctr_native_model_draw` checks a golden two-triangle strip with exact screen
+coordinates, depths, signed areas, source colors and texels; static, halfway and
+clamped frames; continuation topology; optional VRAM; end state; capacity and
+missing-scratch errors; immutable unaligned assets and Rebind. Texture failure
+after projection and an unwritten vertex-cache reference roll back iterator
+state. CLI synthetic fixtures require connected output and reject invalid cache
+use; retail tests require the pipeline output in all eight validation modes.
+Complete normal and ASan/UBSan preset suites pass 19 tests with the supplied disc.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_draw$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+## Diagnostic software preview
+
+`native_raster.c` consumes projected triangles in caller-owned RGB and integer
+Z buffers. It uses pixel-center/top-left coverage, two-sided triangles, viewport
+scissoring, affine UV/color/depth interpolation and nearest-depth replacement.
+Equal depth keeps the existing pixel. Texture RGB is modulated by vertex RGB/128
+and clamped; word-zero texels write neither RGB nor depth, while STP is opaque.
+Degenerate triangles, zero depth and GTE depth/divide overflow are skipped.
+Surviving texture reads are preflighted before a triangle writes any pixels;
+an invalid read clears output statistics and preserves the target. Buffers must
+be disjoint; views must remain unchanged after successful Bind. No heap allocation
+or resident game structures are required by the rasterizer.
+
+This is a diagnostic renderer: it does not implement near-plane clipping,
+lighting, material blending, texture windows, dithering, ordering tables, runtime
+visibility or framebuffer feedback. It is independent of OpenGL and SDL.
+
+The validator can list model array ordinals (distinct from model IDs) and export
+a single chosen header and frame as a binary PPM, 512x512 RGB. Header indices select
+model LOD/variants. `auto` chooses the first present animation, or a static frame
+when none are present; `static` explicitly requests static data. The camera is
+synthetic: it fits the prepared model bounds and stays above the GTE H/2 divide
+threshold. Empty/non-renderable selections fail without opening the output file.
+A successful render opens the requested file for replacement; export I/O failure
+may leave a partial output. Inputs, including the supplied disc, are read-only.
+
+```sh
+build-macos-arm64-memory/ctr_native_asset_validate disc-models assets 260
+build-macos-arm64-memory/ctr_native_asset_validate disc-preview assets 260 258,0 36 0 auto 0 build-macos-arm64-memory/crash-preview.ppm iso
+# Extracted files use: preview MPK_FILE VRAM_FILE MODEL_INDEX HEADER_INDEX ANIMATION_INDEX|auto|static FRAME OUTPUT.ppm [front|side|top|iso]
+# Optional conversion for viewing with macOS tools:
+sips -s format png build-macos-arm64-memory/crash-preview.ppm --out build-macos-arm64-memory/crash-preview.png
+```
+
+**Visual regression found and corrected:** the initial Crash preview exposed a
+packing mismatch. The bounded C17 path sign-extended compressed stored bytes,
+but the original renderer's RenderBucketVertex uses u8 fields. Negative X after
+promotion contaminated the whole upper packed Z half; Y values >=128 also became
+negative. Packing now uses unsigned stored bytes for both raw and compressed
+streams, with signed frame origins and the original 32-bit carries unchanged.
+The earlier signed-coordinate golden/oracle expectations were wrong and have
+been corrected, with explicit 127/128/255 boundary regressions. Decoder temporal
+bases, signed delta arithmetic, byte wrapping and command topology are unchanged.
+
+The preview uses the near-model matrix branch (depth probe 0) before fitting
+its synthetic camera. Crash ordinal 36, MPK 260/header 0/auto animation/frame 0,
+still yields 272 triangles. The earlier flattened quadrilateral now has structured
+racer geometry. Full retail render parity remains unverified.
+
+## Preview camera axes and ordered VRAM uploads
+
+The initial preview incorrectly swapped the second and third GTE inputs a second
+time. The packing path already produces GTE/model XYZ from stored X,Z,Y;
+RenderBucket_BuildM3x3 applies the instance/model matrix directly to those inputs.
+The preview now preserves this model basis and flips image Y for its downward
+screen convention. Front is the default; optional `side`, `top` and `iso` views
+rotate this basis before fitting bounds. Iso uses a fixed Q12 yaw/pitch matrix.
+These are inspection cameras, not the live game's camera or driver rotation.
+
+Disc modes with VRAM accept an ordered comma-separated list of up to 16 unsigned
+indices, without spaces. Each file loads into the same zero-initialized VRAM;
+later rectangles replace overlapping words and other uploaded regions survive.
+Each individual file remains atomic on invalid data. The private CLI VRAM may
+contain successful earlier files when a later upload fails, but no preview file
+is opened. Existing single-index commands remain valid. Extracted-file preview
+still takes one VRAM file; a packed multi-rectangle file remains supported.
+
+For the NTSC-U Dingo Canyon 1P probe, use `258,0`: MainMain loads shared VRAM 0x102
+(258) at boot; LOAD_TenStages queues the chosen level VRAM later, and
+LOAD_GetBigfileIndex selects entry 0 for this track/LOD. MPK 260 is the corresponding
+Crash arcade pack selected by LOAD_DriverMPK. This reproduces those texture uploads
+in source order; it does not reconstruct framebuffer writes, runtime material
+changes or a complete scene. The iso preview now shows orange racer geometry and
+kart details; recognizability alone is not proof of exact rendering behavior.
+
+```sh
+# Same model/frame/textures, different inspection cameras:
+for view in front side top iso; do
+  build-macos-arm64-memory/ctr_native_asset_validate disc-preview assets 260 258,0 36 0 auto 0 "build-macos-arm64-memory/crash-$view.ppm" "$view"
+  sips -s format png "build-macos-arm64-memory/crash-$view.ppm" --out "build-macos-arm64-memory/crash-$view.png"
+done
+```
+
+`ctr_native_raster` tests exact small-image coverage, shared-edge ownership,
+reversed winding, scissoring, depth ties/occlusion, interpolated colors/depth,
+transparent and STP texels, affine UV sampling, buffer guards and rollback after
+an invalid texture read. CLI fixtures test complete file-to-image production,
+RGB dimensions/content, source immutability and rejection of invalid headers or
+vertex-cache use without creating an image. An asymmetric synthetic fixture
+asserts an exact pixel that would be missing under the old axis swap. CLI tests
+reject malformed/overflowing/overlong upload lists and unknown camera names.
+VRAM tests check cross-file overlaps, preservation and upload-order effects. The
+optional retail test renders all four Crash views with uploads 258 then 0, checks
+valid distinct images and upload order, and rejects a failed later upload without
+creating an output. These checks establish image production, not retail parity.
+Normal and ASan/UBSan suites pass 19 tests with the supplied disc, 18 without it.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_raster$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+## Animation sequence preview
+
+The validator now lists animation names and exports bounded logical frame ranges:
+`disc-animations ASSETS_DIR MPK_INDEX MODEL_INDEX HEADER_INDEX` (or
+`animations MPK_FILE MODEL_INDEX HEADER_INDEX`) and `disc-sequence`/`sequence`.
+The sequence first prepares every requested frame and fits one shared camera to
+the union of their bounds. It then reuses its workspace, VRAM and framebuffer to
+render every frame with that same projection. This avoids per-frame centering
+that could hide translation or create apparent camera motion. Odd half-rate
+logical frames use the existing halfway packing path; the decoder is unchanged.
+
+Sequence COUNT must be 1..256 and the entire FIRST/COUNT range must lie inside
+the chosen animation's logical range. Static data is rejected. Unlike the single
+preview's clamping behavior, sequences reject out-of-range requests. Files use
+`OUTPUT_PREFIX-000000.ppm` with the actual logical index. Parent directories must
+already exist. Existing sequence files are rejected before rendering, and files
+are opened with C17 exclusive creation to avoid replacement. Malformed frame
+geometry is rejected during the initial bounds pass; later texture or I/O failure
+may leave previously exported frames or a partial current file. This is not an
+atomic multi-file transaction. Single-image preview keeps its existing behavior.
+
+For MPK 260/model 36/header 0, supplied NTSC-U data lists:
+
+| Index | Name | Logical frames | Stored frames | Half-rate interpolation |
+| --- | --- | ---: | ---: | --- |
+| 0 | turn | 21 | 21 | No |
+| 1 | reverse | 7 | 4 | Yes |
+| 2 | bump | 15 | 8 | Yes |
+| 3 | jump | 4 | 4 | No |
+
+```sh
+cmake --build --preset macos-arm64-memory
+build-macos-arm64-memory/ctr_native_asset_validate disc-animations assets 260 36 0
+build-macos-arm64-memory/ctr_native_asset_validate disc-sequence assets 260 258,0 36 0 1 0 7 build-macos-arm64-memory/crash-reverse side
+python3 tools/preview_sequence_html.py build-macos-arm64-memory/crash-reverse build-macos-arm64-memory/crash-reverse.html
+open build-macos-arm64-memory/crash-reverse.html
+```
+
+Use a new output prefix to repeat export while preserving existing frames.
+`preview_sequence_html.py` validates consecutive native PPM frames, converts
+copies to PNG using macOS `sips` in a temporary directory and embeds them in one
+standalone HTML file. Source PPMs stay unchanged. The viewer has play/pause and a
+logical-frame slider; its default 15 fps (`--fps 1..60`) is an inspection speed,
+not verified game timing. This does not implement gameplay playback or audio.
+
+CLI synthetic tests cover a translating five-frame half-rate animation with an
+exact fixed camera and five distinct rendered frames, including halfway frames;
+metadata listing, bounds/count rejection, preserved existing output and a corrupt
+later frame rejected before any image is created. The retail test exports all
+seven reverse frames with a shared camera and checks valid images and motion.
+Normal and ASan/UBSan suites still pass 19 tests with the supplied disc.
+
+```sh
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_asset_validate$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+## Authored LEV instance transforms
+
+`native_instance_transform.c` bridges NativeInstanceDefView to the normal model
+projection configuration using the decoded position, scale and rotation. It
+retains pointer-free runtime camera and matrix values; no 64-bit overlay is cast
+onto retail instance records and no runtime ptrInstance is published.
+
+Rotation follows INSTANCE_LevInit -> ConvertRotToMatrix: 4096 angle units per
+turn, quarter-turn lookup with quadrant sign rules, and Y * X * Z composition.
+The existing 1024 sine/cosine pairs from game data.trigApprox were moved unchanged
+to native_trig_table.inc, which both the original game initializer and this
+module include. All pairs were compared with the original source. It deliberately
+does not use floating-point trigonometry or the different native_libgte rsin LUT.
+
+The normal projection bridge first computes raw camera-relative depth, with the
+existing wrapping/low16/IR/near/DRAW_HUGE rules. It builds the world model matrix
+from authored rotation and actual header/instance scale (including PIXEL_LOD),
+then composes the camera view. This order preserves intermediate Q12 rounding
+and saturation. SCREENSPACE_INSTANCE bypasses camera subtraction/rotation for
+translation only; the normal matrix still receives the view transform. Camera
+screen offsets, H, DQA and DQB are copied. Errors clear both outputs, inputs must
+be disjoint and immutable, and no heap or global GTE registers are used.
+
+This is explicitly the normal matrix path: custom/always-north billboard
+matrices, reflection/splits, instance colors/materials, visibility/LOD selection,
+runtime tick callbacks and animation timing remain outside this bridge. The
+validator probes every listed header, not the gameplay-selected visible LOD.
+GTE overflow flags and screen degeneracy remain diagnostic results, not asset
+validation failures. The camera is supplied explicitly; retail probes currently
+use identity view at (0,0,-4096), H=256, offset (160,120).
+
+Existing LEV CLI modes now run the connected draw iterator for every referenced
+instance model/header, using the authored transform and a static frame or the
+first present animation (halfway frame 1 when available). Results with supplied
+NTSC-U assets:
+
+| Entry | Instance definitions | Triangle visits | GTE-flagged triangles | Zero screen area |
+| --- | ---: | ---: | ---: | ---: |
+| LEV 1, Dingo Canyon | 66 | 5108 | 2464 | 3303 |
+| Hub LEV/PTR 201/202 | 13 | 1150 | 0 | 656 |
+
+These are transformed triangle probes, not a rendered level scene. The model
+preview/animation viewer retains its fitted inspection camera and is unchanged.
+
+`ctr_native_instance_transform` checks cardinal/mixed/wrapped angles, 10000
+compositions against the resident GTE matrix-column operations, authored position
+and unequal scale, near/far, SCREENSPACE, DRAW_HUGE and PIXEL_LOD behavior,
+projection fields and cleared error outputs. A non-identity view confirms scale
+is applied before the view multiplication. CLI fixtures pass a rotated/scaled
+instance through decoded LEV -> matrix -> projected triangle and preserve source
+bytes; retail modes require the new Instance draw OK output.
+Both preset suites pass 19 tests with the disc (18 without it). The full-game
+syntax baseline remains 668 layout assertions plus its existing global initializer
+error; the playable target is still guarded.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized --output-on-failure
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_instance_transform$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-vram assets 1 258,0
+build-macos-arm64-memory-sanitized/ctr_native_asset_validate disc-lev-ptr-vram assets 201 202 258,200
+```
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -719,13 +1081,13 @@ assertion in `game_layouts.h`. Retail layout assertions remain enabled. The
 memory-only preset is a migration/test target, not a switch that permits an
 unsafe 64-bit game build.
 
-Next, separate binary asset layouts (four-byte addresses and offsets) from
+Next, connect the authored instance bridge to scene rendering and runtime camera consumers, and separate binary asset layouts (four-byte addresses and offsets) from
 runtime objects (host pointers). In particular:
 
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Decode VRAM pixels and connect camera/renderer consumers to the new projection, matrix, triangle,
+2. Validate diagnostic preview parity, add material/visibility handling and connect camera/renderer consumers to the new draw, VRAM, projection, matrix, triangle,
    vertex, library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
