@@ -15,8 +15,9 @@ ctest --preset macos-arm64-memory
 ```
 
 The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
-`ctr_native_ptrmap_tests`, `ctr_native_assets_tests` and
-`ctr_native_model_library_tests` and `ctr_native_model_animation_tests` under
+`ctr_native_ptrmap_tests`, `ctr_native_assets_tests`,
+`ctr_native_model_library_tests`, `ctr_native_model_animation_tests` and
+`ctr_native_model_vertices_tests` under
 `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
@@ -230,9 +231,9 @@ conversion; this step does not enable an ARM64 game build.
 `ctr_native_asset_validate` reads extracted files, individual BIGFILE entries,
 or the supplied `assets/ctr-u.bin` directly using the production MODE2/2352
 disc reader. It checks root/table spans, every listed model/header, and LEV
-geometry spans. It also checks animation/frame records as described below;
-vertex decompression, texture/command decoding and rendering/gameplay remain
-unimplemented in this path. Inputs are opened read-only; no asset extraction is
+geometry spans. It also checks animation/frame records and decompresses model
+vertex streams as described below. Texture/draw-command decoding, transforms
+and rendering/gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -361,11 +362,10 @@ Frame access validates its relative vertex offset against the frame stride,
 and exposes only the remaining frame bytes. The offset need not be 28. For
 static frames the length is not serialized: the caller specifies how many
 vertex bytes it needs, and the reader validates only that requested span.
-The validator requests zero static vertex bytes, checking the prefix/offset
-without guessing a vertex count. The supplied LEV contains an offset-34 frame
-which passes this check. Delta metadata is read as checked little-endian words,
-with each requested index separately bounded against the asset; its semantic
-length and the compressed bitstream still need the vertex/command decoder.
+The vertex decoder below derives the required static span from commands and
+delta metadata. The supplied LEV contains a valid offset-34 frame. Delta
+metadata is read as checked little-endian words, with each requested index
+separately bounded against the asset.
 
 `NativeAnimation_SelectFrame` clamps a logical request before selecting the
 stored record(s). Odd interpolated requests return current and next frames;
@@ -404,8 +404,66 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 
 The module is included in the native unity chain and standalone validator.
 Gameplay and render bucket consumers still use their legacy structures;
-vertex decompression, texture/command decoding and renderer migration remain
+texture/draw-command decoding, transforms and renderer migration remain
 required before visual playback or an ARM64 game build.
+
+## Bounded model vertex decoding
+
+`native_model_vertices.c` decodes raw XYZ byte triples and compressed model
+streams without patching assets or casting bytes to host structures. Output
+coordinates retain the original unsigned byte representation, before frame
+origin/scale, packed-coordinate transforms or interpolation. Stream words are
+little-endian; fields are consumed most-significant bit first in X,Z,Y order.
+Eight-bit fields reset an axis; shorter signed fields accumulate the temporal
+base and delta, wrapping through a signed byte. Cross-word reads require both
+complete words. Failed incremental reads clear output and preserve decoder state.
+
+A bounded scan of each header's command list derives the number of fresh
+vertices. It skips the color-cache prefix, color-only commands and cached
+vertex references, and requires the `0xffffffff` terminator within the asset.
+This scan does not reconstruct faces, colors, textures or cached draw vertices.
+Each temporal word is separately checked through the pointer map. For static
+compressed frames, declared widths determine the stream size rounded to whole
+32-bit words; raw frames require three bytes per fresh vertex. Animated streams
+remain bounded by their frame stride.
+
+Bulk decoding uses caller-owned output storage and reports `OUTPUT_TOO_SMALL`
+for insufficient capacity. On any failure the returned count is zero; output
+storage is scratch until success and may contain a decoded prefix. Sources,
+map entries and views must stay valid and unchanged during decoding. The module
+is included in the native unity chain and standalone validator; legacy render
+bucket consumers still require conversion.
+
+The validator decodes all stored animation frames, or the static frame for
+headers without animations, when a command list is present. Real-disc results:
+
+| Entry | Decoded model vertices |
+| --- | ---: |
+| Shared MPK 259 | 105473 |
+| Crash 1P MPK 260 | 85735 |
+| LEV 1 | 7404 |
+| Hub LEV/PTR 201/202 | 2316 |
+
+These total 200928 vertex visits, including repeated model/frame data; they are
+not unique positions or LEV terrain vertices. Successful bounded decompression
+does not establish rendered parity.
+
+`ctr_native_model_vertices` checks golden raw/compressed coordinates, signed
+bases and byte wrap, unaligned input, cross-word truncation, transactional
+state, and 2000 streams against an independent bit-by-bit oracle. Synthetic
+asset tests cover fresh/cache/color command counts, raw and compressed static
+and animated decoding, output capacity, truncated frames/delta tables and a
+missing command terminator. The retail test requires vertex decoding output.
+With the supplied disc present, both presets run 11 tests; without it, 10 run.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+# Focused vertex and real-disc checks:
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_vertices$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
 
 ## Remaining game work
 
@@ -420,8 +478,8 @@ runtime objects (host pointers). In particular:
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Decode model vertex streams and texture/command data; connect the new
-   library, animation and instance-definition readers to resident
+2. Decode texture/draw-command data and apply vertex transforms; connect the
+   new vertex decoder, library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
    offsets; host structures must not overlap retail-sized scratchpad slots.

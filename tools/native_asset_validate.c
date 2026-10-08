@@ -2,6 +2,7 @@
 #include <platform/native_disc_image.h>
 #include <platform/native_model_library.h>
 #include <platform/native_model_animation.h>
+#include <platform/native_model_vertices.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -114,10 +115,59 @@ static int Validator_Index(const char *text, u32 *out)
 	return 1;
 }
 
+static int Validator_Vertices(const struct NativeModelView *model, u32 headerIndex, size_t *total)
+{
+	u32 capacity, decoded;
+	struct NativeModelHeaderView header;
+	struct NativeModelVertex *vertices = NULL;
+	int success = 0;
+	enum NativeAssetResult status = NativeModel_GetVertexCount(model, headerIndex, &capacity);
+	if (status == NATIVE_ASSET_NOT_FOUND) return 1;
+	if (status != NATIVE_ASSET_OK) return 0;
+	size_t records = capacity;
+	if (records > SIZE_MAX / sizeof(*vertices)) return 0;
+	if (records != 0 && (vertices = malloc(records * sizeof(*vertices))) == NULL) return 0;
+	if (NativeModel_GetHeader(model, headerIndex, &header) != NATIVE_ASSET_OK) goto done;
+	if (header.animationCount == 0)
+	{
+		status = NativeModel_DecodeStaticVertices(model, headerIndex, vertices, capacity, &decoded);
+		if (status == NATIVE_ASSET_NOT_FOUND) { success = 1; goto done; }
+		if (status != NATIVE_ASSET_OK) goto done;
+		*total += decoded;
+	}
+	else
+	{
+		for (u32 a = 0; a < header.animationCount; a++)
+		{
+			struct NativeAnimationView animation;
+			status = NativeModel_GetAnimation(model, headerIndex, a, &animation);
+			if (status == NATIVE_ASSET_NOT_FOUND) continue;
+			if (status != NATIVE_ASSET_OK) goto done;
+			for (u32 f = 0; f < animation.storedFrameCount; f++)
+			{
+				status = NativeModel_DecodeAnimationVertices(model, headerIndex, a, f, vertices, capacity, &decoded);
+				if (status != NATIVE_ASSET_OK)
+				{
+					fprintf(stderr, "Vertex decode failed: model %s, header %u, animation %u, frame %u (status %d)\n",
+					    model->name, headerIndex, a, f, status);
+					goto done;
+				}
+				*total += decoded;
+			}
+		}
+	}
+	success = 1;
+done:
+	if (!success) fprintf(stderr, "Invalid model vertex stream: %s, header %u\n", model->name, headerIndex);
+	free(vertices);
+	return success;
+}
+
 static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level)
 {
 	struct NativeModelLibrary library;
 	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;
+	size_t decodedVertices = 0;
 	NativeModelLibrary_Reset(&library);
 	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
 	    NativeModelLibrary_StoreLevel(&library, level);
@@ -139,6 +189,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 		}
 		for (u32 j = 0; j < model.headerCount; j++)
 		{
+			if (!Validator_Vertices(&model, j, &decodedVertices)) return 0;
 			if (NativeModel_GetHeader(&model, j, &header) != NATIVE_ASSET_OK)
 				return 0;
 			if (header.animationCount == 0)
@@ -204,6 +255,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 	    registered, level != NULL ? level->instanceCount : 0);
 	printf("Animation data OK: %zu animations (%zu interpolated), %zu stored frames, %zu static frames\n",
 	    animations, interpolated, frames, staticFrames);
+	printf("Vertex streams OK: %zu decoded vertices\n", decodedVertices);
 	return 1;
 }
 
@@ -298,7 +350,7 @@ int main(int argc, char **argv)
 		    load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
 	}
 	result = 0;
-	printf("Validation covers roots, model/animation/frame headers and spans; vertex decompression, textures and gameplay remain unverified.\n");
+	printf("Validation includes bounded vertex decompression; transforms, textures, rendering and gameplay remain unverified.\n");
 	goto done;
 invalid:
 	if (status != NATIVE_PTRMAP_OK)

@@ -54,6 +54,7 @@
 #include "platform/native_asset_loading.c"
 #include "platform/native_model_library.c"
 #include "platform/native_model_animation.c"
+#include "platform/native_model_vertices.c"
 #include "platform/native_inline_c.c"
 #include "platform/native_libapi.c"
 #include "platform/native_libetc.c"
