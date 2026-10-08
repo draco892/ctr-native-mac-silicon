@@ -65,7 +65,8 @@ sudo apt install libx11-dev libxext-dev libgl1-mesa-dev libasound2-dev libudev-d
 The ARM64 port builds the C17 memory modules, LNG and pointer-map decoders,
 bounded MPK/LEV model, instance, mesh and animation/frame readers, and a runtime
 model library, bounded raw/compressed model vertex decoding and triangle/color/texture
-metadata decoding, local vertex packing/interpolation and Q12 linear matrices,
+metadata decoding, local vertex packing/interpolation, Q12 matrices and GTE-compatible camera
+translation/projection,
 using Xcode
 Command Line Tools, CMake, Ninja and Python 3. The complete game still requires
 32-bit host pointers while its asset layouts are being ported.

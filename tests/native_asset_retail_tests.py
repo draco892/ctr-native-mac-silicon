@@ -27,6 +27,8 @@ for arguments, expected in [
         raise SystemExit('Retail validation did not reach local vertex transforms.')
     if 'Matrix probes OK:' not in result.stdout:
         raise SystemExit('Retail validation did not reach Q12 matrix probes.')
+    if 'Projection probes OK:' not in result.stdout:
+        raise SystemExit('Retail validation did not reach camera projection probes.')
     if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
         raise SystemExit(result.stderr)
     print(result.stdout, end='')

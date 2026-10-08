@@ -139,24 +139,24 @@ internal u32 gte_divide(u16 numerator, u16 denominator)
 
 internal int A1(/*int44*/ s64 a)
 {
-	return BOUNDS(a, (1 << 31) | (1 << 30), (1 << 31) | (1 << 27));
+	return BOUNDS(a, (1u << 31) | (1 << 30), (1u << 31) | (1 << 27));
 }
 internal int A2(/*int44*/ s64 a)
 {
-	return BOUNDS(a, (1 << 31) | (1 << 29), (1 << 31) | (1 << 26));
+	return BOUNDS(a, (1u << 31) | (1 << 29), (1u << 31) | (1 << 26));
 }
 internal int A3(/*int44*/ s64 a)
 {
 	m_mac3 = a;
-	return BOUNDS(a, (1 << 31) | (1 << 28), (1 << 31) | (1 << 25));
+	return BOUNDS(a, (1u << 31) | (1 << 28), (1u << 31) | (1 << 25));
 }
 internal int Lm_B1(int a, int lm)
 {
-	return LIM(a, 0x7fff, -0x8000 * !lm, (1 << 31) | (1 << 24));
+	return LIM(a, 0x7fff, -0x8000 * !lm, (1u << 31) | (1 << 24));
 }
 internal int Lm_B2(int a, int lm)
 {
-	return LIM(a, 0x7fff, -0x8000 * !lm, (1 << 31) | (1 << 23));
+	return LIM(a, 0x7fff, -0x8000 * !lm, (1u << 31) | (1 << 23));
 }
 internal int Lm_B3(int a, int lm)
 {
@@ -205,14 +205,14 @@ internal int Lm_C3(int a)
 }
 internal int Lm_D(s64 a, int sf)
 {
-	return LIM((int)(gte_shift(a, sf)), 0xffff, 0x0000, (1 << 31) | (1 << 18));
+	return LIM((int)(gte_shift(a, sf)), 0xffff, 0x0000, (1u << 31) | (1 << 18));
 }
 
 internal u32 Lm_E(u32 result)
 {
 	if (result == 0xffffffff)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 17);
+		C2_FLAG |= (1u << 31) | (1 << 17);
 		return 0x1ffff;
 	}
 
@@ -230,12 +230,12 @@ internal s64 F(s64 a)
 
 	if (a > 0x7fffffffLL)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 16);
+		C2_FLAG |= (1u << 31) | (1 << 16);
 	}
 
 	if (a < -0x80000000LL)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 15);
+		C2_FLAG |= (1u << 31) | (1 << 15);
 	}
 
 	return a;
@@ -245,12 +245,12 @@ internal int Lm_G1(s64 a)
 {
 	if (a > 0x3ff)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 14);
+		C2_FLAG |= (1u << 31) | (1 << 14);
 		return 0x3ff;
 	}
 	if (a < -0x400)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 14);
+		C2_FLAG |= (1u << 31) | (1 << 14);
 		return -0x400;
 	}
 
@@ -261,13 +261,13 @@ internal int Lm_G2(s64 a)
 {
 	if (a > 0x3ff)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 13);
+		C2_FLAG |= (1u << 31) | (1 << 13);
 		return 0x3ff;
 	}
 
 	if (a < -0x400)
 	{
-		C2_FLAG |= (1 << 31) | (1 << 13);
+		C2_FLAG |= (1u << 31) | (1 << 13);
 		return -0x400;
 	}
 
@@ -301,9 +301,9 @@ internal int Lm_H(s64 value, int sf)
 
 internal int GTE_RotTransPers(int idx, int lm)
 {
-	C2_MAC1 = A1(/*int44*/ (s64)((s64)C2_TRX << 12) + (C2_R11 * VX(idx)) + (C2_R12 * VY(idx)) + (C2_R13 * VZ(idx)));
-	C2_MAC2 = A2(/*int44*/ (s64)((s64)C2_TRY << 12) + (C2_R21 * VX(idx)) + (C2_R22 * VY(idx)) + (C2_R23 * VZ(idx)));
-	C2_MAC3 = A3(/*int44*/ (s64)((s64)C2_TRZ << 12) + (C2_R31 * VX(idx)) + (C2_R32 * VY(idx)) + (C2_R33 * VZ(idx)));
+	C2_MAC1 = A1(/*int44*/ (s64)((s64)C2_TRX * 4096) + (C2_R11 * VX(idx)) + (C2_R12 * VY(idx)) + (C2_R13 * VZ(idx)));
+	C2_MAC2 = A2(/*int44*/ (s64)((s64)C2_TRY * 4096) + (C2_R21 * VX(idx)) + (C2_R22 * VY(idx)) + (C2_R23 * VZ(idx)));
+	C2_MAC3 = A3(/*int44*/ (s64)((s64)C2_TRZ * 4096) + (C2_R31 * VX(idx)) + (C2_R32 * VY(idx)) + (C2_R33 * VZ(idx)));
 	C2_IR1 = Lm_B1(C2_MAC1, lm);
 	C2_IR2 = Lm_B2(C2_MAC2, lm);
 	C2_IR3 = Lm_B3_sf(m_mac3, m_sf, lm);

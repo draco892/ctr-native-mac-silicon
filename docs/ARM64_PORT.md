@@ -18,7 +18,8 @@ The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
 `ctr_native_ptrmap_tests`, `ctr_native_assets_tests`,
 `ctr_native_model_library_tests`, `ctr_native_model_animation_tests` and
 `ctr_native_model_vertices_tests`, `ctr_native_model_commands_tests` and
-`ctr_native_model_transform_tests` and `ctr_native_model_matrix_tests` under
+`ctr_native_model_transform_tests`, `ctr_native_model_matrix_tests` and
+`ctr_native_model_projection_tests` under
 `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
@@ -235,8 +236,9 @@ disc reader. It checks root/table spans, every listed model/header, and LEV
 geometry spans. It also checks animation/frame records and decompresses model
 vertex streams as described below. Triangle/color/texture metadata and local vertex packing/interpolation are
 decoded too. Q12 matrix probes use real model scales with synthetic identity
-rotation/view/instance inputs. Translation, perspective, VRAM pixel sampling
-and rendering/gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
+rotation/view/instance inputs. Projection probes use a declared synthetic
+camera. Actual game camera integration, VRAM pixel sampling and rendering/
+gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -407,7 +409,7 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 
 The module is included in the native unity chain and standalone validator.
 Gameplay and render bucket consumers still use their legacy structures;
-VRAM pixel sampling, translation/projection and renderer migration remain
+VRAM pixel sampling, camera/renderer integration and resident migration remain
 required before visual playback or an ARM64 game build.
 
 ## Bounded model vertex decoding
@@ -458,7 +460,7 @@ state, and 2000 streams against an independent bit-by-bit oracle. Synthetic
 asset tests cover fresh/cache/color command counts, raw and compressed static
 and animated decoding, output capacity, truncated frames/delta tables and a
 missing command terminator. The retail test requires vertex decoding output.
-With the supplied disc present, both presets run 14 tests; without it, 13 run.
+With the supplied disc present, both presets run 15 tests; without it, 14 run.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -583,7 +585,7 @@ and 10000 randomized comparisons with a wide-integer reference calculation.
 Synthetic assets exercise static/direct/interpolated bulk packing, odd/even
 logical endpoints, clamping, missing next scratch, capacity, unaligned buffers,
 immutability, Rebind, compressed stream integration and a malformed next frame.
-Both complete preset suites pass 14 tests with the supplied disc present.
+Both complete preset suites pass 15 tests with the supplied disc present.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -638,7 +640,7 @@ fractional rounding, signed-halfword narrowing, saturation and extreme depth/
 product wrap. It also compares 10000 randomized matrix compositions, packed
 vertex applications and scale builds with independent wide-integer reference
 calculations, checking that inputs remain unchanged. Complete normal and
-ASan/UBSan preset suites pass 14 tests with the supplied disc present.
+ASan/UBSan preset suites pass 15 tests with the supplied disc present.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -646,6 +648,67 @@ cmake --build --preset macos-arm64-memory-sanitized
 ctest --preset macos-arm64-memory-sanitized
 # Focused matrix and real-disc checks:
 ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_matrix$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+## Camera translation and explicit GTE projection state
+
+`native_model_projection.c` prepares camera-relative translations and implements
+the current native GTE RTPS/RTPT path with SF=1, LM=0. Configuration contains a
+Q12 rotation, signed integer translation, Q16 screen offsets, H, DQA and DQB.
+All screen/depth FIFOs are caller-owned; no operation touches global gteRegs.
+Project advances one vertex; Project3 advances three vertices, accumulates flags
+and leaves the last vertex's MAC/IR/depth-cue registers in its result.
+
+ViewTranslation follows GetViewPosition and AdjustViewPositionForMvp: wrapping
+camera subtraction, signed low16 camera-relative inputs, view rotation and IR
+clamping. Screenspace instances bypass camera subtraction/rotation. Raw depth
+is captured before the wrapping near-depth <<2 and optional arithmetic
+DRAW_HUGE >>2 adjustments, allowing callers to drive the scale/LOD path.
+No camera matrix or rotation angles are inferred from LEV instance definitions.
+
+Projection uses the native GTE reciprocal lookup/refinement, including the
+H>=2*SZ divide-overflow path. It returns shifted/truncated MAC coordinates,
+saturated IR and unsigned depth, screen coordinates limited to [-1024,1023],
+MAC0, IR0, ratio and flags. Behind-camera or saturated vertices return OK with
+flags; callers must apply the renderer's visibility rules. Invalid arguments
+clear output and preserve FIFO state. Inputs/config/state/output must not
+overlap. There is no allocation, rasterization, clipping or triangle culling.
+
+The compatibility target is the existing native core, not independent PS1
+hardware verification. In particular, this step preserves its asymmetric
+accumulator thresholds, truncation behavior and flag-summary quirks. Changes
+to those contracts require separate hardware/reference validation. The source
+retains the PsyCross/REDRIVER2 MIT provenance notice. In native_gte_core.c,
+bit-31 flag shifts now use unsigned operands and RTPS/RTPT translation shifts
+use wide multiplication; this removes UB exercised by the sanitizer reference
+without changing these routines' intended values. Other GTE opcodes remain
+outside this validation scope.
+
+The asset validator projects the same 451358 near/far matrix vertex visits
+with a synthetic camera: identity view, camera-relative position (0,0,4096),
+H=256, offsets (160,120), DQA/DQB=0, and actual model scale. The FIFO carries
+probe state across vertices. These are numerical asset probes, not gameplay
+camera state, visible-face counts or visual parity. Legacy resident camera and
+render-bucket consumers still need integration; full ARM64 compilation remains
+guarded.
+
+`ctr_native_model_projection` compares 10000 random RTPS/RTPT cases directly
+with the production native GTE core, checking MAC/IR, flags and all screen/depth
+FIFO entries. Another 10000 camera-translation cases compare view rotation with
+the core and independently check adjustment/wrap. Golden tests cover screen
+coordinates, three-vertex FIFO order, divide threshold/zero/negative depth,
+screen saturation, screenspace bypass, near/far and DRAW_HUGE, full signed depth
+extremes and transactional argument failures. The new module leaves global GTE
+state unchanged. Complete normal and ASan/UBSan suites pass 15 tests with the
+supplied disc present.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+# Focused projection and real-disc checks:
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_projection$' -V
 ctest --preset macos-arm64-memory-sanitized -L retail -V
 ```
 
@@ -662,7 +725,7 @@ runtime objects (host pointers). In particular:
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Port camera translation/perspective and decode VRAM pixels; connect the new matrix, triangle,
+2. Decode VRAM pixels and connect camera/renderer consumers to the new projection, matrix, triangle,
    vertex, library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
