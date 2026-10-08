@@ -4,6 +4,7 @@
 #include <platform/native_model_animation.h>
 #include <platform/native_model_vertices.h>
 #include <platform/native_model_transform.h>
+#include <platform/native_model_matrix.h>
 #include <platform/native_model_commands.h>
 
 #include <errno.h>
@@ -117,12 +118,15 @@ static int Validator_Index(const char *text, u32 *out)
 	return 1;
 }
 
-static int Validator_Transforms(const struct NativeModelView *model, u32 headerIndex, size_t *total)
+static int Validator_Transforms(const struct NativeModelView *model, u32 headerIndex, size_t *total, size_t *matrixTotal)
 {
 	u32 capacity, decoded;
 	struct NativeModelHeaderView header;
 	struct NativeModelVertex *current = NULL, *next = NULL;
 	struct NativePackedModelVertex *packed = NULL;
+	struct NativeModelMatrix probes[2];
+	const struct NativeModelMatrix identity = {.m = {{4096,0,0},{0,4096,0},{0,0,4096}}};
+	const s16 instanceScale[3] = {4096,4096,4096};
 	int success = 0;
 	enum NativeAssetResult status = NativeModel_GetVertexCount(model, headerIndex, &capacity);
 	if (status == NATIVE_ASSET_NOT_FOUND) return 1;
@@ -136,6 +140,17 @@ static int Validator_Transforms(const struct NativeModelView *model, u32 headerI
 		if (current == NULL || next == NULL || packed == NULL) goto done;
 	}
 	if (NativeModel_GetHeader(model, headerIndex, &header) != NATIVE_ASSET_OK) goto done;
+	// Synthetic identity rotation/view/instance scale, actual wire model scale.
+	// These exercise near/far Q12 paths without inventing a game camera state.
+	for (unsigned probe = 0; probe < 2; probe++)
+	{
+		struct NativeModelMatrix modelMatrix;
+		status = NativeModelMatrix_Build(&identity, header.scale, instanceScale,
+		    probe ? 4096 : 0, 0, &modelMatrix);
+		if (status != NATIVE_ASSET_OK) goto done;
+		status = NativeModelMatrix_Compose(&identity, &modelMatrix, &probes[probe]);
+		if (status != NATIVE_ASSET_OK) goto done;
+	}
 	if (header.animationCount == 0)
 	{
 		status = NativeModel_PackStaticVertices(model, headerIndex, current, packed, capacity, &decoded);
@@ -145,6 +160,12 @@ static int Validator_Transforms(const struct NativeModelView *model, u32 headerI
 		{
 			s16 position[3];
 			if (NativeModel_UnpackPosition(&packed[i], position) != NATIVE_ASSET_OK) goto done;
+			for (unsigned probe = 0; probe < 2; probe++)
+			{
+				struct NativeMatrixVector transformed;
+				if (NativeModelMatrix_Apply(&probes[probe], &packed[i], &transformed) != NATIVE_ASSET_OK) goto done;
+				(*matrixTotal)++;
+			}
 		}
 		*total += decoded;
 	}
@@ -162,6 +183,12 @@ static int Validator_Transforms(const struct NativeModelView *model, u32 headerI
 			{
 				s16 position[3];
 				if (NativeModel_UnpackPosition(&packed[i], position) != NATIVE_ASSET_OK) goto done;
+				for (unsigned probe = 0; probe < 2; probe++)
+				{
+					struct NativeMatrixVector transformed;
+					if (NativeModelMatrix_Apply(&probes[probe], &packed[i], &transformed) != NATIVE_ASSET_OK) goto done;
+					(*matrixTotal)++;
+				}
 			}
 			*total += decoded;
 		}
@@ -225,7 +252,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 {
 	struct NativeModelLibrary library;
 	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;
-	size_t decodedVertices = 0, transformedVertices = 0, triangles = 0, textured = 0;
+	size_t decodedVertices = 0, transformedVertices = 0, matrixVertices = 0, triangles = 0, textured = 0;
 	NativeModelLibrary_Reset(&library);
 	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
 	    NativeModelLibrary_StoreLevel(&library, level);
@@ -248,7 +275,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 		for (u32 j = 0; j < model.headerCount; j++)
 		{
 			if (!Validator_Vertices(&model, j, &decodedVertices)) return 0;
-			if (!Validator_Transforms(&model, j, &transformedVertices)) return 0;
+			if (!Validator_Transforms(&model, j, &transformedVertices, &matrixVertices)) return 0;
 			struct NativeModelCommands commands;
 			struct NativeModelTriangle triangle;
 			enum NativeAssetResult commandStatus = NativeModelCommands_Open(&model, j, &commands);
@@ -328,6 +355,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 	    registered, level != NULL ? level->instanceCount : 0);
 	printf("Animation data OK: %zu animations (%zu interpolated), %zu stored frames, %zu static frames\n",
 	    animations, interpolated, frames, staticFrames);
+	printf("Matrix probes OK: %zu linear vertex applications (synthetic identity camera/instance, actual model scale)\n", matrixVertices);
 	printf("Local transforms OK: %zu packed vertices across logical frames\n", transformedVertices);
 	printf("Draw commands OK: %zu triangles (%zu textured)\n", triangles, textured);
 	printf("Vertex streams OK: %zu decoded vertices\n", decodedVertices);
@@ -425,7 +453,7 @@ int main(int argc, char **argv)
 		    load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
 	}
 	result = 0;
-	printf("Validation includes local vertex packing/interpolation, triangles, source colors and texture metadata; matrices, VRAM pixels, rendering and gameplay remain unverified.\n");
+	printf("Validation includes local vertex packing/interpolation, triangles, source colors and texture metadata; linear Q12 matrix probes included; translation, perspective, VRAM pixels, rendering and gameplay remain unverified.\n");
 	goto done;
 invalid:
 	if (status != NATIVE_PTRMAP_OK)

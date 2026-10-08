@@ -18,7 +18,7 @@ The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
 `ctr_native_ptrmap_tests`, `ctr_native_assets_tests`,
 `ctr_native_model_library_tests`, `ctr_native_model_animation_tests` and
 `ctr_native_model_vertices_tests`, `ctr_native_model_commands_tests` and
-`ctr_native_model_transform_tests` under
+`ctr_native_model_transform_tests` and `ctr_native_model_matrix_tests` under
 `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
@@ -234,8 +234,9 @@ or the supplied `assets/ctr-u.bin` directly using the production MODE2/2352
 disc reader. It checks root/table spans, every listed model/header, and LEV
 geometry spans. It also checks animation/frame records and decompresses model
 vertex streams as described below. Triangle/color/texture metadata and local vertex packing/interpolation are
-decoded too; matrices, VRAM pixel sampling and rendering/gameplay remain
-unverified in this path. Inputs are opened read-only; no asset extraction is
+decoded too. Q12 matrix probes use real model scales with synthetic identity
+rotation/view/instance inputs. Translation, perspective, VRAM pixel sampling
+and rendering/gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -406,7 +407,7 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 
 The module is included in the native unity chain and standalone validator.
 Gameplay and render bucket consumers still use their legacy structures;
-VRAM pixel sampling, matrix transforms and renderer migration remain
+VRAM pixel sampling, translation/projection and renderer migration remain
 required before visual playback or an ARM64 game build.
 
 ## Bounded model vertex decoding
@@ -457,7 +458,7 @@ state, and 2000 streams against an independent bit-by-bit oracle. Synthetic
 asset tests cover fresh/cache/color command counts, raw and compressed static
 and animated decoding, output capacity, truncated frames/delta tables and a
 missing command terminator. The retail test requires vertex decoding output.
-With the supplied disc present, both presets run 13 tests; without it, 12 run.
+With the supplied disc present, both presets run 14 tests; without it, 13 run.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -582,7 +583,7 @@ and 10000 randomized comparisons with a wide-integer reference calculation.
 Synthetic assets exercise static/direct/interpolated bulk packing, odd/even
 logical endpoints, clamping, missing next scratch, capacity, unaligned buffers,
 immutability, Rebind, compressed stream integration and a malformed next frame.
-Both complete preset suites pass 13 tests with the supplied disc present.
+Both complete preset suites pass 14 tests with the supplied disc present.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -590,6 +591,61 @@ cmake --build --preset macos-arm64-memory-sanitized
 ctest --preset macos-arm64-memory-sanitized
 # Focused local-transform and real-disc checks:
 ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_transform$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
+## Q12 linear model matrices
+
+`native_model_matrix.c` stores runtime 3x3 matrices as signed halfwords,
+independent of resident MATRIX layouts. Q12 one is 4096. Compose multiplies
+left and right matrices in that order, floors each signed dot product after
+12 fractional bits and clamps to signed IR range. Build follows the normal
+RenderBucket_BuildM3x3 two-stage path: first model/instance scale, then rotation
+multiplied by the resulting saturated diagonal matrix. View rotation is supplied
+separately through Compose; angles and trigonometric tables are not generated.
+
+The model-scale shift changes from zero to two at view depth 4096, using the
+signed result of the wrapping MIPS subtraction. Model coefficients are first
+unsigned halfwords, shifted logically, then interpreted as signed GTE matrix
+coefficients. PIXEL_LOD computes floor(depth/2)+4096 with 32-bit wrap, multiplies
+instance scales retaining only the low 32 bits, floors by 4096 and narrows to
+signed halfwords. These rules preserve negative inputs and extreme depth wrap;
+ordinary floating-point scaling or signed overflow would not match the path.
+
+Apply takes the signed input halves of a prepared packed vertex. It returns
+the shifted linear dot products and saturated IR coordinates, with a simple
+three-bit saturation diagnostic. Wide intermediates avoid overflow; negative
+rounding uses defined division/remainder instead of implementation-dependent
+signed right shifts. This diagnostic is not GTE FLAG and this module does not
+implement translation, perspective division, screen/depth FIFOs, clipping,
+lighting, split/reflection paths or the hardware's projection accumulator rules.
+
+Inputs are caller-owned and outputs must not overlap inputs. Outputs clear on
+argument errors. Operations allocate nothing, access no globals and retain no
+pointers. The native unity chain and standalone validator include the module;
+legacy game rendering still requires conversion and the full ARM64 guard stays.
+
+For each prepared retail vertex, the validator applies two matrix probes:
+actual header scale with identity rotation/view/instance scale at synthetic
+depths 0 and 4096. This tests scale-data access and linear computation, not a
+real gameplay camera or resident instance transform. Counts are twice the
+local-packing visits: shared MPK 212302, Crash MPK 218566, LEV 14808 and hub
+5682, totaling 451358 linear applications.
+
+`ctr_native_model_matrix` checks identity and quarter-turn matrices, unequal
+axis scales, composition order, the near/far threshold, PIXEL_LOD, negative
+fractional rounding, signed-halfword narrowing, saturation and extreme depth/
+product wrap. It also compares 10000 randomized matrix compositions, packed
+vertex applications and scale builds with independent wide-integer reference
+calculations, checking that inputs remain unchanged. Complete normal and
+ASan/UBSan preset suites pass 14 tests with the supplied disc present.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+# Focused matrix and real-disc checks:
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_matrix$' -V
 ctest --preset macos-arm64-memory-sanitized -L retail -V
 ```
 
@@ -606,7 +662,7 @@ runtime objects (host pointers). In particular:
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Apply model/instance/view matrices and decode VRAM pixels; connect the new triangle,
+2. Port camera translation/perspective and decode VRAM pixels; connect the new matrix, triangle,
    vertex, library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
