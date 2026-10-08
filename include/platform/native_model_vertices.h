@@ -3,8 +3,8 @@
 
 #include <platform/native_model_animation.h>
 
-// Raw unsigned byte coordinates, matching RenderBucketVertex before origin,
-// scale, packed-coordinate transforms or interpolation are applied.
+// Encoded coordinate bytes before origin, scale, packing or interpolation.
+// Promote compressed bytes as signed and raw bytes as unsigned when packing.
 struct NativeModelVertex { u8 x, y, z; };
 
 struct NativeVertexDecoder

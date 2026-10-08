@@ -3,6 +3,7 @@
 #include <platform/native_model_library.h>
 #include <platform/native_model_animation.h>
 #include <platform/native_model_vertices.h>
+#include <platform/native_model_transform.h>
 #include <platform/native_model_commands.h>
 
 #include <errno.h>
@@ -116,6 +117,62 @@ static int Validator_Index(const char *text, u32 *out)
 	return 1;
 }
 
+static int Validator_Transforms(const struct NativeModelView *model, u32 headerIndex, size_t *total)
+{
+	u32 capacity, decoded;
+	struct NativeModelHeaderView header;
+	struct NativeModelVertex *current = NULL, *next = NULL;
+	struct NativePackedModelVertex *packed = NULL;
+	int success = 0;
+	enum NativeAssetResult status = NativeModel_GetVertexCount(model, headerIndex, &capacity);
+	if (status == NATIVE_ASSET_NOT_FOUND) return 1;
+	if (status != NATIVE_ASSET_OK) return 0;
+	size_t records = capacity;
+	if (records > SIZE_MAX / sizeof(*packed) || records > SIZE_MAX / sizeof(*current)) return 0;
+	if (records != 0)
+	{
+		current = malloc(records * sizeof(*current)); next = malloc(records * sizeof(*next));
+		packed = malloc(records * sizeof(*packed));
+		if (current == NULL || next == NULL || packed == NULL) goto done;
+	}
+	if (NativeModel_GetHeader(model, headerIndex, &header) != NATIVE_ASSET_OK) goto done;
+	if (header.animationCount == 0)
+	{
+		status = NativeModel_PackStaticVertices(model, headerIndex, current, packed, capacity, &decoded);
+		if (status == NATIVE_ASSET_NOT_FOUND) { success = 1; goto done; }
+		if (status != NATIVE_ASSET_OK || decoded != capacity) goto done;
+		for (u32 i = 0; i < decoded; i++)
+		{
+			s16 position[3];
+			if (NativeModel_UnpackPosition(&packed[i], position) != NATIVE_ASSET_OK) goto done;
+		}
+		*total += decoded;
+	}
+	else for (u32 a = 0; a < header.animationCount; a++)
+	{
+		struct NativeAnimationView animation;
+		status = NativeModel_GetAnimation(model, headerIndex, a, &animation);
+		if (status == NATIVE_ASSET_NOT_FOUND) continue;
+		if (status != NATIVE_ASSET_OK) goto done;
+		for (u32 f = 0; f < animation.logicalFrameCount; f++)
+		{
+			status = NativeModel_PackAnimationVertices(model, headerIndex, a, f, current, next, packed, capacity, &decoded);
+			if (status != NATIVE_ASSET_OK || decoded != capacity) goto done;
+			for (u32 i = 0; i < decoded; i++)
+			{
+				s16 position[3];
+				if (NativeModel_UnpackPosition(&packed[i], position) != NATIVE_ASSET_OK) goto done;
+			}
+			*total += decoded;
+		}
+	}
+	success = 1;
+done:
+	if (!success) fprintf(stderr, "Invalid model local transform: %s, header %u\n", model->name, headerIndex);
+	free(current); free(next); free(packed);
+	return success;
+}
+
 static int Validator_Vertices(const struct NativeModelView *model, u32 headerIndex, size_t *total)
 {
 	u32 capacity, decoded;
@@ -168,7 +225,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 {
 	struct NativeModelLibrary library;
 	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;
-	size_t decodedVertices = 0, triangles = 0, textured = 0;
+	size_t decodedVertices = 0, transformedVertices = 0, triangles = 0, textured = 0;
 	NativeModelLibrary_Reset(&library);
 	enum NativeAssetResult stored = mpk != NULL ? NativeModelLibrary_StoreMpk(&library, mpk) :
 	    NativeModelLibrary_StoreLevel(&library, level);
@@ -191,6 +248,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 		for (u32 j = 0; j < model.headerCount; j++)
 		{
 			if (!Validator_Vertices(&model, j, &decodedVertices)) return 0;
+			if (!Validator_Transforms(&model, j, &transformedVertices)) return 0;
 			struct NativeModelCommands commands;
 			struct NativeModelTriangle triangle;
 			enum NativeAssetResult commandStatus = NativeModelCommands_Open(&model, j, &commands);
@@ -270,6 +328,7 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 	    registered, level != NULL ? level->instanceCount : 0);
 	printf("Animation data OK: %zu animations (%zu interpolated), %zu stored frames, %zu static frames\n",
 	    animations, interpolated, frames, staticFrames);
+	printf("Local transforms OK: %zu packed vertices across logical frames\n", transformedVertices);
 	printf("Draw commands OK: %zu triangles (%zu textured)\n", triangles, textured);
 	printf("Vertex streams OK: %zu decoded vertices\n", decodedVertices);
 	return 1;
@@ -366,7 +425,7 @@ int main(int argc, char **argv)
 		    load.payloadBytes, load.pointers.count, sizeof(void *) * 8);
 	}
 	result = 0;
-	printf("Validation includes vertices, triangles, source colors and texture metadata; transforms, VRAM pixels, rendering and gameplay remain unverified.\n");
+	printf("Validation includes local vertex packing/interpolation, triangles, source colors and texture metadata; matrices, VRAM pixels, rendering and gameplay remain unverified.\n");
 	goto done;
 invalid:
 	if (status != NATIVE_PTRMAP_OK)

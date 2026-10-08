@@ -17,7 +17,8 @@ ctest --preset macos-arm64-memory
 The executables are `ctr_native_memory_tests`, `ctr_native_lng_tests`,
 `ctr_native_ptrmap_tests`, `ctr_native_assets_tests`,
 `ctr_native_model_library_tests`, `ctr_native_model_animation_tests` and
-`ctr_native_model_vertices_tests` and `ctr_native_model_commands_tests` under
+`ctr_native_model_vertices_tests`, `ctr_native_model_commands_tests` and
+`ctr_native_model_transform_tests` under
 `build-macos-arm64-memory/`. SDL and retail
 assets are not needed for these tests.
 
@@ -232,8 +233,9 @@ conversion; this step does not enable an ARM64 game build.
 or the supplied `assets/ctr-u.bin` directly using the production MODE2/2352
 disc reader. It checks root/table spans, every listed model/header, and LEV
 geometry spans. It also checks animation/frame records and decompresses model
-vertex streams as described below. Triangle/color/texture metadata is decoded too; transforms, VRAM pixel
-sampling and rendering/gameplay remain unverified in this path. Inputs are opened read-only; no asset extraction is
+vertex streams as described below. Triangle/color/texture metadata and local vertex packing/interpolation are
+decoded too; matrices, VRAM pixel sampling and rendering/gameplay remain
+unverified in this path. Inputs are opened read-only; no asset extraction is
 needed and CD padding is excluded from the decoder's payload size.
 
 Build with either preset above. From the project root, validate real NTSC-U
@@ -404,15 +406,16 @@ ctest --preset macos-arm64-memory-sanitized -L retail -V
 
 The module is included in the native unity chain and standalone validator.
 Gameplay and render bucket consumers still use their legacy structures;
-VRAM pixel sampling, transforms and renderer migration remain
+VRAM pixel sampling, matrix transforms and renderer migration remain
 required before visual playback or an ARM64 game build.
 
 ## Bounded model vertex decoding
 
 `native_model_vertices.c` decodes raw XYZ byte triples and compressed model
 streams without patching assets or casting bytes to host structures. Output
-coordinates retain the original unsigned byte representation, before frame
-origin/scale, packed-coordinate transforms or interpolation. Stream words are
+coordinates retain the encoded byte representation, before frame origin/scale,
+packed-coordinate transforms or interpolation. Packing promotes compressed
+bytes as signed and raw bytes as unsigned; these are distinct contracts. Stream words are
 little-endian; fields are consumed most-significant bit first in X,Z,Y order.
 Eight-bit fields reset an axis; shorter signed fields accumulate the temporal
 base and delta, wrapping through a signed byte. Cross-word reads require both
@@ -454,7 +457,7 @@ state, and 2000 streams against an independent bit-by-bit oracle. Synthetic
 asset tests cover fresh/cache/color command counts, raw and compressed static
 and animated decoding, output capacity, truncated frames/delta tables and a
 missing command terminator. The retail test requires vertex decoding output.
-With the supplied disc present, both presets run 12 tests; without it, 11 run.
+With the supplied disc present, both presets run 13 tests; without it, 12 run.
 
 ```sh
 cmake --preset macos-arm64-memory-sanitized
@@ -526,6 +529,70 @@ ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_commands$' -V
 ctest --preset macos-arm64-memory-sanitized -L retail -V
 ```
 
+## Local vertex packing and halfway interpolation
+
+`native_model_transform.c` prepares the coordinate words used by the normal
+render bucket before GTE matrix/projection operations. It follows the existing
+`PackModelVertexXY`, `PackInterpolatedModelVertexXY`, `ModelVertexZ` and
+`InterpolatedModelVertexZ` functions. Input uses the byte representation from
+the vertex decoder: compressed axes are sign-extended; raw axes are unsigned.
+This distinction matters both for negative coordinates and packed OR carries.
+
+For direct frames the first origin component is masked with `0x7fff`. The
+X/Z vertex pair is combined with the first two origin components in a single
+32-bit packed addition, shifted left by two and masked with `0xfff8ffff`.
+The vertical Y byte plus the third origin component is shifted by two.
+Halfway frames sum both packed vertices and the two frame origins, shifting
+by one instead. This intentionally preserves cross-half carries, wrap and
+masking; independent floating-point XYZ averaging would change the result.
+Unsigned operations avoid shifting negative signed integers. Position access
+returns the signed low/high halves consumed by the GTE (X/Z/Y axis order).
+
+Bulk static and animation APIs use caller-owned current/next scratch arrays
+and packed output, with no allocations. Arrays must not overlap. Logical
+animation requests use SelectFrame clamping; only odd half-rate requests
+decode and combine the next stored frame. Direct/even requests need no next
+scratch. Each source stream/delta table keeps the previous reader's bounds
+checks. Failed calls return count zero; scratch/output are unpublished until
+success. Source buffers and maps remain unchanged and views must be reopened
+after Rebind or reload.
+
+This is local packing, not model/instance scale, rotation, view matrices,
+projection, special split/reflection paths or timing advancement. The new
+module is included in the native unity chain and standalone validator;
+legacy game render consumers remain unchanged. Full ARM64 compilation is
+still guarded, with the same pre-existing layout and global-initializer errors.
+
+The validator now prepares static models and every logical animation frame,
+including halfway frames, separately from its stored-frame decode pass:
+
+| Entry | Packed vertex visits |
+| --- | ---: |
+| Shared MPK 259 | 106151 |
+| Crash 1P MPK 260 | 109283 |
+| LEV 1 | 7404 |
+| Hub LEV/PTR 201/202 | 2841 |
+
+These total 225679 vertex visits, not unique geometry. Successful calculation
+and bounds checks establish no visual parity until matrix/render consumers run.
+
+`ctr_native_model_transform` checks golden packed words and signed position
+halves, negative origins, signed compressed versus unsigned raw coordinates,
+and 10000 randomized comparisons with a wide-integer reference calculation.
+Synthetic assets exercise static/direct/interpolated bulk packing, odd/even
+logical endpoints, clamping, missing next scratch, capacity, unaligned buffers,
+immutability, Rebind, compressed stream integration and a malformed next frame.
+Both complete preset suites pass 13 tests with the supplied disc present.
+
+```sh
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+# Focused local-transform and real-disc checks:
+ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_model_transform$' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+```
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -539,7 +606,7 @@ runtime objects (host pointers). In particular:
 1. Replace persistent MPK/LEV callback publications and direct host-pointer
    consumers with decoded wire views and explicit ownership. The native DRAM
    callback now retains actual payload lengths and validates embedded maps.
-2. Apply vertex transforms and decode VRAM pixels; connect the new triangle,
+2. Apply model/instance/view matrices and decode VRAM pixels; connect the new triangle,
    vertex, library, animation and instance-definition readers to resident
    gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
