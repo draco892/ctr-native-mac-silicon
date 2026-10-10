@@ -6,6 +6,71 @@ struct ValidatorSceneItem {
     struct NativeInstanceDefView instance;
     u32 header,animation,vertices;
 };
+struct ValidatorRuntimeRaster { const struct NativeRasterView *target; const struct NativeVramView *vram; size_t writes; };
+static enum NativeAssetResult Validator_RuntimeSink(void *user,const struct NativeDrawTriangle *triangle)
+{
+    struct ValidatorRuntimeRaster *context=user; struct NativeRasterStats stats;
+    enum NativeAssetResult status=NativeRaster_Draw(context->target,triangle,context->vram,&stats);
+    if(status==NATIVE_ASSET_OK) context->writes+=stats.written;
+    return status;
+}
+static int Validator_RuntimeSequence(const struct NativeLevelView *level,const struct NativeMeshView *mesh,
+    const u32 *terrainQuads,size_t terrainCount,const struct ValidatorSceneItem *items,size_t selected,
+    const struct NativeInstanceCamera *initial,const struct NativeModelDrawWorkspace *modelWork,
+    const struct NativeRasterView *target,const struct NativeVramView *vram,u32 ticks,const char *prefix)
+{
+    struct NativeVisibilityWorkspace visibility={.stackCapacity=(size_t)mesh->bspCount*2+1,.stateCapacity=mesh->bspCount,.quadCapacity=mesh->quadCount};
+    if(visibility.stackCapacity>SIZE_MAX/sizeof(*visibility.stack)) return 0;
+    size_t faceBytes=((size_t)mesh->quadCount+31)/32*4;
+    visibility.stack=malloc(visibility.stackCapacity*sizeof(*visibility.stack));
+    visibility.states=calloc(mesh->bspCount ? mesh->bspCount : 1,1); visibility.quads=calloc(mesh->quadCount ? mesh->quadCount : 1,1);
+    u8 *faces=calloc(faceBytes ? faceBytes : 4,1); char *path=malloc(strlen(prefix)+32); int success=0;
+    if(visibility.stack==NULL || visibility.states==NULL || visibility.quads==NULL || faces==NULL || path==NULL) goto done;
+    for(size_t q=0;q<terrainCount;q++) {
+        struct NativeMeshQuad quad;
+        if(NativeMesh_GetQuad(mesh,terrainQuads[q],&quad)!=NATIVE_ASSET_OK || quad.blockID/32*4>=faceBytes) goto done;
+        u8 *word=faces+quad.blockID/32*4;
+        CTR_WriteU32LE(word,CTR_ReadU32LE(word)|(0x80000000u>>(quad.blockID%32)));
+    }
+    // No existing frame may be replaced, including a later frame in the run.
+    for(u32 tick=0;tick<ticks;tick++) {
+        snprintf(path,strlen(prefix)+32,"%s-%06u.ppm",prefix,tick);
+        FILE *existing=fopen(path,"rb"); if(existing!=NULL) { fclose(existing); goto done; }
+    }
+    for(u32 tick=0;tick<ticks;tick++) {
+        struct NativeSceneCamera camera={.transform=*initial,.width=512,.height=512,.nearDepth=128,.farDepth=65535};
+        camera.transform.position[0]+=(s32)(tick*32); // Explicit inspection pan, not a gameplay tick rate.
+        const u8 background[3]={24,28,36}; NativeRaster_Clear(target,background);
+        struct ValidatorRuntimeRaster raster={target,vram,0}; struct NativeSceneRenderStats terrainStats,modelStats;
+        enum NativeAssetResult status=NativeSceneRender_Terrain(level,mesh,&camera,NULL,0,faces,faceBytes,tick,UINT32_MAX,&visibility,Validator_RuntimeSink,&raster,&terrainStats);
+        if(status!=NATIVE_ASSET_OK) { fprintf(stderr,"Runtime terrain error %d at tick %u\n",status,tick); goto done; }
+        size_t modelTriangles=0;
+        for(size_t i=0;i<selected;i++) {
+            struct NativeRuntimeInstance instance;
+            status=NativeRuntimeInstance_Init(&items[i].instance,&instance); if(status!=NATIVE_ASSET_OK) goto done;
+            instance.header=items[i].header; instance.animation=items[i].animation;
+            if(instance.animation!=UINT32_MAX) {
+                struct NativeAnimationView animation;
+                status=NativeModel_GetAnimation(&instance.model,instance.header,instance.animation,&animation); if(status!=NATIVE_ASSET_OK) goto done;
+                instance.frame=tick%animation.logicalFrameCount;
+            }
+            status=NativeSceneRender_Model(&instance,&camera,modelWork,vram,Validator_RuntimeSink,&raster,&modelStats);
+            if(status!=NATIVE_ASSET_OK) goto done;
+            modelTriangles+=modelStats.triangles;
+        }
+        snprintf(path,strlen(prefix)+32,"%s-%06u.ppm",prefix,tick);
+        FILE *file=fopen(path,"wbx"); if(file==NULL) goto done;
+        int written=fprintf(file,"P6\n512 512\n255\n")>0 && fwrite(target->rgb,1,512*512*3,file)==512*512*3;
+        int closed=fclose(file)==0; if(!written || !closed) goto done;
+        printf("Runtime frame OK: tick %u, camera %d %d %d, %u visible BSP nodes, %u eligible quads, %zu terrain / %zu model triangles, %zu fragment writes -> %s\n",
+            tick,camera.transform.position[0],camera.transform.position[1],camera.transform.position[2],terrainStats.visibleNodes,terrainStats.visibleQuads,terrainStats.triangles,modelTriangles,raster.writes,path);
+    }
+    printf("Runtime sequence OK: %u ticks, authored model frames, texture animation, BSP/frustum and face masks; synthetic pan, opaque affine diagnostic rendering\n",ticks);
+    success=1;
+done:
+    if(!success) fprintf(stderr,"Runtime sequence failed; existing frames are never overwritten.\n");
+    free(visibility.stack); free(visibility.states); free(visibility.quads); free(faces); free(path); return success;
+}
 static void Validator_SceneBounds(const struct NativeModelMatrix *view,const s32 position[3],s32 minimum[3],s32 maximum[3])
 {
     for(unsigned row=0;row<3;row++) {
@@ -39,7 +104,7 @@ static enum NativeAssetResult Validator_TerrainTriangle(const struct NativeMeshT
     *out=triangle; return NATIVE_ASSET_OK;
 }
 static int Validator_Scene(const struct NativeLevelView *level,const struct NativeVramView *vram,
-    u32 first,u32 requested,int nearby,int terrain,const char *path,const char *viewName)
+    u32 first,u32 requested,int nearby,int terrain,u32 ticks,const char *path,const char *viewName)
 {
     struct ValidatorSceneItem *items=NULL;
     struct NativeModelDrawWorkspace workspace={0}; struct NativeRasterView target;
@@ -69,7 +134,7 @@ static int Validator_Scene(const struct NativeLevelView *level,const struct Nati
             for(unsigned k=0;k<3;k++) { s64 d=anchor.position[k]<low[k] ? low[k]-anchor.position[k] : anchor.position[k]>high[k] ? anchor.position[k]-high[k] : 0; distance+=d*d; }
             if(distance<=2048LL*2048) terrainQuads[terrainCount++]=q;
         }
-        printf("Terrain selection: %zu/%u quad blocks within 2048 units of instance %u, coarse vertex colors\n",terrainCount,mesh.quadCount,first);
+        printf("Terrain selection: %zu/%u quad blocks within 2048 units of instance %u, %s\n",terrainCount,mesh.quadCount,first,terrain>=2 ? "face selectors and near textures" : "coarse vertex colors");
     }
     u32 indices[256];
     for(u32 i=0;i<requested;i++) indices[i]=first+i;
@@ -151,9 +216,15 @@ static int Validator_Scene(const struct NativeLevelView *level,const struct Nati
             Validator_SceneBounds(&camera.view,position,minimum,maximum);
         }
     }
-    for(size_t q=0;q<terrainCount;q++) for(u32 t=0;t<2;t++) {
+    for(size_t q=0;q<terrainCount;q++) for(u32 t=0;t<(terrain>=2 ? 8u : 2u);t++) {
         struct NativeMeshTriangle triangle;
-        status=NativeMesh_GetLowTriangle(&mesh,terrainQuads[q],t,&triangle); if(status!=NATIVE_ASSET_OK) goto done;
+        if(terrain>=2) {
+            struct NativeTerrainTriangle material;
+            status=NativeTerrain_GetTriangle(level,&mesh,terrainQuads[q],t/2,t%2,2,0,&material);
+            if(status==NATIVE_ASSET_NOT_FOUND) continue;
+            triangle=material.geometry;
+        } else status=NativeMesh_GetLowTriangle(&mesh,terrainQuads[q],t,&triangle);
+        if(status!=NATIVE_ASSET_OK) goto done;
         for(unsigned v=0;v<3;v++) {
             s32 position[3]; for(unsigned k=0;k<3;k++) position[k]=triangle.vertices[v].position[k];
             Validator_SceneBounds(&camera.view,position,minimum,maximum);
@@ -170,12 +241,34 @@ static int Validator_Scene(const struct NativeLevelView *level,const struct Nati
     }
     if(NativeRaster_Bind(rgb,512*512*3,depth,512*512,512,512,&target)!=NATIVE_ASSET_OK) goto done;
     const u8 background[3]={24,28,36}; NativeRaster_Clear(&target,background);
+    if(terrain==3) {
+        success=Validator_RuntimeSequence(level,&mesh,terrainQuads,terrainCount,items,selected,&camera,&workspace,&target,vram,ticks,path);
+        goto done;
+    }
     size_t triangles=0,writes=0,skipped=0;
-    size_t terrainTriangles=0,terrainWrites=0;
-    for(size_t q=0;q<terrainCount;q++) for(u32 t=0;t<2;t++) {
+    size_t terrainTriangles=0,terrainWrites=0,terrainCulled=0;
+    for(size_t q=0;q<terrainCount;q++) for(u32 t=0;t<(terrain==2 ? 8u : 2u);t++) {
         struct NativeMeshTriangle source; struct NativeDrawTriangle triangle; struct NativeRasterStats stats;
-        status=NativeMesh_GetLowTriangle(&mesh,terrainQuads[q],t,&source); if(status!=NATIVE_ASSET_OK) goto done;
+        struct NativeTerrainTriangle material={0};
+        if(terrain==2) {
+            status=NativeTerrain_GetTriangle(level,&mesh,terrainQuads[q],t/2,t%2,2,0,&material);
+            if(status==NATIVE_ASSET_NOT_FOUND) continue;
+            source=material.geometry;
+        } else status=NativeMesh_GetLowTriangle(&mesh,terrainQuads[q],t,&source);
+        if(status!=NATIVE_ASSET_OK) goto done;
         status=Validator_TerrainTriangle(&source,&camera,&triangle); if(status!=NATIVE_ASSET_OK) goto done;
+        if(terrain==2) {
+            triangle.source.texture=material.texture; triangle.source.textured=material.textured;
+            s64 x1=(s64)triangle.screen[1][0]-triangle.screen[0][0],y1=(s64)triangle.screen[1][1]-triangle.screen[0][1];
+            s64 x2=(s64)triangle.screen[2][0]-triangle.screen[0][0],y2=(s64)triangle.screen[2][1]-triangle.screen[0][1];
+            // Inspection views reflect Y for display (negative determinant),
+            // unlike the resident proper rotation. Compensate NCLIP winding.
+            s64 determinant=0;
+            for(unsigned k=0;k<3;k++) determinant+=(s64)camera.view.m[0][k]*
+                ((s64)camera.view.m[1][(k+1)%3]*camera.view.m[2][(k+2)%3]-(s64)camera.view.m[1][(k+2)%3]*camera.view.m[2][(k+1)%3]);
+            s64 area=x1*y2-y1*x2;
+            if(!NativeTerrain_FrontFacing(&material,determinant<0 ? -area : area)) { terrainCulled++; continue; }
+        }
         status=NativeRaster_Draw(&target,&triangle,vram,&stats); if(status!=NATIVE_ASSET_OK) goto done;
         terrainTriangles++; terrainWrites+=stats.written;
         triangles++; writes+=stats.written; skipped+=stats.skipped!=0;
@@ -200,7 +293,8 @@ static int Validator_Scene(const struct NativeLevelView *level,const struct Nati
     if(fprintf(file,"P6\n512 512\n255\n")<0 || fwrite(rgb,1,512*512*3,file)!=512*512*3) goto done;
     if(fclose(file)!=0) { file=NULL; goto done; } file=NULL;
     printf("Scene selection: %s\n",nearby ? "nearest authored positions" : "consecutive definitions");
-    if(terrain) printf("Terrain OK: %zu quad blocks, %zu coarse triangles, %zu fragment writes; shared world-unit depth, no terrain textures\n",terrainCount,terrainTriangles,terrainWrites);
+    if(terrain==2) printf("Terrain material OK: %zu submitted triangles, %zu culled, %zu fragment writes, near textures at tick 0\n",terrainTriangles,terrainCulled,terrainWrites);
+    if(terrain==1) printf("Terrain OK: %zu quad blocks, %zu coarse triangles, %zu fragment writes; shared world-unit depth, no terrain textures\n",terrainCount,terrainTriangles,terrainWrites);
     printf("Scene OK: first %u, requested %u, rendered %zu instances, unsupported %zu, unavailable %zu, %zu triangles, %zu skipped triangles, %zu fragment writes -> %s\n",
         first,requested,selected,unsupported,unavailable,triangles,skipped,writes,path);
     printf("Scene camera: %d %d %d, view %s; one normal header/instance, frame 0, shared RGB/depth; terrain/material/visibility parity unverified.\n",

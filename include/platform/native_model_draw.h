@@ -20,6 +20,7 @@ struct NativeDrawTriangle
 	u16 averageDepth;
 	struct NativeTexturePixel corners[3];
 	int hasCornerPixels;
+	s16 orderingBias; // Runtime ordering metadata, never a serialized pointer.
 };
 struct NativeModelDraw
 {

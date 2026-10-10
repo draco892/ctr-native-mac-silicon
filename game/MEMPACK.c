@@ -2,6 +2,9 @@
 #include <namespace_Mempack.h>
 #include <platform.h>
 #include <stdio.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#endif
 
 void CTR_ErrorScreen(u8 r, u8 g, u8 b);
 
@@ -117,8 +120,11 @@ void MEMPACK_NewPack(void *start, s32 size)
 	start = (u8 *)start + padding;
 	size = (size - (s32)padding) & MEMPACK_ALIGNMENT_CLEAR_MASK;
 #endif
-	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
-	ptrMempack->start = start;
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeSceneAssets_ForgetRange(&gNativeSceneAssets, start, (u8 *)start + size);
+#endif
+    struct Mempack *ptrMempack = MEMPACK_ACTIVE;
+    ptrMempack->start = start;
 	// NOTE(aalhendi): Preserve retail's start-pointer readback instead of forwarding the argument.
 	CTR_PSX_RELOAD(ptrMempack->start);
 	start = (u8 *)start + size;
@@ -217,7 +223,10 @@ void *MEMPACK_AllocHighMem(s32 allocSize, const char *name)
 
 void MEMPACK_ClearHighMem(void)
 {
-	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
+    struct Mempack *ptrMempack = MEMPACK_ACTIVE;
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeSceneAssets_ForgetRange(&gNativeSceneAssets, ptrMempack->lastFreeByte, ptrMempack->endOfAllocator);
+#endif
 	ptrMempack->lastFreeByte = ptrMempack->endOfAllocator;
 }
 
@@ -235,6 +244,10 @@ void *MEMPACK_ReallocMem(s32 allocSize)
 	}
 #else
 	s32 newAllocSize = MEMPACK_ALIGN_SIZE(allocSize);
+#endif
+#ifdef CTR_NATIVE_GAME_SCENE
+    if (newAllocSize < ptrMempack->sizeOfPrevAllocation)
+        NativeSceneAssets_ForgetRange(&gNativeSceneAssets, (u8 *)ptrMempack->firstFreeByte - ptrMempack->sizeOfPrevAllocation + newAllocSize, ptrMempack->firstFreeByte);
 #endif
 	ptrMempack->firstFreeByte = (void *)((u8 *)ptrMempack->firstFreeByte - ptrMempack->sizeOfPrevAllocation + newAllocSize);
 	ptrMempack->sizeOfPrevAllocation = newAllocSize;
@@ -260,7 +273,10 @@ s32 MEMPACK_PushState(void)
 
 void MEMPACK_ClearLowMem(void)
 {
-	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
+    struct Mempack *ptrMempack = MEMPACK_ACTIVE;
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeSceneAssets_ForgetRange(&gNativeSceneAssets, ptrMempack->start, ptrMempack->firstFreeByte);
+#endif
 
 	ptrMempack->numBookmarks = 0;
 	ptrMempack->firstFreeByte = ptrMempack->start;
@@ -275,7 +291,10 @@ void MEMPACK_PopState(void)
 	{
 		numBookmarks--;
 		ptrMempack->numBookmarks = numBookmarks;
-		ptrMempack->firstFreeByte = ptrMempack->bookmarks[numBookmarks];
+#ifdef CTR_NATIVE_GAME_SCENE
+        NativeSceneAssets_ForgetRange(&gNativeSceneAssets, ptrMempack->bookmarks[numBookmarks], ptrMempack->firstFreeByte);
+#endif
+        ptrMempack->firstFreeByte = ptrMempack->bookmarks[numBookmarks];
 	}
 }
 
@@ -285,5 +304,8 @@ void MEMPACK_PopToState(s32 id)
 	struct Mempack *ptrMempack = MEMPACK_ACTIVE;
 
 	ptrMempack->numBookmarks = id;
-	ptrMempack->firstFreeByte = ptrMempack->bookmarks[id];
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeSceneAssets_ForgetRange(&gNativeSceneAssets, ptrMempack->bookmarks[id], ptrMempack->firstFreeByte);
+#endif
+    ptrMempack->firstFreeByte = ptrMempack->bookmarks[id];
 }

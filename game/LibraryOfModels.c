@@ -2,6 +2,9 @@
 
 #ifdef CTR_NATIVE
 #include <platform/native_model_library.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct GameTracker *)0)->modelPtr) /
     sizeof(((struct GameTracker *)0)->modelPtr[0]) == NATIVE_MODEL_LIBRARY_SLOTS);
 #endif
@@ -21,7 +24,13 @@ void LibraryOfModels_Store(struct GameTracker *gGT, u32 numModels, struct Model 
 		{
 			return;
 		}
-		if (m->id != -1)
+#ifdef CTR_NATIVE_GAME_SCENE
+        struct NativeModelView nativeModel;
+        if (NativeSceneAssets_GetModel(&gNativeSceneAssets, m, &nativeModel) == NATIVE_ASSET_OK &&
+            NativeModelLibrary_StoreModel(&gNativeSceneAssets.library, &nativeModel) != NATIVE_ASSET_OK)
+        { Platform_LogError("[CTR Native] Invalid decoded library model\n"); CTR_TRAP(); }
+#endif
+        if (m->id != -1)
 		{
 #ifdef CTR_NATIVE
 			if ((u16)m->id >= NATIVE_MODEL_LIBRARY_SLOTS)
@@ -39,6 +48,9 @@ void LibraryOfModels_Store(struct GameTracker *gGT, u32 numModels, struct Model 
 
 void LibraryOfModels_Clear(struct GameTracker *gGT)
 {
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeModelLibrary_Clear(&gNativeSceneAssets.library);
+#endif
 	s32 i;
 
 	for (i = 0; i < LIBRARY_OF_MODELS_CLEAR_COUNT; i++)

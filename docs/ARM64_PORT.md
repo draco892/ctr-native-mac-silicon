@@ -1215,6 +1215,107 @@ ctest --preset macos-arm64-memory-sanitized -R '^ctr_native_mesh_geometry$' -V
 ctest --preset macos-arm64-memory-sanitized -L retail -V
 ```
 
+## Textured terrain and runtime scene integration (current milestone)
+
+The C17 ARM64 suite now contains **22 tests with the retail disc, 21 without it**.
+Both the normal and AddressSanitizer/UndefinedBehaviorSanitizer suites pass.
+Earlier counts and coarse-scene measurements above describe previous milestones.
+
+`native_terrain_material.c` decodes the four face selectors, all 24 resident
+scratch-init modes, UV flip/degenerate assignments, NCLIP winding and double-sided
+flags, signed ordering bias, and the three TextureLayout LOD records. Tagged odd
+texture targets resolve AnimTex frame arrays through the bounded pointer map.
+Integer ticks include signed frame offsets and frame-skip divisors; no active
+texture pointer or source byte is changed. These implement direct face triangles,
+not the original subdivision or clipping pipeline.
+
+`native_scene_camera.c` creates a Q12 view from authored angles and world position.
+`native_scene_visibility.c` traverses BSP branches/leaves with bounded caller
+workspace, detects visible cycles and checks leaf quad ranges. Signed-negative
+child IDs disable branches, including retail 0xc000 leaves. Optional decompressed
+PVS masks are MSB-first: leaf masks use node ordinals, face masks use wire blockIDs,
+which differ from quad ordinals within retail groups of 32. Frustum tests are
+conservative AABB tests; this module does not decompress or reproduce the game's
+visibility selection algorithm.
+
+`native_scene_render.c` consumes runtime camera and model pose/frame values and
+emits triangles through an explicit callback. Terrain LOD defaults to the resident
+non-cutscene thresholds H*12 and H*24. Model near depths are normalized to world
+units before sharing a software depth target with terrain. `native_scene_gpu.c`
+packs G3/GT3 primitives into fixed 40-byte slots and links them to the existing OT
+through registered GPU tokens. Host addresses are never truncated into wire words.
+
+The game loader captures immutable wire snapshots before legacy relocation; raw
+LEV snapshots are completed when the external PTR arrives. The game model library,
+driver extras and normal instance/vehicle animation frame-count queries can use
+these readers. MEMPACK release, shrink, bookmark rollback and arena reuse drop
+owner maps and borrowed model library references. Snapshot storage is additional
+host heap memory. Borrowed views expire on release/reset/replacement; this is not
+a checkpoint restore integration.
+
+`NativeSceneConsumer_Terrain` is an actual one-player game adapter: it reads the
+PushBuffer camera and decompressed PVS, preflights capacity, emits native GPU
+packets and advances PrimMem. The unit target compiles this production adapter
+and the production model-library consumer against minimal host aggregates, and
+also executes the production MEMPACK lifecycle. It does not execute the full game.
+`CTR_NATIVE_DECODED_TERRAIN` is **OFF by default**. Enabling it opts the existing
+32-bit game into the experimental terrain consumer, with legacy fallback before
+publication if the snapshot or output capacity is unavailable. The default
+renderer continues to provide the behavior baseline.
+
+New static diagnostic commands:
+
+```text
+disc-scene-textured ASSETS LEV VRAM_CSV ANCHOR COUNT OUTPUT.ppm [VIEW]
+disc-scene-ptr-textured ASSETS LEV PTR VRAM_CSV ANCHOR COUNT OUTPUT.ppm [VIEW]
+scene-textured LEV_FILE PTR_FILE VRAM_FILE ANCHOR COUNT OUTPUT.ppm [VIEW]
+scene-dram-textured LEV_FILE VRAM_FILE ANCHOR COUNT OUTPUT.ppm [VIEW]
+```
+
+New runtime sequence commands insert a TICKS argument before the output prefix:
+
+```text
+disc-scene-runtime ASSETS LEV VRAM_CSV ANCHOR COUNT TICKS PREFIX [VIEW]
+disc-scene-ptr-runtime ASSETS LEV PTR VRAM_CSV ANCHOR COUNT TICKS PREFIX [VIEW]
+scene-runtime LEV_FILE PTR_FILE VRAM_FILE ANCHOR COUNT TICKS PREFIX [VIEW]
+scene-dram-runtime LEV_FILE VRAM_FILE ANCHOR COUNT TICKS PREFIX [VIEW]
+```
+
+TICKS is 1..256. The camera fits the selected local neighborhood and then pans
+32 world X units per tick. Models advance one logical frame per tick with wrap;
+terrain textures use that tick. This is an inspection sequence, not gameplay
+timing or controller input. All frames share the same projection and one freshly
+cleared color/depth target per tick. Existing sequence files are never replaced;
+choose a new prefix to rerun. A later rendering or I/O failure can leave earlier
+frames on disk. Rendering remains opaque, affine, without near clipping.
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R 'terrain_material|scene_runtime' -V
+ctest --preset macos-arm64-memory-sanitized -L retail -V
+
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-textured assets 1 258,0 0 6 build-macos-arm64-memory/dingo-textured.ppm iso
+sips -s format png build-macos-arm64-memory/dingo-textured.ppm --out build-macos-arm64-memory/dingo-textured.png
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-runtime assets 1 258,0 0 6 8 build-macos-arm64-memory/dingo-runtime-new iso
+python3 tools/preview_sequence_html.py build-macos-arm64-memory/dingo-runtime-new build-macos-arm64-memory/dingo-runtime-new.html --fps 15
+open build-macos-arm64-memory/dingo-runtime-new.html
+```
+
+Dingo's static iso test selects 62/1250 quad blocks and emits 411 terrain
+triangles after 57 face culls, with 18675 terrain fragment writes. Runtime tick 0
+visits 252 BSP nodes and 577 eligible quads before the local face mask, then emits
+411 terrain and 200 model triangles with 19028 writes. These are diagnostics,
+not parity baselines. Retail tests cover both Dingo and the external-PTR hub;
+CLI tests compare embedded/external PTR images and sequence immutability,
+advancing frames and refusal to overwrite. Material tests cover all selector
+modes, UVs, tagged animation and malformed data; runtime tests cover camera,
+PVS/blockID masks, disabled children, cycles, packet links and MEMPACK ownership.
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -1222,17 +1323,22 @@ assertion in `game_layouts.h`. Retail layout assertions remain enabled. The
 memory-only preset is a migration/test target, not a switch that permits an
 unsafe 64-bit game build.
 
-Next, add terrain texture/face handling to the diagnostic scene and connect the authored
-instance bridge to runtime camera consumers. Separate binary asset layouts
-(four-byte addresses and offsets) from
-runtime objects (host pointers). In particular:
+The requested terrain/material and reader-to-consumer areas now have an executable
+ARM64 path, but are **not fully closed for the game**. Remaining in these areas:
 
-1. Replace persistent MPK/LEV callback publications and direct host-pointer
-   consumers with decoded wire views and explicit ownership. The native DRAM
-   callback now retains actual payload lengths and validates embedded maps.
-2. Validate diagnostic preview parity, add material/visibility handling and connect camera/renderer consumers to the new draw, VRAM, projection, matrix, triangle,
-   vertex, library, animation and instance-definition readers to resident
-   gameplay and rendering consumers. Validate these and the LNG integration with retail assets.
+- Native subdivision, near clipping, deforming water, reflection/environment
+  materials and special model paths; verify visibility and visual parity.
+- Replace the remaining legacy model RenderBucket/gameplay consumers and add
+  multiplayer/cutscene camera paths, then validate in the complete game.
+
+These depend on continued separation of binary asset layouts (four-byte addresses
+and offsets) from runtime objects (host pointers). In particular:
+
+1. Continue replacing legacy MPK/LEV callback publications and direct pointer
+   consumers. Immutable loader ownership is connected, but legacy publications
+   coexist until their callers are migrated.
+2. Validate material/visibility and camera/renderer parity in the complete game,
+   including remaining model and gameplay consumers and the LNG integration.
 3. Audit resident globals, callbacks carried in integers and fixed scratchpad
    offsets; host structures must not overlap retail-sized scratchpad slots.
 4. Port checkpoint pointer slots and address tables before enabling 64-bit
@@ -1243,3 +1349,9 @@ runtime objects (host pointers). In particular:
 The PS1 allocator path retains its original four-byte alignment and pointer
 arithmetic. The existing native 32-bit game remains the baseline for behavior;
 this milestone does not establish full game or PS1 binary parity.
+
+A full-game ARM64 syntax audit with the new integrations and experimental terrain
+flag still encounters the existing **668 binary-layout assertions**, plus the
+existing nonconstant initializer in `game/zGlobal_DATA.c:3362`. It reports no
+additional integration syntax errors. This is not a successful full-game build;
+the CMake pointer-width guard and all layout assertions remain enabled.

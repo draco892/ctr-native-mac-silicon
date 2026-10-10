@@ -27,6 +27,9 @@ void LOAD_StringToUpper(char *path)
 #ifdef CTR_NATIVE
 #include <platform/native_cd.h>
 #include <platform/native_asset_loading.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#endif
 #endif
 
 int LOAD_InitCDvol(void)
@@ -142,6 +145,13 @@ void LOAD_DramFileCallback(struct LoadQueueSlot *lqs)
 			CTR_TRAP();
 		}
 		int ptrMapOffset = nativeLayout.ptr == NULL ? -1 : (int)nativeLayout.payloadBytes;
+#ifdef CTR_NATIVE_GAME_SCENE
+        // Preserve wire ownership before legacy consumers patch pointer words.
+        enum NativePtrMapResult sceneStatus = nativeLayout.ptr != NULL ?
+            NativeSceneAssets_Capture(&gNativeSceneAssets, nativeLayout.payload, nativeLayout.payloadBytes, nativeLayout.ptr, nativeLayout.ptrBytes) :
+            NativeSceneAssets_BeginRaw(&gNativeSceneAssets, nativeLayout.payload, nativeLayout.payloadBytes);
+        if (sceneStatus != NATIVE_PTRMAP_OK) { Platform_LogError("[CTR Native] Cannot retain immutable asset\n"); CTR_TRAP(); }
+#endif
 #else
 		int ptrMapOffset = *(int *)&fileBuf[0];
 #endif

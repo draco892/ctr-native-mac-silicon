@@ -26,6 +26,7 @@ enum NativeAssetResult NativeMesh_GetQuad(const struct NativeMeshView *mesh,u32 
         if(quad.indices[k]>=mesh->vertexCount) return NATIVE_ASSET_INVALID_DATA;
     }
     quad.flags=Mesh_U16(wire+0x12); quad.drawOrderLow=CTR_ReadU32LE(wire+0x14); quad.drawOrderHigh=CTR_ReadU32LE(wire+0x18);
+    quad.blockID=Mesh_U16(wire+0x3c);
     *out=quad; return NATIVE_ASSET_OK;
 }
 enum NativeAssetResult NativeMesh_GetLowTriangle(const struct NativeMeshView *mesh,u32 quadIndex,u32 triangleIndex,struct NativeMeshTriangle *out)

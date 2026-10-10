@@ -1,4 +1,7 @@
 #include <common.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#endif
 
 // NOTE(aalhendi): Qualify selected callback stores to preserve retail's
 // return delay slots without changing the shared state layout.
@@ -50,6 +53,12 @@ void LOAD_Callback_Podiums(struct LoadQueueSlot *lqs)
 
 void LOAD_Callback_LEV(struct LoadQueueSlot *lqs)
 {
+#ifdef CTR_NATIVE_GAME_SCENE
+    struct NativeLevelView sceneLevel;
+    if (NativeSceneAssets_GetLevel(&gNativeSceneAssets, lqs->ptrDestination, &sceneLevel) == NATIVE_ASSET_NOT_FOUND &&
+        NativeSceneAssets_BeginRaw(&gNativeSceneAssets, lqs->ptrDestination, lqs->size_UNUSED) != NATIVE_PTRMAP_OK)
+    { Platform_LogError("[CTR Native] Cannot retain pending LEV\n"); CTR_TRAP(); }
+#endif
 	if ((lqs->flags & LT_GETADDR) == 0)
 	{
 		sdata->load_inProgress = 0;
@@ -71,6 +80,10 @@ void LOAD_Callback_PatchMem(struct LoadQueueSlot *lqs)
 	sdata->load_inProgress = 0;
 	// NOTE(aalhendi): Retail reads the patch count after clearing the load gate.
 	patchNum = patchMap->numBytes >> DRAM_POINTER_MAP_WORD_SHIFT;
+#ifdef CTR_NATIVE_GAME_SCENE
+    if (NativeSceneAssets_CompletePtr(&gNativeSceneAssets, sdata->ptrLevelFile, patchMap, lqs->size_UNUSED) != NATIVE_PTRMAP_OK)
+    { Platform_LogError("[CTR Native] Cannot complete immutable LEV map\n"); CTR_TRAP(); }
+#endif
 
 	LOAD_RunPtrMap((char *)sdata->ptrLevelFile, DRAM_GETOFFSETS(patchMap), patchNum);
 

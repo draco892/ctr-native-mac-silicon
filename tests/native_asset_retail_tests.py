@@ -126,3 +126,25 @@ with tempfile.TemporaryDirectory(prefix='ctr-motion-') as directory:
     if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
         raise SystemExit(result.stderr)
     print(result.stdout, end='')
+
+# Real material selectors, animated frames, BSP traversal and camera updates.
+with tempfile.TemporaryDirectory(prefix='ctr-runtime-') as directory:
+    for mode, indices in [
+        ('disc-scene-textured', ['1', '258,0', '0', '6']),
+        ('disc-scene-ptr-textured', ['201', '202', '258,200', '12', '1']),
+        ('disc-scene-runtime', ['1', '258,0', '0', '6', '3']),
+        ('disc-scene-ptr-runtime', ['201', '202', '258,200', '12', '1', '3']),
+    ]:
+        output = pathlib.Path(directory) / mode
+        result = subprocess.run([validator, mode, assets, *indices, output, 'iso'], capture_output=True, text=True)
+        if result.returncode or 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
+            raise SystemExit(f'Retail material/runtime failure: {result.stdout}{result.stderr}')
+        paths = [pathlib.Path(f'{output}-{i:06d}.ppm') for i in range(3)] if mode.endswith('runtime') else [output]
+        images = [path.read_bytes() for path in paths]
+        if any(not image.startswith(b'P6\n512 512\n255\n') or len(image) != 786447 for image in images):
+            raise SystemExit('Malformed retail runtime image.')
+        if mode.endswith('runtime') and (result.stdout.count('Runtime frame OK:') != 3 or len(set(images)) < 2):
+            raise SystemExit('Retail camera/animation sequence did not advance.')
+        if mode.endswith('textured') and 'Terrain material OK:' not in result.stdout:
+            raise SystemExit('Retail terrain did not reach material consumer.')
+        print(result.stdout, end='')

@@ -70,7 +70,11 @@ translation/projection, bounded VRAM loading and 4/8/16-bit texel sampling,
 a connected projected-triangle iterator and a diagnostic software rasterizer/PPM
 preview with inspection cameras, ordered VRAM uploads, fixed-camera animation
 sequences and multi-instance LEV scenes with authored transforms and coarse
-terrain geometry shaded with vertex colors, using Xcode
+terrain geometry shaded with vertex colors or decoded face textures. Runtime scene
+modules add camera/frustum/BSP selection, animated textures, model poses and
+triangle sinks for the software rasterizer and native GPU token bridge. Loader
+snapshots and selected library/animation consumers are connected to these readers;
+the optional game terrain adapter remains experimental. Builds use Xcode
 Command Line Tools, CMake, Ninja and Python 3. The complete game still requires
 32-bit host pointers while its asset layouts are being ported.
 

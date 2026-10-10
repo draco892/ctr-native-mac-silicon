@@ -12,6 +12,8 @@
 #include <platform/native_raster.h>
 #include <platform/native_instance_transform.h>
 #include <platform/native_mesh_geometry.h>
+#include <platform/native_terrain_material.h>
+#include <platform/native_scene_render.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -631,7 +633,7 @@ int main(int argc, char **argv)
 	size_t count = 0;
 	u32 vramIndices[16]; size_t vramCount=0;
 	const char *previewView="front";
-	u32 assetIndex = 0, ptrIndex = 0, previewModel = 0, previewHeader = 0, previewFrame = 0, previewFrames = 1;
+	u32 assetIndex = 0, ptrIndex = 0, previewModel = 0, previewHeader = 0, previewFrame = 0, previewFrames = 1, sceneTicks = 1;
 	int indexed = 0, disc = 0, separate = 0, externalDram = 0, mpk = 0, result = 1, withVram = 0, onlyVram = 0, preview = 0, listModels = 0, sequence = 0, listAnimations = 0, scene = 0, sceneNearby = 0, sceneTerrain = 0;
 	enum NativePtrMapResult status;
 	if (argc < 3)
@@ -640,6 +642,10 @@ int main(int argc, char **argv)
 	    (strcmp(argv[1],"disc-sequence")==0 && argc==12) || (strcmp(argv[1],"sequence")==0 && argc==11) ||
 	    (strcmp(argv[1],"disc-scene")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr")==0 && argc==10) ||
 	    (strcmp(argv[1],"scene")==0 && argc==9) || (strcmp(argv[1],"scene-dram")==0 && argc==8) ||
+	    (strcmp(argv[1],"disc-scene-runtime")==0 && argc==10) || (strcmp(argv[1],"disc-scene-ptr-runtime")==0 && argc==11) ||
+	    (strcmp(argv[1],"scene-runtime")==0 && argc==10) || (strcmp(argv[1],"scene-dram-runtime")==0 && argc==9) ||
+	    (strcmp(argv[1],"disc-scene-textured")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr-textured")==0 && argc==10) ||
+	    (strcmp(argv[1],"scene-textured")==0 && argc==9) || (strcmp(argv[1],"scene-dram-textured")==0 && argc==8) ||
 	    (strcmp(argv[1],"disc-scene-terrain")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr-terrain")==0 && argc==10) ||
 	    (strcmp(argv[1],"scene-terrain")==0 && argc==9) || (strcmp(argv[1],"scene-dram-terrain")==0 && argc==8) ||
 	    (strcmp(argv[1],"disc-scene-near")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr-near")==0 && argc==10))
@@ -648,7 +654,15 @@ int main(int argc, char **argv)
 		previewView=argv[--argc];
 		if(!Validator_PreviewView(previewView,&checkedView)) goto usage;
 	}
-	if(strcmp(argv[1],"disc-scene-terrain")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; indexed=1; disc=1; }
+	if(strcmp(argv[1],"disc-scene-runtime")==0 && argc==9) { scene=1; sceneNearby=1; sceneTerrain=3; withVram=1; indexed=1; disc=1; }
+	else if(strcmp(argv[1],"disc-scene-ptr-runtime")==0 && argc==10) { scene=1; sceneNearby=1; sceneTerrain=3; withVram=1; indexed=1; disc=1; separate=1; externalDram=1; }
+	else if(strcmp(argv[1],"scene-runtime")==0 && argc==9) { scene=1; sceneNearby=1; sceneTerrain=3; withVram=1; separate=1; }
+	else if(strcmp(argv[1],"scene-dram-runtime")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=3; withVram=1; }
+	else if(strcmp(argv[1],"disc-scene-textured")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=2; withVram=1; indexed=1; disc=1; }
+	else if(strcmp(argv[1],"disc-scene-ptr-textured")==0 && argc==9) { scene=1; sceneNearby=1; sceneTerrain=2; withVram=1; indexed=1; disc=1; separate=1; externalDram=1; }
+	else if(strcmp(argv[1],"scene-textured")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=2; withVram=1; separate=1; }
+	else if(strcmp(argv[1],"scene-dram-textured")==0 && argc==7) { scene=1; sceneNearby=1; sceneTerrain=2; withVram=1; }
+	else if(strcmp(argv[1],"disc-scene-terrain")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; indexed=1; disc=1; }
 	else if(strcmp(argv[1],"disc-scene-ptr-terrain")==0 && argc==9) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; indexed=1; disc=1; separate=1; externalDram=1; }
 	else if(strcmp(argv[1],"scene-terrain")==0 && argc==8) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; separate=1; }
 	else if(strcmp(argv[1],"scene-dram-terrain")==0 && argc==7) { scene=1; sceneNearby=1; sceneTerrain=1; withVram=1; }
@@ -686,7 +700,8 @@ int main(int argc, char **argv)
 		goto usage;
 	if (withVram && disc && !Validator_VramIndices(argv[separate ? 5 : 4], vramIndices, &vramCount)) goto usage;
 	if (preview && (!Validator_Index(argv[argc-5-sequence], &previewModel) || !Validator_Index(argv[argc-4-sequence], &previewHeader) || !Validator_Index(argv[argc-2-sequence], &previewFrame))) goto usage;
-	if(scene && (!Validator_Index(argv[argc-3],&previewFrame) || !Validator_Index(argv[argc-2],&previewFrames) || previewFrames==0 || previewFrames>256)) goto usage;
+	if(scene && (!Validator_Index(argv[argc-3-(sceneTerrain==3)],&previewFrame) || !Validator_Index(argv[argc-2-(sceneTerrain==3)],&previewFrames) || previewFrames==0 || previewFrames>256)) goto usage;
+	if(sceneTerrain==3 && (!Validator_Index(argv[argc-2],&sceneTicks) || sceneTicks==0 || sceneTicks>256)) goto usage;
 	if(sequence && (!Validator_Index(argv[argc-2],&previewFrames) || previewFrames==0 || previewFrames>256)) goto usage;
 	if(listAnimations && (!Validator_Index(argv[argc-2],&previewModel) || !Validator_Index(argv[argc-1],&previewHeader))) goto usage;
 	if (disc && !NativeDiscImage_Init(argv[2]))
@@ -801,7 +816,7 @@ int main(int argc, char **argv)
 		struct NativeMeshView mesh;
 		if(scene) {
 			if(NativeLevel_Open(&load.pointers,&view)!=NATIVE_ASSET_OK) goto invalid;
-			result=Validator_Scene(&view,&vram,previewFrame,previewFrames,sceneNearby,sceneTerrain,argv[argc-1],previewView) ? 0 : 1;
+			result=Validator_Scene(&view,&vram,previewFrame,previewFrames,sceneNearby,sceneTerrain,sceneTicks,argv[argc-1],previewView) ? 0 : 1;
 			goto done;
 		}
 		if (NativeLevel_Open(&load.pointers, &view) != NATIVE_ASSET_OK || !Validator_Models(NULL, &view, withVram ? &vram : NULL) ||
@@ -836,6 +851,8 @@ usage:
 	fprintf(stderr,"  ctr_native_asset_validate scene-dram LEV_FILE VRAM_FILE FIRST COUNT OUTPUT.ppm [front|side|top|iso]\n");
 	fprintf(stderr,"  disc-scene-near / disc-scene-ptr-near: same arguments, FIRST is anchor; choose COUNT nearest authored positions\n");
 	fprintf(stderr,"  disc-scene-terrain / disc-scene-ptr-terrain / scene-terrain / scene-dram-terrain: same scene arguments; FIRST is anchor, nearest instances plus coarse terrain within 2048 units\n");
+	fprintf(stderr,"  disc-scene-textured / disc-scene-ptr-textured / scene-textured / scene-dram-textured: same terrain arguments, face selectors and near textures at tick 0\n");
+	fprintf(stderr,"  disc-scene-runtime / disc-scene-ptr-runtime / scene-runtime / scene-dram-runtime: same textured arguments, add TICKS (1..256) before OUTPUT_PREFIX; files PREFIX-000000.ppm etc\n");
 	result = 2;
 done:
 	NativeAssetLoad_Reset(&load);

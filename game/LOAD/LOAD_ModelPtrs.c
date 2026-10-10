@@ -3,6 +3,9 @@
 #ifdef CTR_NATIVE
 #include <platform/native_model_library.h>
 #endif
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#endif
 
 void LOAD_GlobalModelPtrs_MPK()
 {
@@ -31,6 +34,15 @@ void LOAD_GlobalModelPtrs_MPK()
 		}
 #endif
 
+#ifdef CTR_NATIVE_GAME_SCENE
+        struct NativeModelView decoded;
+        if (NativeSceneAssets_GetModel(&gNativeSceneAssets, m, &decoded) == NATIVE_ASSET_OK &&
+            NativeModelLibrary_StoreModel(&gNativeSceneAssets.library, &decoded) != NATIVE_ASSET_OK)
+        {
+            Platform_LogError("[CTR Native] Driver model snapshot could not enter library\n");
+            CTR_TRAP();
+        }
+#endif
 		gGT->modelPtr[m->id] = m;
 	}
 

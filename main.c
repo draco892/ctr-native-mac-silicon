@@ -63,6 +63,13 @@
 #include "platform/native_model_draw.c"
 #include "platform/native_raster.c"
 #include "platform/native_instance_transform.c"
+#include "platform/native_mesh_geometry.c"
+#include "platform/native_terrain_material.c"
+#include "platform/native_scene_camera.c"
+#include "platform/native_scene_visibility.c"
+#include "platform/native_scene_assets.c"
+#include "platform/native_scene_render.c"
+#include "platform/native_scene_gpu.c"
 #include "platform/native_inline_c.c"
 #include "platform/native_libapi.c"
 #include "platform/native_libetc.c"
@@ -211,6 +218,7 @@ int main(int argc, char *argv[])
 	if (NativePerf_ConfigureFromArgs(argc, argv) != 0)
 	{
 		Platform_LogFlush();
+		NativeSceneAssets_Reset(&gNativeSceneAssets);
 		Platform_Shutdown();
 		return NativeConsole_Return(1);
 	}
@@ -223,6 +231,7 @@ int main(int argc, char *argv[])
 	if (NativeReplayScheduler_ConfigureFromArgs(argc, argv) != 0)
 	{
 		Platform_LogFlush();
+		NativeSceneAssets_Reset(&gNativeSceneAssets);
 		Platform_Shutdown();
 		return NativeConsole_Return(1);
 	}
@@ -233,6 +242,7 @@ int main(int argc, char *argv[])
 
 	const int result = CTR_Main();
 
+	NativeSceneAssets_Reset(&gNativeSceneAssets);
 	Platform_Shutdown();
 	return NativeConsole_Return(result);
 }

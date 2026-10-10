@@ -3,7 +3,7 @@
 #include <platform/native_asset_readers.h>
 
 struct NativeMeshVertex { s16 position[3]; u16 flags; u32 colorHigh, colorLow; };
-struct NativeMeshQuad { u16 indices[9], flags; u32 drawOrderLow, drawOrderHigh; };
+struct NativeMeshQuad { u16 indices[9], flags,blockID; u32 drawOrderLow, drawOrderHigh; };
 struct NativeMeshTriangle { u16 indices[3]; struct NativeMeshVertex vertices[3]; };
 // Use unchanged validated mesh spans returned by NativeLevel_GetMesh. These
 // value outputs borrow no host pointers; asset bytes are never patched. Outputs

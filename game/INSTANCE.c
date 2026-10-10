@@ -1,4 +1,8 @@
 #include <common.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#include <platform/native_model_animation.h>
+#endif
 
 void INSTANCE_Birth(struct Instance *inst, struct Model *model, const char *name, struct Thread *th, u32 flags)
 {
@@ -354,6 +358,11 @@ void INSTANCE_LevDelayedLInBs(struct InstDef *instDef, s32 numInstances)
 
 s32 INSTANCE_GetNumAnimFrames(struct Instance *pInstance, s32 animIndex)
 {
+#ifdef CTR_NATIVE_GAME_SCENE
+    struct NativeModelView nativeModel; struct NativeAnimationView nativeAnimation;
+    if (pInstance != NULL && NativeSceneAssets_GetModel(&gNativeSceneAssets, pInstance->model, &nativeModel) == NATIVE_ASSET_OK)
+        return animIndex >= 0 && NativeModel_GetAnimation(&nativeModel, 0, (u32)animIndex, &nativeAnimation) == NATIVE_ASSET_OK ? nativeAnimation.logicalFrameCount : 0;
+#endif
 	struct Model *pModel;
 	struct ModelHeader *pHeader;
 	struct ModelAnim **animations;

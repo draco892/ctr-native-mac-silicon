@@ -285,6 +285,34 @@ class ValidatorTests(unittest.TestCase):
         self.run_tool('scene-dram-terrain', self.write('terrain.dram', dram), vram_file,
                       '0', '2', output, 'front')
         self.assertEqual(output.read_bytes(), terrain_image)
+        # Material and runtime consumers accept both loader layouts unchanged.
+        struct.pack_into('<I', lev, quads + 20, 0x80000000)  # Double sided.
+        self.write('authored.lev', lev)
+        textured = ['scene-textured', *terrain_args[1:]]
+        self.assertIn('Terrain material OK:', self.run_tool(*textured))
+        textured_image = output.read_bytes()
+        dram = struct.pack('<I', len(lev)) + lev + ptr_map(slots)
+        self.run_tool('scene-dram-textured', self.write('textured.dram', dram), vram_file,
+                      '0', '2', output, 'front')
+        self.assertEqual(output.read_bytes(), textured_image)
+        run_prefix = self.root / 'runtime'
+        runtime_args = ['scene-runtime', file, self.root / 'authored.ptr', vram_file,
+                        '0', '2', '3', run_prefix, 'front']
+        text = self.run_tool(*runtime_args)
+        self.assertEqual(text.count('Runtime frame OK:'), 3)
+        runtime_images = [pathlib.Path(f'{run_prefix}-{i:06d}.ppm').read_bytes() for i in range(3)]
+        self.assertGreater(len(set(runtime_images)), 1)
+        embedded_prefix = self.root / 'runtime-embedded'
+        self.run_tool('scene-dram-runtime', self.root / 'textured.dram', vram_file,
+                      '0', '2', '3', embedded_prefix, 'front')
+        self.assertEqual(runtime_images, [pathlib.Path(f'{embedded_prefix}-{i:06d}.ppm').read_bytes() for i in range(3)])
+        self.run_tool(*runtime_args, expected=1)
+        self.assertEqual(pathlib.Path(f'{run_prefix}-000000.ppm').read_bytes(), runtime_images[0])
+        runtime_args[6] = '0'
+        self.run_tool(*runtime_args, expected=2)
+        self.assertEqual(pathlib.Path(file).read_bytes(), lev)
+        lev[:] = snapshot
+        self.write('authored.lev', lev)
         # Exclude the red model, so terrain alone must hide the green model.
         # Put green beyond the far threshold to also exercise mixed depth units.
         put32(lev, definition + 64 + 0x20, 0x800)

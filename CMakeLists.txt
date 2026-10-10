@@ -7,6 +7,7 @@ set(CTR_NATIVE_VERSION "0.1.0-beta.7.1")
 option(CTR_BUILD_GAME "Build the game (currently requires 32-bit asset layouts)" ON)
 option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native porting tests" OFF)
 include(CTest)
+option(CTR_NATIVE_DECODED_TERRAIN "Use experimental decoded terrain in the 32-bit game" OFF)
 
 # Build actual production memory modules independently of resident game layouts
 # and SDL. This is the ARM64 porting entry point until asset decoding is ready.
@@ -235,7 +236,33 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ctr_native_mesh_geometry COMMAND ctr_native_mesh_geometry_tests)
 
-    add_executable(ctr_native_asset_validate tools/native_asset_validate.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c platform/native_disc_image.c)
+    add_executable(ctr_native_terrain_material_tests tests/native_terrain_material_tests.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_terrain_material_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_terrain_material_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_terrain_material_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_terrain_material_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_terrain_material_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_terrain_material_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_terrain_material COMMAND ctr_native_terrain_material_tests)
+
+    add_executable(ctr_native_scene_runtime_tests tests/native_scene_runtime_tests.c game/MEMPACK.c platform/native_mempack_arena.c platform/native_scene_gpu.c platform/native_gpu_links.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_scene_runtime_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_scene_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_scene_runtime_tests PRIVATE CTR_NATIVE CTR_NATIVE_GAME_SCENE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_scene_runtime_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_scene_runtime_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_scene_runtime_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_scene_runtime COMMAND ctr_native_scene_runtime_tests)
+
+    add_executable(ctr_native_asset_validate tools/native_asset_validate.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c platform/native_disc_image.c)
     set_target_properties(ctr_native_asset_validate PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(ctr_native_asset_validate PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_definitions(ctr_native_asset_validate PRIVATE CTR_NATIVE)
@@ -364,7 +391,11 @@ set_target_properties(ctr_native PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 target_include_directories(ctr_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(CTR_NATIVE_DECODED_TERRAIN)
+    target_compile_definitions(ctr_native PRIVATE CTR_NATIVE_DECODED_TERRAIN)
+endif()
 target_compile_definitions(ctr_native PRIVATE
+    CTR_NATIVE_GAME_SCENE
     CTR_NATIVE
     CTR_INTERNAL
     CTR_NATIVE_VERSION=\"${CTR_NATIVE_VERSION}\"

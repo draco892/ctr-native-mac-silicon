@@ -1,3 +1,6 @@
+#ifdef CTR_NATIVE_DECODED_TERRAIN
+#include <platform/native_scene_game.h>
+#endif
 #include <common.h>
 
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
@@ -939,6 +942,13 @@ void RenderAllLevelGeometry(struct GameTracker *gGT, struct Level *level1, struc
 		                                           gGT->visMem1->bspList[0], numPlyrCurrGame);
 
 		// 226-229
+#ifdef CTR_NATIVE_DECODED_TERRAIN
+		u32 decodedVisibleNodes;
+		if (NativeSceneConsumer_Terrain(level1, pushBuffer, &gGT->backBuffer->primMem,
+		    gGT->visMem1->visLeafList[0], gGT->visMem1->visFaceList[0], (u32)gGT->timer, &decodedVisibleNodes))
+			gGT->bspLeafsDrawn = (s32)decodedVisibleNodes;
+		else
+#endif
 		DrawLevelOvr1P(&gGT->LevRenderLists[0], pushBuffer, (struct BSP *)ptr_mesh_info, &gGT->backBuffer->primMem, gGT->visMem1->visFaceList[0],
 		               level1->ptr_tex_waterEnvMap); // waterEnvMap?
 
