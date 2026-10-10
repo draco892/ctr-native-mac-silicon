@@ -499,8 +499,7 @@ void AH_Pause_Update(void)
 					s16 j;
 					for (j = 1; j < GAME_TRACKER->numPlyrCurrGame; j++)
 					{
-						u32 offset = j * sizeof(struct InstDrawPerPlayer);
-						((struct InstDrawPerPlayer *)((u32)inst + offset + sizeof(struct Instance)))->pushBuffer = 0;
+						idpp[j].pushBuffer = NULL;
 					}
 				}
 

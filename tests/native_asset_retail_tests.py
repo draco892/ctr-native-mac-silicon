@@ -39,6 +39,8 @@ for arguments, expected in [
         raise SystemExit('Retail validation did not reach VRAM loading and texture sampling.')
     if arguments[0].startswith('disc-lev') and 'Instance draw OK:' not in result.stdout:
         raise SystemExit('Retail validation did not reach authored instance transforms.')
+    if arguments[0].startswith('disc-lev') and 'Resident instance bridge OK:' not in result.stdout:
+        raise SystemExit('Retail validation did not reach resident model/definition conversion.')
     if 'Draw pipeline OK:' not in result.stdout:
         raise SystemExit('Retail validation did not reach the connected frame/triangle/projection pipeline.')
     if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:

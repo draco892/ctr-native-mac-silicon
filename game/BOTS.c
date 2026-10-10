@@ -3086,7 +3086,7 @@ struct Driver *BOTS_Driver_Init(int driverID)
 	// path data found
 	struct Thread *t = PROC_BirthWithObject(
 	    // creation flags
-	    SIZE_RELATIVE_POOL_BUCKET(DRIVER_NTSC_RETAIL_SIZE, NONE, LARGE, ROBOT),
+	    SIZE_RELATIVE_POOL_BUCKET(DRIVER_RUNTIME_BASE_SIZE, NONE, LARGE, ROBOT),
 
 	    BOTS_ThTick_Drive, // behavior
 	    0,                 //"robotcar",	// debug name
@@ -3094,7 +3094,7 @@ struct Driver *BOTS_Driver_Init(int driverID)
 	);
 
 	struct Driver *d = t->object;
-	memset(d, 0x0, DRIVER_NTSC_RETAIL_SIZE);
+	memset(d, 0x0, DRIVER_RUNTIME_BASE_SIZE);
 	VehBirth_NonGhost(t, driverID);
 	sdata->gGT->drivers[driverID] = d;
 	t->modelIndex = DYNAMIC_ROBOT_CAR;

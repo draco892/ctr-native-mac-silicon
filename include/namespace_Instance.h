@@ -344,7 +344,7 @@ struct ModelAnim
 	// then verts, then next ModelFrame, then verts, etc...
 };
 
-#define MODELANIM_GETFRAME(x) ((u32)x + sizeof(struct ModelAnim))
+#define MODELANIM_GETFRAME(x) ((u8 *)(x) + sizeof(struct ModelAnim))
 
 struct ModelHeader
 {
@@ -370,7 +370,7 @@ struct ModelHeader
 	s16 _pad_scale;
 
 	// 0x20
-	u32 ptrCommandList;
+	CtrRuntimeAddress ptrCommandList;
 
 	// 0x24
 	// null if there are animations
@@ -384,7 +384,7 @@ struct ModelHeader
 
 	// 0x30
 	// same as anim->0x14
-	u32 unk3;
+	CtrRuntimeAddress unk3;
 
 	// 0x34
 	u32 numAnimations;
@@ -430,10 +430,18 @@ struct Model
 
 CTR_STATIC_ASSERT(sizeof(((struct Model *)0)->name) == MODEL_NAME_WORD_COUNT * sizeof(u32));
 CTR_STATIC_ASSERT(OFFSETOF(struct Model, id) == 0x10);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(OFFSETOF(struct Model, headers) == 0x14);
+#endif
 
 struct InstDef
 {
+#if defined(CTR_NATIVE_HOST64)
+	// Reserve the intrusive Instance prefix so polymorphic PVS links can
+	// read their peer at the same offset in either resident record.
+	u8 residentLinkPrefix[2 * sizeof(void *)];
+	void *residentPeer;
+#endif
 	// 0
 	char name[0x10];
 
@@ -495,16 +503,16 @@ struct InstDrawPerPlayer
 	struct ModelFrame *ptrNextFrame;
 
 	// 0xc8
-	u32 ptrCommandList;
+	CtrRuntimeAddress ptrCommandList;
 
 	// 0xcc
 	struct TextureLayout **ptrTexLayout;
 
 	// 0xd0
-	u32 ptrColorLayout; // maybe should be `u32*`
+	CtrRuntimeAddress ptrColorLayout; // maybe should be `u32*`
 
 	// 0xd4
-	int ptrDeltaArray;
+	CtrRuntimeAddress ptrDeltaArray;
 
 	// 0xd8 - LOD index (0,1,2,3)
 	int lodIndex;
@@ -516,8 +524,8 @@ struct InstDrawPerPlayer
 	struct ModelHeader *mh;
 
 	// 0xe4
-	int otRangeNormal;    // ptrOT + depthOffset
-	int otRangeSecondary; // ptrOT + depthOffset
+	CtrRuntimeAddress otRangeNormal;    // ptrOT + depthOffset
+	CtrRuntimeAddress otRangeSecondary; // ptrOT + depthOffset
 	int unkEC;            // drawFunc1
 	int unkF0;            // drawFunc2
 
@@ -534,6 +542,7 @@ struct InstDrawPerPlayer
 	// 0x88 = size of struct
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct InstDrawPerPlayer, pushBuffer) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct InstDrawPerPlayer, mvp) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct InstDrawPerPlayer, mvp) + CTR_OFFSET_OF_ARRAY(MATRIX, t, 0) == 0x18);
@@ -557,6 +566,7 @@ CTR_STATIC_ASSERT(offsetof(struct InstDrawPerPlayer, otRangeSecondary) == 0x74);
 CTR_STATIC_ASSERT(offsetof(struct InstDrawPerPlayer, unkEC) == 0x78);
 CTR_STATIC_ASSERT(offsetof(struct InstDrawPerPlayer, unkF0) == 0x7c);
 CTR_STATIC_ASSERT(sizeof(struct InstDrawPerPlayer) == 0x88);
+#endif
 
 // draws anything with a model
 struct Instance
@@ -566,6 +576,9 @@ struct Instance
 
 	// 0x4
 	struct Instance *prev;
+#if defined(CTR_NATIVE_HOST64)
+	void *residentPeer;
+#endif
 
 	// 0x8
 	char name[0x10];
@@ -647,10 +660,11 @@ struct Instance
 
 	// 0x74
 	// NOTE(aalhendi): The instance pool reserves one trailing record per viewport.
-	struct InstDrawPerPlayer idpp[0];
+	struct InstDrawPerPlayer idpp[];
 };
 
 CTR_STATIC_ASSERT(offsetof(struct Instance, next) == 0x0);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Instance, prev) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct Instance, model) == 0x18);
 CTR_STATIC_ASSERT(offsetof(struct Instance, scale.x) == 0x1c);
@@ -676,6 +690,7 @@ CTR_STATIC_ASSERT(CTR_OFFSET_OF_ARRAY(struct Instance, funcPtr, 3) == 0x68);
 CTR_STATIC_ASSERT(offsetof(struct Instance, thread) == 0x6c);
 CTR_STATIC_ASSERT(offsetof(struct Instance, compressedNormalAndDriverIndex) == 0x70);
 CTR_STATIC_ASSERT(sizeof(struct Instance) == 0x74);
+#endif
 
 enum InstanceCompressedNormalLayout
 {
@@ -704,6 +719,37 @@ static inline u32 INST_CompressNormalVectorAndDriverIndex(s32 normalX, s32 norma
 	return INST_CompressNormalVector(normalX, normalY, normalZ) | (((u32)driverID + INST_COMPRESSED_DRIVER_INDEX_OFFSET) << INST_COMPRESSED_DRIVER_INDEX_SHIFT);
 }
 
-#define INST_GETIDPP(x) ((struct InstDrawPerPlayer *)((u32)x + sizeof(struct Instance)))
+#define INST_GETIDPP(x) ((x)->idpp)
 
+#if defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(offsetof(struct Instance, prev) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct Instance, residentPeer) == offsetof(struct InstDef, residentPeer));
+CTR_STATIC_ASSERT(offsetof(struct Instance, idpp) == sizeof(struct Instance));
+CTR_STATIC_ASSERT(sizeof(((struct InstDrawPerPlayer *)0)->ptrDeltaArray) == sizeof(void *));
+CTR_STATIC_ASSERT(sizeof(((struct InstDrawPerPlayer *)0)->otRangeNormal) == sizeof(void *));
+CTR_STATIC_ASSERT(sizeof(((struct ModelHeader *)0)->ptrCommandList) == sizeof(void *));
+#endif
+
+static inline void INST_LinkDefinition(struct Instance *inst, struct InstDef *def)
+{
+	inst->instDef = def;
+	if (def != NULL)
+		def->ptrInstance = inst;
+#if defined(CTR_NATIVE_HOST64)
+	inst->residentPeer = def;
+	if (def != NULL)
+		def->residentPeer = inst;
+#endif
+}
+
+static inline void *INST_DefinitionPeer(const void *record)
+{
+#if defined(CTR_NATIVE_HOST64)
+	void *peer;
+	memcpy(&peer, (const u8 *)record + offsetof(struct Instance, residentPeer), sizeof(peer));
+	return peer;
+#else
+	return (void *)CTR_ReadU32AlignedLE((const u8 *)record + offsetof(struct InstDef, ptrInstance));
+#endif
+}
 #endif

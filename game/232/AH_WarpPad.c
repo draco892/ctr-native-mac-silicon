@@ -101,7 +101,7 @@ void AH_WarpPad_AllWarppadNum()
 		if ((wp->slots.inst[2] != 0) && (wp->digit1s != 0) && (wp->digit1s != 9))
 		{
 			INST_GETIDPP(wp->slots.inst[2])->ptrCommandList = wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrCommandList;
-			INST_GETIDPP(wp->slots.inst[2])->ptrColorLayout = (u32)wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrColors;
+			INST_GETIDPP(wp->slots.inst[2])->ptrColorLayout = (CtrRuntimeAddress)wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrColors;
 			INST_GETIDPP(wp->slots.inst[2])->ptrTexLayout = wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrTexLayout;
 			INST_GETIDPP(wp->slots.inst[2])->ptrCurrFrame = wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrFrameData;
 		}
@@ -109,7 +109,7 @@ void AH_WarpPad_AllWarppadNum()
 		if ((wp->slots.inst[3] != 0) && (wp->digit10s != 0))
 		{
 			INST_GETIDPP(wp->slots.inst[3])->ptrCommandList = wp->slots.inst[3]->model->headers[0].ptrCommandList;
-			INST_GETIDPP(wp->slots.inst[3])->ptrColorLayout = (u32)wp->slots.inst[3]->model->headers[0].ptrColors;
+			INST_GETIDPP(wp->slots.inst[3])->ptrColorLayout = (CtrRuntimeAddress)wp->slots.inst[3]->model->headers[0].ptrColors;
 			INST_GETIDPP(wp->slots.inst[3])->ptrTexLayout = wp->slots.inst[3]->model->headers[0].ptrTexLayout;
 			INST_GETIDPP(wp->slots.inst[3])->ptrCurrFrame = wp->slots.inst[3]->model->headers[0].ptrFrameData;
 		}

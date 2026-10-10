@@ -484,7 +484,7 @@ void CAM_StartOfRace(struct CameraDC *cDC)
 
 	if (hasFlyInCamera)
 	{
-		s32 flyInData = (s32)level1->ptr_restart_points;
+		struct CheckpointNode *flyInData = level1->ptr_restart_points;
 		cDC->trackPathProgress = 0;
 		cDC->transitionBlend = 0;
 
@@ -493,7 +493,7 @@ void CAM_StartOfRace(struct CameraDC *cDC)
 
 		// when camera reaches player, be zoomed in
 		cDC->cameraMode = 0;
-		cDC->trackPathNode = (struct CheckpointNode *)(flyInData + 0x18);
+		cDC->trackPathNode = &flyInData[2];
 
 		// if 1 or less screens
 		cDC->transitionFrame = 0xA5;
@@ -1446,7 +1446,7 @@ LAB_8001ab04:
 
 	if (cDC->BlastedLerp.boolLerpPending != 0)
 	{
-		cam->delta.y = cam->pos.y + (s32) * (s16 *)((s32)cDC + 0xc8);
+		cam->delta.y = cam->pos.y + (s32)cDC->BlastedLerp.unkOffset[0];
 	}
 
 	if (d->kartState == KS_MASK_GRABBED)
@@ -1885,7 +1885,7 @@ void CAM_ThTick(struct Thread *t)
 			uVar16 = (u32)*psVar20;
 
 			// +2 to include respawnPoint and modeID
-			psVar20 = (s16 *)((s32)psVar19 + data.EndOfRace_Camera_Size[iVar7] + 2);
+			psVar20 = (s16 *)((u8 *)psVar19 + data.EndOfRace_Camera_Size[iVar7] + 2);
 
 			psVar15 = &gGT->level1->ptr_restart_points[uVar16];
 

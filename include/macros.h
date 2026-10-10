@@ -32,10 +32,12 @@ typedef unsigned int size_t;
 
 // Runtime callback transport retains host width; PS1 ABI stays one word.
 #if defined(CTR_NATIVE)
+typedef uintptr_t CtrRuntimeAddress;
 typedef intptr_t CtrCallbackArg;
 typedef void *CtrRuntimePointer;
 typedef void *CtrVoiceSetPointer;
 #else
+typedef unsigned int CtrRuntimeAddress;
 typedef int CtrCallbackArg;
 typedef int CtrRuntimePointer;
 typedef int CtrVoiceSetPointer;

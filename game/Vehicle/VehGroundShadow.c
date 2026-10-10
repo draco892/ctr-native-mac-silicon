@@ -112,7 +112,9 @@ void VehGroundShadow_Main(void)
 	u32 *prim;
 	register s32 playerIndex CTR_PSX_REGISTER("$23");
 	register u8 *entryBase CTR_PSX_REGISTER("$21");
+	#if !defined(CTR_NATIVE_HOST64)
 	register u8 *pushBufferCursor CTR_PSX_REGISTER("$22");
+#endif
 	register u32 colorOrDistance CTR_PSX_REGISTER("$20");
 	register u8 *entryCursor CTR_PSX_REGISTER("$18");
 	register s32 height CTR_PSX_REGISTER("$17");
@@ -146,7 +148,8 @@ void VehGroundShadow_Main(void)
 	u32 retailCallState[3];
 
 #if defined(CTR_NATIVE_HOST64)
-    scratch = NativeShadowWork_Get()->payload.bytes;
+	struct NativeShadowWork *hostShadow = NativeShadowWork_Get();
+	scratch = hostShadow->payload.bytes;
 #elif defined(CTR_NATIVE)
     scratch = CTR_SCRATCHPAD_PTR(u8, 0);
 #else
@@ -203,7 +206,11 @@ void VehGroundShadow_Main(void)
 				z = v0Value + x;
 				do
 				{
+#if defined(CTR_NATIVE_HOST64)
+					v1Value = (u8)INST_GETIDPP((struct Instance *)x)[entryPlayerIndex].instFlags;
+#else
 					v1Value = VEH_GROUND_SHADOW_BYTE((u8 *)z, 0xb8);
+#endif
 					z -= sizeof(struct InstDrawPerPlayer);
 					v0Value = (size_t)entryBase + entryPlayerIndex;
 					entryPlayerIndex--;
@@ -234,27 +241,39 @@ void VehGroundShadow_Main(void)
 		VEH_SHADOW_DRIVER_SLOT(entryBase + 0x14) = NULL;
 		v0Value = tracker->numPlyrCurrGame;
 		playerIndex = (s32)v0Value - 1;
-		v0Value = playerIndex << 4;
-		v0Value += playerIndex;
-		v0Value <<= 4;
-		v0Value += 0x168;
-		v0Value = (size_t)tracker + v0Value;
+#if !defined(CTR_NATIVE_HOST64)
+        v0Value = playerIndex << 4;
+        v0Value += playerIndex;
+        v0Value <<= 4;
+        v0Value += 0x168;
+        v0Value = (size_t)tracker + v0Value;
+#endif
 	}
 	if (playerIndex < 0)
 		goto write_cursor;
 	culledState = VEH_GROUND_SHADOW_STATE_CULLED;
 	VehGroundShadow_SetLocalVector(localVector, scratch);
 	readyState = VEH_GROUND_SHADOW_STATE_READY;
+#if !defined(CTR_NATIVE_HOST64)
 	pushBufferCursor = (u8 *)v0Value + 0x38;
+#endif
 
 	do
 	{
+#if defined(CTR_NATIVE_HOST64)
+		struct PushBuffer *pb = &GAME_TRACKER->pushBuffer[playerIndex];
+		hostShadow->ot = pb->ptrOT;
+		VEH_GROUND_SHADOW_WORD(scratch, 0x240) = pb->distanceToScreen_PREV;
+		geomX = pb->rect.w >> 1;
+		geomY = pb->rect.h >> 1;
+		memcpy(scratch + 0x90, pb->matrix_Camera.t, sizeof(pb->matrix_Camera.t));
+		memcpy(scratch + 0x50, pb->matrix_ViewProj.m, sizeof(pb->matrix_ViewProj.m));
+#else
 		VEH_GROUND_SHADOW_WORD(scratch, 0x240) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, -0x20);
 		VEH_GROUND_SHADOW_WORD(scratch, 0x23c) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0xbc);
 		geomX = (s16)VEH_GROUND_SHADOW_HALF(pushBufferCursor, -0x18) >> 1;
 		geomY = (s16)VEH_GROUND_SHADOW_HALF(pushBufferCursor, -0x16) >> 1;
-		VehGroundShadow_SetGeomOffset(geomX, geomY);
-		CTC2(VEH_GROUND_SHADOW_WORD(scratch, 0x240), 26);
+
 		VEH_GROUND_SHADOW_WORD(scratch, 0x90) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0x44);
 		VEH_GROUND_SHADOW_WORD(scratch, 0x94) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0x48);
 		VEH_GROUND_SHADOW_WORD(scratch, 0x98) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0x4c);
@@ -265,6 +284,9 @@ void VehGroundShadow_Main(void)
 		v1Value = VEH_GROUND_SHADOW_WORD(pushBufferCursor, -0x04);
 		VEH_GROUND_SHADOW_HALF(scratch, 0x60) = (u16)v0Value;
 		VEH_GROUND_SHADOW_WORD(scratch, 0x5c) = (u32)v1Value;
+#endif
+		VehGroundShadow_SetGeomOffset(geomX, geomY);
+		CTC2(VEH_GROUND_SHADOW_WORD(scratch, 0x240), 26);
 		VehGroundShadow_LoadRotMatrix((MATRIX *)(scratch + 0x50));
 
 		VehGroundShadow_AddPointer(entryBase, scratch, 0xa4);
@@ -581,7 +603,11 @@ void VehGroundShadow_Main(void)
 				if (depthIndex > VEH_GROUND_SHADOW_OT_MAX)
 					depthIndex = VEH_GROUND_SHADOW_OT_MAX;
 				packetAddress = (s32)CtrGpu_PrimToOTLink24(prim);
+#if defined(CTR_NATIVE_HOST64)
+				ot = hostShadow->ot + depthIndex;
+#else
 				ot = (u32 *)VEH_GROUND_SHADOW_WORD(scratch, 0x23c) + depthIndex;
+#endif
 				prim[0] = *ot | VEH_GROUND_SHADOW_GPU_TAG_POLY_FT4;
 				prim += 10;
 				*ot = (u32)packetAddress;
@@ -597,7 +623,10 @@ void VehGroundShadow_Main(void)
 
 	drivers_done:
 		playerIndex--;
-		pushBufferCursor -= sizeof(struct PushBuffer);
+#if !defined(CTR_NATIVE_HOST64)
+		if (playerIndex >= 0)
+			pushBufferCursor -= sizeof(struct PushBuffer);
+#endif
 	} while (playerIndex >= 0);
 
 write_cursor:

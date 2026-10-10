@@ -284,12 +284,15 @@ CTR_STATIC_ASSERT(offsetof(struct CameraHeightSmoothing, startOffset) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct CameraHeightSmoothing, framesRemaining) == 0x2);
 CTR_STATIC_ASSERT(offsetof(struct CameraHeightSmoothing, currentOffset) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, damagePitchOffset) == 0x1a);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, quadBlockSearchHit) == 0x3c);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, pushBufferPosCorrection) == 0x4c);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, cameraPos) == 0x58);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, lookAtPos) == 0x64);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, flags) == 0x70);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->flags) == 0x4);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, driverOffset_CamEyePos) == 0x74);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, angleAxisLerpRatio) == 0x7a);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, driverOffset_CamLookAtPos) == 0x7c);
@@ -307,9 +310,17 @@ CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData) == 0xb0);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData.trackPathSpeed) == 0xb0);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData.pointPath.endPos) == 0xb0);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData.pointPath.speed) == 0xb6);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->eorModeData) == 0x8);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, fireSpeedZoom) == 0xb8);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, heightSmoothing) == 0xc0);
 CTR_STATIC_ASSERT(sizeof(struct CameraDC) == 0xDC);
+#endif
 
+#if defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->pushBuffer) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct CameraDC, pushBuffer) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->BlastedLerp.unkOffset[0]) == 2);
+#endif
 #endif

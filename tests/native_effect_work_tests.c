@@ -29,7 +29,8 @@ int main(void)
     memset(shadow->payload.bytes,0x5a,sizeof(shadow->payload.bytes));
     u8 *old=malloc(256),*live=malloc(256); CHECK(old && live);
     skids->pushBuffer=(struct PushBuffer *)(old+16);
-    for(size_t i=0;i<9;i++) {
+	shadow->ot = (u32 *)(old + 32);
+	for(size_t i=0;i<9;i++) {
         struct Driver **driver=NativeShadowWork_DriverSlot(shadow,shadow->payload.bytes+0xb8+i*0x28);
         struct Instance **instance=NativeShadowWork_InstanceSlot(shadow,shadow->payload.bytes+0xbc+i*0x28);
         CHECK(driver==&shadow->drivers[i] && instance==&shadow->instances[i]);
@@ -49,8 +50,9 @@ int main(void)
     memcpy(NativeHostScratch_Storage(),snapshot,bytes);
     struct Relocate rebase={{.kind=1,.start=(u64)(uintptr_t)old,.size=256},{.kind=1,.start=(u64)(uintptr_t)live,.size=256},0};
     NativeEffectWork_VisitHostPointers(Rebase,&rebase);
-    CHECK(rebase.slots==19 && skids->pushBuffer==(struct PushBuffer *)(live+16));
-    for(size_t i=0;i<8;i++) CHECK(shadow->drivers[i]==(struct Driver *)(live+i*8) && shadow->instances[i]==(struct Instance *)(live+128+i*8));
+	CHECK(rebase.slots == 20 && skids->pushBuffer == (struct PushBuffer *)(live + 16));
+	CHECK(shadow->ot == (u32 *)(live + 32));
+	for(size_t i=0;i<8;i++) CHECK(shadow->drivers[i]==(struct Driver *)(live+i*8) && shadow->instances[i]==(struct Instance *)(live+128+i*8));
     CHECK(shadow->drivers[8]==NULL && shadow->instances[8]==NULL);
     CHECK(torch->rings[2].bottom==0x12345678 && torch->screenWFP==0x87654321);
     for(size_t i=0;i<sizeof(retail);i++) CHECK(retail[i]==0xa5);

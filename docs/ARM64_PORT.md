@@ -1575,7 +1575,7 @@ The CLI reports blended fragment counts. An eight-frame Dingo sequence with
 `subdiv=1` remains valid, but the selected inspection region produces **zero
 blended fragments**; real translucent material parity is not established by it.
 
-The current syntax inventory is **602 layout assertions, 544 pointer/integer-cast
+The stage-13 syntax inventory was **602 layout assertions, 544 pointer/integer-cast
 warnings and 86 scratchpad call sites**, with no other syntax errors. The scratch
 count includes PS1/native32 fallback branches. These are diagnostic counts, not
 a completion percentage; the full-game build remains guarded.
@@ -1644,7 +1644,109 @@ The PS1 allocator path retains its original four-byte alignment and pointer
 arithmetic. The existing native 32-bit game remains the baseline for behavior;
 this milestone does not establish full game or PS1 binary parity.
 
-The current full-game ARM64 syntax audit encounters **602 active binary-layout
-assertions and no other syntax errors**; the voice-set initializer is fixed.
+The current full-game ARM64 syntax audit encounters **382 active binary-layout
+assertions, 411 pointer/integer-cast warnings and no other syntax errors**.
+The source inventory retains 86 scratchpad call sites, including fallback paths.
 This is not a successful full-game build. The CMake pointer-width guard and
 remaining retail layout assertions stay enabled.
+
+
+## Stage 14: resident camera, vehicle and asset record contracts
+
+`CameraDC` and `PushBuffer` now compile as actual host64 game declarations.
+Pointer-free camera/viewport/matrix prefix checks remain active; pointer-dependent
+retail offsets remain checked on the 32-bit path, with host pointer width and
+alignment checks on ARM64. `PushBuffer_Core.c` contains the production init,
+matrix and frustum routines, included by `PushBuffer.c` and exercised with the
+production native GTE register bridge. Matrix stores use byte-safe helpers;
+negative normal normalization avoids signed-left-shift UB and the corner loop
+no longer forms a pointer before its array. Native initialization writes the
+whole camera ID. CAM fly-in, blasted-height and end-of-race path accesses use
+typed fields/byte arithmetic. Draw-environment cursor increments retain host
+width. Shadow viewport selection, matrices and per-player flags use typed fields;
+its OT pointer lives beside the scalar scratch payload and participates in
+checkpoint rebasing.
+
+`Driver` and `BotData` retain fixed-width scalar state and full-width callbacks,
+object references and list links. Player/bot initialization clears through the
+actual `ghostTape` offset, preserving the separately initialized ghost extension.
+The host large-stack pool includes the whole Driver and intrusive prefix,
+rounds to host alignment and leaves room for PROC's strict capacity check.
+`Instance` uses a C17 flexible per-player array. IDPP command/color/delta and OT
+address transports use `CtrRuntimeAddress`; direct RenderBucket range parameters
+and returns retain that width while draw-handler IDs stay 32-bit tokens.
+SpawnType1 and IconGroup trailing pointer arrays are aligned flexible members.
+
+Resident `Instance` and `InstDef` have a shared full-width peer slot after the
+intrusive list prefix. Linking initializes both typed references and peer slots;
+pooled birth clears the instance peer. `LevInstDef` traversal reads the peer by
+bytes, preserving the existing toggle-on-each-reference behavior of shared PVS
+lists rather than deduplicating them. Native level instance initialization copies
+named fields instead of copying a wire prefix across changed host offsets.
+
+`native_resident.h/.c` defines explicit fixed-size wire records and bounded,
+transactional decoders for Level, Model, ModelHeader, ModelAnim, InstDef, mesh,
+QuadBlock, BSP branches/leaves and hitboxes, WaterVert, SCVert, PVS, NavHeader,
+Skybox and both SpawnType2 interpretations. Scalars are read little-endian.
+Caller-owned typed bindings translate interior array references by element index
+with distinct wire/host strides, reject unaligned/ambiguous bindings and never
+patch the asset. Listed target zero still refers to origin; an unlisted zero slot
+is NULL. Tagged terrain textures resolve to resident IconGroup4/AnimTex objects
+and retain their tag. Only opaque byte spans and word streams may borrow asset
+storage; mixed pointer-bearing records require resident bindings.
+
+These are record/header decoders, **not a complete resident graph loader**.
+Bindings must describe real allocations. The caller must materialize pointer
+arrays, inline animation/navigation/texture payloads and nested objects, validate
+complete streams/terminated lists and publish only a finished graph. The retail
+validator now compares resident Model/InstDef conversion against the existing
+bounded views for every level definition, including Dingo Canyon, Coco Park and
+the separate-PTR menu. Its model header allocations are placeholders for this
+comparison and are never published or rendered as resident objects.
+
+Checkpoint payload version is **8** because the resident ABI and shadow pointer
+storage changed. Instance peer and shadow OT slots are visited. Full game
+checkpoint traversal, including future resident asset owners/definition peers,
+remains unverified and must be completed with graph-loader integration.
+
+Validation: **29/29 CTest entries pass normally and with ASan/UBSan** (28 without
+the optional disc). The two new tests check 1–4 viewport layouts, 2,000 rotations
+through production matrix/frustum/GTE routines, intrusive/peer/PVS links,
+per-player data, Driver base initialization and pool capacity, aligned trailing
+pointer arrays, little-endian record conversion, distinct array strides,
+geometry references, tagged textures, immutable bytes and atomic rejection.
+The optional retail test requires the resident conversion diagnostic as well as
+the existing rendering checks. The syntax inventory above remains a guard-failure
+inventory, not evidence of a successful game build.
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R 'resident|effect_work|asset_retail' -V
+
+# Real definitions, without generating or overwriting images.
+build-macos-arm64-memory/ctr_native_asset_validate disc-lev assets 1
+build-macos-arm64-memory/ctr_native_asset_validate disc-lev assets 25
+build-macos-arm64-memory/ctr_native_asset_validate disc-lev-ptr assets 201 202
+
+# Expected full-game layout failure; other_error must remain absent/zero.
+/usr/bin/clang -fsyntax-only -ferror-limit=0 -std=c17 -DCTR_NATIVE -DCTR_INTERNAL -DCTR_NATIVE_GAME_SCENE -DCTR_NATIVE_DECODED_TERRAIN -DCTR_NATIVE_BUILD_ID='"port-check"' -DCTR_NATIVE_VERSION='"port-check"' -Iinclude -I/opt/homebrew/include main.c > build-macos-arm64-memory/stage14-syntax.log 2>&1
+python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage14-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
+```
+
+Next work, in dependency order:
+
+1. Migrate recursive render scratch, retail subdivision/reflection and special
+   model/material consumers, including texture-animation slot transports.
+2. Finish the resident asset graph loader/publications, remaining globals,
+   overlays and direct offset consumers (including BOTS), plus checkpoint owner
+   and pointer traversal. Existing raw asset callbacks must not cast wire records
+   to the enlarged resident declarations.
+3. Enable/build the full ARM64 game once those contracts and pointer transport
+   checks are satisfied; the CMake and game-layout guards remain active until then.
+4. Validate real menu/race behavior, multiplayer/cutscene cameras, GPU rendering,
+   input/controllers, audio, replay/save-state round trips and memory lifetimes.

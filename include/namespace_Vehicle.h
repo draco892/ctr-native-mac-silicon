@@ -1978,6 +1978,7 @@ CTR_STATIC_ASSERT(offsetof(struct BotPhysics, accel) == 0x1c);
 CTR_STATIC_ASSERT(offsetof(struct BotPhysics, velocity) == 0x28);
 CTR_STATIC_ASSERT(sizeof(((struct BotPhysics *)0)->accel) == 0xc);
 CTR_STATIC_ASSERT(sizeof(((struct BotPhysics *)0)->velocity) == 0xc);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct BotData) == 0x94);
 CTR_STATIC_ASSERT(offsetof(struct BotData, aiPhysics) == 0x24);
 CTR_STATIC_ASSERT(offsetof(struct BotData, reserved_0x5a0) == 0x8);
@@ -1987,9 +1988,12 @@ CTR_STATIC_ASSERT(offsetof(struct BotData, ai_quadblock_checkpointIndex) == 0x72
 CTR_STATIC_ASSERT(offsetof(struct BotData, reserved_0x628) == 0x90);
 CTR_STATIC_ASSERT(offsetof(struct BotData, estimateNavFrame) == 0x74);
 CTR_STATIC_ASSERT(offsetof(struct BotData, estimateNavFrame.pos) == 0x74);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct BotData *)0)->estimateNavFrame.pos) == 0x6);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct BotData, estimateNavFrame.flags) == 0x82);
 CTR_STATIC_ASSERT(offsetof(struct BotData, estimateNavFrame.pathChangeOpcode) == 0x84);
+#endif
 CTR_STATIC_ASSERT(sizeof(Actions) == 0x4);
 CTR_STATIC_ASSERT(sizeof(DriverCollisionFlags) == 0x2);
 CTR_STATIC_ASSERT(sizeof(RainCloudEffect) == 0x2);
@@ -2011,11 +2015,16 @@ CTR_STATIC_ASSERT(sizeof(RevEngineChargeState) == 0x1);
 CTR_STATIC_ASSERT(sizeof(RevEngineLockoutFlags) == 0x1);
 CTR_STATIC_ASSERT(sizeof(EngineSoundMode) == 0x1);
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, ghostTape) == DRIVER_NTSC_RETAIL_SIZE);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->funcPtrs) == DRIVER_FUNC_COUNT * sizeof(DriverFunc));
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, funcPtrs) == 0x54);
 CTR_STATIC_ASSERT(offsetof(struct Driver, velocity) == 0x88);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->velocity) == 0xc);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, collisionFlags) == 0xaa);
 CTR_STATIC_ASSERT(offsetof(struct Driver, spsHitPos) == 0xac);
 CTR_STATIC_ASSERT(offsetof(struct Driver, padding_0xb2) == 0xb2);
@@ -2024,13 +2033,17 @@ CTR_STATIC_ASSERT(offsetof(struct Driver, padding_0xba) == 0xba);
 CTR_STATIC_ASSERT(offsetof(struct Driver, stepFlagSet) == 0xbc);
 CTR_STATIC_ASSERT(offsetof(struct Driver, skidmarks) == 0xc4);
 CTR_STATIC_ASSERT(offsetof(struct Driver, skidmarkEnableFlags) == 0x2c4);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->stepFlagSet) == 0x4);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, padding_0x3e) == 0x3e);
 CTR_STATIC_ASSERT(offsetof(struct Driver, actionsFlagSet) == 0x2c8);
 CTR_STATIC_ASSERT(offsetof(struct Driver, actionsFlagSetPrevFrame) == 0x2cc);
 CTR_STATIC_ASSERT(offsetof(struct Driver, quadBlockHeight) == 0x2d0);
 CTR_STATIC_ASSERT(offsetof(struct Driver, posCurr) == 0x2d4);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->posCurr) == 0xc);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, forcedJumpType) == 0x366);
 CTR_STATIC_ASSERT(offsetof(struct Driver, AxisAngle2_normalVec) == 0x368);
 CTR_STATIC_ASSERT(offsetof(struct Driver, speedometerNeedleValue) == 0x36e);
@@ -2048,7 +2061,9 @@ CTR_STATIC_ASSERT(offsetof(struct Driver, accelTapWindowTimer) == 0x3c0);
 CTR_STATIC_ASSERT(offsetof(struct Driver, accelTapCount) == 0x3c2);
 CTR_STATIC_ASSERT(offsetof(struct Driver, terrainScaledBaseSpeed) == 0x3c4);
 CTR_STATIC_ASSERT(offsetof(struct Driver, accel) == 0x3cc);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->accel) == 0x6);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, turnWobbleAngle) == 0x3d4);
 CTR_STATIC_ASSERT(offsetof(struct Driver, turnWobbleVelocity) == 0x3d6);
 CTR_STATIC_ASSERT(offsetof(struct Driver, turnWobbleTimer) == 0x3d8);
@@ -2095,7 +2110,9 @@ CTR_STATIC_ASSERT(offsetof(struct Driver, BattleHUD.reserved_0x4d8) == 0x4d8);
 CTR_STATIC_ASSERT(offsetof(struct Driver, pendingDamageType) == 0x4ff);
 CTR_STATIC_ASSERT(offsetof(struct Driver, pendingDamageAttacker) == 0x500);
 CTR_STATIC_ASSERT(offsetof(struct Driver, pendingDamageReasonByte) == 0x504);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->pendingDamageReasonPadding) == 0x3);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, rainCloudEffect) == 0x50a);
 CTR_STATIC_ASSERT(offsetof(struct Driver, numTimesWumpa) == 0x569);
 CTR_STATIC_ASSERT(offsetof(struct Driver, ghostPadding_0x636) == 0x636);
@@ -2116,5 +2133,19 @@ CTR_STATIC_ASSERT(offsetof(struct Driver, rotPrev.y) == 0x2f6);
 CTR_STATIC_ASSERT(offsetof(struct Driver, rotPrev.z) == 0x2f8);
 CTR_STATIC_ASSERT(offsetof(struct Driver, rotPrev.w) == 0x2fa);
 CTR_STATIC_ASSERT(offsetof(struct Driver, KartStates.MaskGrab.AngleAxis_NormalVec) == 0x584);
+#endif
 
+#if defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(sizeof(((struct Driver *)0)->ghostTape) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct Driver, funcPtrs) % _Alignof(DriverFunc) == 0);
+CTR_STATIC_ASSERT(offsetof(struct Driver, ghostTape) >= offsetof(struct Driver, botData) + sizeof(struct BotData));
+#endif
+// Base initialization preserves the separately initialized ghost extension.
+#define DRIVER_RUNTIME_BASE_SIZE offsetof(struct Driver, ghostTape)
+#if defined(CTR_NATIVE_HOST64)
+// PROC rejects exact-capacity requests, so retain one extra byte before rounding.
+#define DRIVER_RUNTIME_POOL_BYTES ((sizeof(struct Driver) + 2 * sizeof(void *) + 1 + _Alignof(max_align_t) - 1) / _Alignof(max_align_t) * _Alignof(max_align_t))
+CTR_STATIC_ASSERT(DRIVER_RUNTIME_BASE_SIZE <= UINT16_MAX);
+CTR_STATIC_ASSERT(DRIVER_RUNTIME_POOL_BYTES - 2 * sizeof(void *) > sizeof(struct Driver));
+#endif
 #endif

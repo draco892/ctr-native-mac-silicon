@@ -39,7 +39,7 @@ void INSTANCE_Birth(struct Instance *inst, struct Model *model, const char *name
 	inst->flags = flags;
 	inst->alphaScale = 0;
 	inst->colorRGBA = 0;
-	inst->instDef = 0;
+	INST_LinkDefinition(inst, NULL);
 
 	inst->animFrame = 0;
 	inst->vertSplit = 0;
@@ -236,7 +236,16 @@ void INSTANCE_LevInitAll(struct InstDef *definitions, s32 count)
 
 		// NOTE(aalhendi): Retail copies the 44-byte serialized prefix past the
 		// pool links. Its final two words are replaced by instDef and matrix.
+#if defined(CTR_NATIVE_HOST64)
+		memcpy(inst->name, levInstDef->name, sizeof(inst->name));
+		inst->model = levInstDef->model;
+		inst->scale = levInstDef->scale;
+		inst->alphaScale = levInstDef->_pad_scale;
+		inst->colorRGBA = levInstDef->colorRGBA;
+		inst->flags = levInstDef->flags;
+#else
 		memcpy((u8 *)inst + offsetof(struct Instance, name), levInstDef, offsetof(struct InstDef, ptrInstance));
+#endif
 
 		inst->depthBiasNormal = levInstDef->unk24 - 2;
 		inst->depthBiasSecondary = levInstDef->unk24 + 12;
@@ -246,7 +255,7 @@ void INSTANCE_LevInitAll(struct InstDef *definitions, s32 count)
 		inst->animIndex = 0;
 		inst->animFrame = 0;
 
-		inst->instDef = levInstDef;
+		INST_LinkDefinition(inst, levInstDef);
 
 		inst->vertSplit = 0;
 		inst->specLightX = 1;

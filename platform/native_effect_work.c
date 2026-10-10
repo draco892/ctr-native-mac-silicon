@@ -35,7 +35,9 @@ void NativeEffectWork_VisitHostPointers(NativeEffectPointerVisitor visit, void *
     struct VehGroundSkidsScratch *skids = NativeHostScratch_Peek(NATIVE_HOST_SCRATCH_SKIDS, sizeof(struct VehGroundSkidsScratch));
     struct NativeShadowWork *shadow = NativeHostScratch_Peek(NATIVE_HOST_SCRATCH_SHADOW, sizeof(struct NativeShadowWork));
     if(skids != NULL) visit(user, &skids->pushBuffer, sizeof(skids->pushBuffer), 0);
-    if(shadow != NULL) for(size_t i = 0; i < 9; i++) {
+	if (shadow != NULL)
+		visit(user, &shadow->ot, sizeof(shadow->ot), 0);
+	if(shadow != NULL) for(size_t i = 0; i < 9; i++) {
         visit(user, &shadow->drivers[i], sizeof(shadow->drivers[i]), 0);
         visit(user, &shadow->instances[i], sizeof(shadow->instances[i]), 0);
     }

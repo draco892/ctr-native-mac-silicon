@@ -22,11 +22,12 @@
 // and retail globals are defined, so they can snapshot the same process-local
 // regions the game mutates.
 #define NATIVE_CHECKPOINT_MAGIC              NATIVE_CHECKPOINT_FOURCC('C', 'T', 'R', 'C')
+// Version 8 changes resident Camera/PushBuffer/Driver/Instance layouts and peer slots.
 // Version 7 adds Torch/skid/shadow host storage and typed effect-pointer traversal.
 // Version 6 includes separate collision/camera host workspaces and pointer traversal.
 // Version 5 introduced 64-bit addresses and explicit slot/host widths.
 // Payload regions remain ABI-specific; older versions are rejected.
-#define NATIVE_CHECKPOINT_VERSION            7u
+#define NATIVE_CHECKPOINT_VERSION            8u
 #define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  20u
 #define NATIVE_CHECKPOINT_POINTER_SLOT_CAP   65536u
 #define NATIVE_CHECKPOINT_CREDITS_STRING_CAP 4096u
@@ -696,9 +697,12 @@ internal void NativeCheckpoint_RelocateInstance(const struct NativeCheckpointHea
                                                 struct Instance *inst, s32 numPlayers)
 {
 	local_persist const struct NativeCheckpointFieldRelocation fields[] = {
-	    NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, next),   NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, prev),
-	    NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, model),  NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, instDef),
+	    NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, next),         NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, prev),
+	    NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, model),        NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, instDef),
 	    NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, thread),
+#if defined(CTR_NATIVE_HOST64)
+	    NATIVE_CHECKPOINT_FIELD_PTR(struct Instance, residentPeer),
+#endif
 	};
 
 	if (inst == NULL)

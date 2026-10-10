@@ -2,8 +2,9 @@
 #define GAME_LAYOUTS_H
 
 #include <macros.h>
-// Resident game and asset layouts still require 32-bit host pointers. Native
-// modules can be built independently while those contracts are being ported.
+// Remaining globals, overlays and legacy asset publications still require
+// 32-bit pointers. Migrated resident contracts compile independently; keep
+// this full-game guard until every consumer uses the new host/wire boundary.
 CTR_STATIC_ASSERT(sizeof(void *) == 4);
 
 // Game layout and namespace headers.

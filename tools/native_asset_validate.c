@@ -15,6 +15,7 @@
 #include <platform/native_terrain_material.h>
 #include <platform/native_scene_render.h>
 #include <platform/native_vertex_animation.h>
+#include <platform/native_resident.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -354,6 +355,32 @@ static int Validator_VertexAnimation(const struct NativeLevelView *level,const s
     return 1;
 }
 
+// Materialize actual resident headers/definitions as a differential check.
+// Nested model-header objects are allocated placeholders, never published to
+// the game or dereferenced here; full graph loading remains a separate step.
+static int Validator_ResidentInstance(const struct NativeLevelView *level, u32 index, const struct NativeInstanceDefView *view)
+{
+	struct Model model;
+	struct InstDef definition;
+	struct ModelHeader *headers = calloc(view->model.headerCount ? view->model.headerCount : 1, sizeof(*headers));
+	if (headers == NULL)
+		return 0;
+	struct NativeResidentBinding bindings[] = {{NR_MODEL, view->model.offset, 1, &model},
+	                                           {NR_MODEL_HEADER, view->model.headersOffset, view->model.headerCount, headers}};
+	struct NativeResidentContext context = {level->map, bindings, 2};
+	int ok = NativeResident_DecodeModel(&context, view->model.offset, &model) == NATIVE_ASSET_OK &&
+	         NativeResident_DecodeInstDef(&context, level->instancesOffset + index * NATIVE_INSTANCE_DEF_BYTES, &definition) == NATIVE_ASSET_OK;
+	if (ok)
+		ok = definition.model == &model && model.id == view->model.id && (u16)model.numHeaders == view->model.headerCount &&
+		     (view->model.headerCount == 0 || model.headers == headers) && memcmp(model.name, view->model.name, sizeof(model.name)) == 0 &&
+		     memcmp(definition.name, view->name, sizeof(definition.name)) == 0 && memcmp(&definition.scale, view->scale, sizeof(definition.scale)) == 0 &&
+		     memcmp(&definition.pos, view->position, sizeof(definition.pos)) == 0 && memcmp(&definition.rot, view->rotation, sizeof(definition.rot)) == 0 &&
+		     definition.colorRGBA == view->colorRGBA && definition.flags == view->flags && definition.unk24 == view->unk24 && definition.unk28 == view->unk28 &&
+		     definition.modelID == view->modelID && definition.ptrInstance == NULL;
+	free(headers);
+	return ok;
+}
+
 static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level, const struct NativeVramView *vram)
 {
 	struct NativeModelLibrary library;
@@ -471,9 +498,16 @@ static int Validator_Models(const struct NativeMpkView *mpk, const struct Native
 				fprintf(stderr, "Invalid instance/model reference at index %u\n", i);
 				return 0;
 			}
-			for(u32 h=0;h<instance.model.headerCount;h++)
+			if (!Validator_ResidentInstance(level, i, &instance))
+			{
+				fprintf(stderr, "Resident instance conversion failed at index %u\n", i);
+				return 0;
+			}
+			for (u32 h = 0; h < instance.model.headerCount; h++)
 				if(!Validator_Draw(&instance.model,h,vram,&instance,&instanceStats)) return 0;
 		}
+	if (level != NULL)
+		printf("Resident instance bridge OK: %u model/definition records (nested graph not published)\n", level->instanceCount);
 	if(level!=NULL) printf("Instance draw OK: %u definitions, %zu projected triangles, %zu flagged, %zu degenerate (authored transforms, synthetic camera)\n",level->instanceCount,instanceStats.triangles,instanceStats.flagged,instanceStats.degenerate);
 	printf("Model library OK: %u registered IDs; %u instance definitions decoded\n",
 	    registered, level != NULL ? level->instanceCount : 0);

@@ -167,14 +167,19 @@ struct IconGroup
 	s16 numIcons;
 
 	// 0x14
-	// struct Icon* icons[0];
+	struct Icon *icons[];
 };
-#define ICONGROUP_GETICONS(x) (struct Icon **)((u32)x + sizeof(struct IconGroup))
+#define ICONGROUP_GETICONS(x) ((x)->icons)
 
 CTR_STATIC_ASSERT(sizeof(struct TextureLayout) == 0xC);
 CTR_STATIC_ASSERT(sizeof(struct Icon) == 0x20);
 CTR_STATIC_ASSERT(sizeof(((struct Icon *)0)->name) == 0x10);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct IconGroup) == 0x14);
+#else
+CTR_STATIC_ASSERT(offsetof(struct IconGroup, icons) == sizeof(struct IconGroup));
+CTR_STATIC_ASSERT(offsetof(struct IconGroup, icons) % _Alignof(void *) == 0);
+#endif
 CTR_STATIC_ASSERT(OFFSETOF(struct IconGroup, name) == 0x0);
 CTR_STATIC_ASSERT(OFFSETOF(struct IconGroup, groupID) == 0x10);
 CTR_STATIC_ASSERT(OFFSETOF(struct IconGroup, numIcons) == 0x12);

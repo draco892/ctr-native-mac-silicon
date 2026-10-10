@@ -2,9 +2,10 @@
 
 Use this for bug reports in internal builds.
 
-Current checkpoints use payload version 7 and replay headers use version 2.
-Version 7 adds Torch/skid/shadow workspaces and typed effect-pointer traversal
-to the collision/camera workspaces introduced in version 6.
+Current checkpoints use payload version 8 and replay headers use version 2.
+Version 8 accounts for the new resident Camera/PushBuffer/Driver/Instance layouts,
+full-width instance peer links and the shadow OT pointer. Version 7 added
+Torch/skid/shadow workspaces to the collision/camera storage from version 6.
 Previous versions are rejected. Pointer width, endian marker and platform/CPU
 identity are checked; bypassing build identity does not bypass format/ABI checks.
 The outer CTST container remains version 1. Checkpoints now include immutable

@@ -191,6 +191,7 @@ struct NativeShadowWork {
     union { max_align_t alignment; u8 bytes[1024]; } payload;
     struct Driver *drivers[9];
     struct Instance *instances[9];
+	u32 *ot;
 };
 CTR_STATIC_ASSERT(sizeof(struct NativeShadowWork) <= 2048);
 struct TorchScratch *NativeTorchWork_Get(void);

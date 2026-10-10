@@ -151,7 +151,7 @@ struct AnimTex
 	// struct IconGroup4* ptrarray[0];
 };
 
-#define ANIMTEX_GETARRAY(x) (struct IconGroup4 **)((u32)x + sizeof(struct AnimTex))
+#define ANIMTEX_GETARRAY(x) ((struct IconGroup4 **)((u8 *)(x) + sizeof(struct AnimTex)))
 
 struct PVS
 {
@@ -269,15 +269,19 @@ struct QuadBlock
 	// full struct is 0x5c bytes large
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct QuadBlock) == 0x5c);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct QuadBlock, index) == 0x0);
 CTR_STATIC_ASSERT(sizeof(((struct QuadBlock *)0)->index[0]) == 0x2);
 CTR_STATIC_ASSERT(sizeof(QuadBlockFlags) == 0x2);
 CTR_STATIC_ASSERT(offsetof(struct QuadBlock, quadFlags) == 0x12);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct QuadBlock, checkpointIndex) == 0x3e);
 CTR_STATIC_ASSERT(offsetof(struct QuadBlock, ptr_texture_low) == 0x40);
 CTR_STATIC_ASSERT(offsetof(struct QuadBlock, pvs) == 0x44);
 CTR_STATIC_ASSERT(offsetof(struct QuadBlock, triNormalVecDividend) == 0x48);
+#endif
 
 // BSP box that contains geometry
 struct BSP
@@ -398,7 +402,9 @@ enum BspHitboxClass
 	BSP_HITBOX_CLASS_TOUCH = 4,
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct BSP) == 0x20);
+#endif
 CTR_STATIC_ASSERT(sizeof(BspChildId) == 0x2);
 CTR_STATIC_ASSERT(sizeof(BspChildIdEncoding) == 0x2);
 CTR_STATIC_ASSERT(sizeof(BspNodeFlag) == 0x2);
@@ -411,7 +417,9 @@ CTR_STATIC_ASSERT(offsetof(struct BSP, box) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct BSP, data.branch.childID) == 0x18);
 CTR_STATIC_ASSERT(offsetof(struct BSP, data.hitbox.center) == 0x10);
 CTR_STATIC_ASSERT(offsetof(struct BSP, data.hitbox.radius) == 0x16);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct BSP, data.hitbox.instDef) == 0x1C);
+#endif
 
 struct VisMemBspListNode
 {
@@ -419,7 +427,9 @@ struct VisMemBspListNode
 	struct BSP *bsp;
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct VisMemBspListNode) == 8);
+#endif
 
 struct LevVertex
 {
@@ -596,9 +606,9 @@ struct SpawnType1
 {
 	int count;
 
-	// void* pointers[0];
+	void *pointers[];
 };
-#define ST1_GETPOINTERS(x) (void **)((u32)x + sizeof(struct SpawnType1))
+#define ST1_GETPOINTERS(x) ((x)->pointers)
 
 struct SpawnPosRot
 {
@@ -671,7 +681,7 @@ struct Skybox
 
 	// struct SkyboxFace allFaces[0];
 };
-#define SKY_GETFACES(x) ((u32)x + sizeof(struct Skybox))
+#define SKY_GETFACES(x) ((u8 *)(x) + sizeof(struct Skybox))
 
 struct LevTexLookup
 {
@@ -904,8 +914,11 @@ CTR_STATIC_ASSERT(sizeof(struct RainBuffer) == 0x30);
 CTR_STATIC_ASSERT(sizeof(struct SpawnPosRot) == 0xc);
 CTR_STATIC_ASSERT(offsetof(struct SpawnPosRot, pos) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct SpawnPosRot, rot) == 0x6);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct SpawnType2) == 0x8);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct SpawnType2, numCoords) == 0x0);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct SpawnType2, coords.posCoords) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct SpawnType2, coords.positions) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct SpawnType2, coords.posRot) == 0x4);
@@ -921,5 +934,12 @@ CTR_STATIC_ASSERT(offsetof(struct Level, jumpVerticalSpeedCap) == 0x18C);
 CTR_STATIC_ASSERT(offsetof(struct Level, visOVertSrc) == 0x28);
 CTR_STATIC_ASSERT(offsetof(struct Level, visSCVertSrc) == 0x170);
 CTR_STATIC_ASSERT(offsetof(struct Level, ptrSCVert) == 0x178);
+#endif
 
+#if defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(sizeof(((struct Level *)0)->ptrModelsPtrArray) == sizeof(void *));
+CTR_STATIC_ASSERT(sizeof(((struct QuadBlock *)0)->pvs) == sizeof(void *));
+CTR_STATIC_ASSERT(sizeof(struct VisMemBspListNode) == 2 * sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct Level, ptrSCVert) % _Alignof(void *) == 0);
+#endif
 #endif
