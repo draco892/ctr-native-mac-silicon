@@ -2,12 +2,12 @@
 #include <string.h>
 #include <limits.h>
 
-struct KindLayout
+struct ResidentKindLayout
 {
 	size_t wire, host, alignment;
 };
 #define K(w, type) {w, sizeof(type), _Alignof(type)}
-static const struct KindLayout layouts[NR_KIND_COUNT] = {
+static const struct ResidentKindLayout Residentlayouts[NR_KIND_COUNT] = {
     [NR_BYTES] = K(1, u8),
     [NR_WORDS] = K(4, u32),
     [NR_MODEL] = K(0x18, struct Model),
@@ -44,26 +44,43 @@ static const struct KindLayout layouts[NR_KIND_COUNT] = {
     [NR_ANIMATIONS] = K(4, struct ModelAnim *),
     [NR_TEXTURES] = K(4, struct TextureLayout *),
     [NR_NAVS] = K(4, struct NavHeader *),
+    [NR_MPK] = K(4, struct NativeModelPack),
+    [NR_LEVEL] = K(500, struct Level),
+    [NR_HITBOX] = K(32, struct BSP),
+    [NR_SPAWN2_ROT] = K(8, struct SpawnType2),
+    [NR_ICONGROUP] = K(20, struct IconGroup),
+    [NR_ICONGROUPS] = K(4, struct IconGroup *),
+    [NR_BSPLINK] = K(8, struct VisMemBspListNode),
 };
 #undef K
-static int Overlap(const void *a, size_t na, const void *b, size_t nb)
+int NativeResident_Layout(enum NativeResidentKind kind, size_t *wire, size_t *host, size_t *alignment)
+{
+	if ((unsigned)kind >= NR_KIND_COUNT || !wire || !host || !alignment)
+		return 0;
+	*wire = Residentlayouts[kind].wire;
+	*host = Residentlayouts[kind].host;
+	*alignment = Residentlayouts[kind].alignment;
+	return 1;
+}
+static int ResidentOverlap(const void *a, size_t na, const void *b, size_t nb)
 {
 	uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
 	return na && nb && (x <= y ? y - x < na : x - y < nb);
 }
-static int Range(const struct NativeResidentContext *c, u32 offset, size_t bytes, void *out, size_t outBytes)
+static int ResidentRange(const struct NativeResidentContext *c, u32 offset, size_t bytes, void *out, size_t outBytes)
 {
 	if (!c || !c->map || !c->map->origin || c->map->originSize > UINT32_MAX || !out || (c->count && !c->bindings) || offset > c->map->originSize ||
-	    bytes > c->map->originSize - offset || Overlap(out, outBytes, c->map->origin, c->map->originSize) || c->count > SIZE_MAX / sizeof(*c->bindings) ||
-	    Overlap(out, outBytes, c->bindings, c->count * sizeof(*c->bindings)))
+	    bytes > c->map->originSize - offset || ResidentOverlap(out, outBytes, c->map->origin, c->map->originSize) ||
+	    c->count > SIZE_MAX / sizeof(*c->bindings) || ResidentOverlap(out, outBytes, c->bindings, c->count * sizeof(*c->bindings)))
 		return 0;
 	return 1;
 }
-static enum NativeAssetResult ResolveTarget(const struct NativeResidentContext *c, size_t target, enum NativeResidentKind kind, size_t count, void **out)
+static enum NativeAssetResult ResidentResolveTarget(const struct NativeResidentContext *c, size_t target, enum NativeResidentKind kind, size_t count,
+                                                    void **out)
 {
 	void *found = NULL;
 	*out = NULL;
-	if (kind >= NR_KIND_COUNT || target > c->map->originSize || count > (c->map->originSize - target) / layouts[kind].wire)
+	if (kind >= NR_KIND_COUNT || target > c->map->originSize || count > (c->map->originSize - target) / Residentlayouts[kind].wire)
 		return NATIVE_ASSET_INVALID_DATA;
 	for (size_t i = 0; i < c->count; i++)
 	{
@@ -71,45 +88,47 @@ static enum NativeAssetResult ResolveTarget(const struct NativeResidentContext *
 		if (b->kind != kind || target < b->offset)
 			continue;
 		size_t delta = target - b->offset;
-		if (delta % layouts[kind].wire)
+		if (delta % Residentlayouts[kind].wire)
 			continue;
-		size_t index = delta / layouts[kind].wire;
+		size_t index = delta / Residentlayouts[kind].wire;
 		if (index > b->count || count > b->count - index)
 			continue;
-		if (found || !b->resident || (uintptr_t)b->resident % layouts[kind].alignment || b->count > SIZE_MAX / layouts[kind].host ||
-		    b->offset > c->map->originSize || b->count > (c->map->originSize - b->offset) / layouts[kind].wire ||
-		    Overlap(b->resident, b->count * layouts[kind].host, c->map->origin, c->map->originSize))
+		if (found || !b->resident || (uintptr_t)b->resident % Residentlayouts[kind].alignment || b->count > SIZE_MAX / Residentlayouts[kind].host ||
+		    b->offset > c->map->originSize || b->count > (c->map->originSize - b->offset) / Residentlayouts[kind].wire ||
+		    ResidentOverlap(b->resident, b->count * Residentlayouts[kind].host, c->map->origin, c->map->originSize))
 			return NATIVE_ASSET_INVALID_DATA;
-		found = (u8 *)b->resident + index * layouts[kind].host;
+		found = (u8 *)b->resident + index * Residentlayouts[kind].host;
 	}
 	if (found)
 	{
 		*out = found;
 		return NATIVE_ASSET_OK;
 	}
+	if (c->materialize)
+		return c->materialize(c->owner, (u32)target, kind, count, out);
 	if (kind == NR_BYTES || kind == NR_WORDS)
 	{
-		if ((uintptr_t)(c->map->origin + target) % layouts[kind].alignment)
+		if ((uintptr_t)(c->map->origin + target) % Residentlayouts[kind].alignment)
 			return NATIVE_ASSET_INVALID_DATA;
 		*out = c->map->origin + target;
 		return NATIVE_ASSET_OK;
 	}
 	return NATIVE_ASSET_NOT_FOUND;
 }
-static enum NativeAssetResult Resolve(const struct NativeResidentContext *c, u32 slot, enum NativeResidentKind kind, size_t count, void **out)
+enum NativeAssetResult NativeResident_Resolve(const struct NativeResidentContext *c, u32 slot, enum NativeResidentKind kind, size_t count, void **out)
 {
 	void *wire = NULL;
 	*out = NULL;
-	if (kind >= NR_KIND_COUNT || count > SIZE_MAX / layouts[kind].wire)
+	if (kind >= NR_KIND_COUNT || count > SIZE_MAX / Residentlayouts[kind].wire)
 		return NATIVE_ASSET_INVALID_DATA;
-	enum NativePtrMapResult r = NativePtrMap_Resolve(c->map, slot, count * layouts[kind].wire, &wire);
+	enum NativePtrMapResult r = NativePtrMap_Resolve(c->map, slot, count * Residentlayouts[kind].wire, &wire);
 	if (r == NATIVE_PTRMAP_SLOT_NOT_FOUND && slot <= c->map->originSize && c->map->originSize - slot >= 4 && CTR_ReadU32LE(c->map->origin + slot) == 0)
 		return NATIVE_ASSET_OK;
 	if (r != NATIVE_PTRMAP_OK)
 		return NATIVE_ASSET_INVALID_DATA;
-	return ResolveTarget(c, (size_t)((u8 *)wire - c->map->origin), kind, count, out);
+	return ResidentResolveTarget(c, (size_t)((u8 *)wire - c->map->origin), kind, count, out);
 }
-static enum NativeAssetResult ResolveTerrain(const struct NativeResidentContext *c, u32 slot, void **out)
+static enum NativeAssetResult ResidentResolveTerrain(const struct NativeResidentContext *c, u32 slot, void **out)
 {
 	void *wire = NULL;
 	*out = NULL;
@@ -120,17 +139,17 @@ static enum NativeAssetResult ResolveTerrain(const struct NativeResidentContext 
 		return NATIVE_ASSET_INVALID_DATA;
 	size_t target = (size_t)((u8 *)wire - c->map->origin);
 	int animated = (target & 1) != 0;
-	enum NativeAssetResult result = ResolveTarget(c, target - (size_t)animated, animated ? NR_ANIMTEX : NR_ICONGROUP4, 1, out);
+	enum NativeAssetResult result = ResidentResolveTarget(c, target - (size_t)animated, animated ? NR_ANIMTEX : NR_ICONGROUP4, 1, out);
 	if (result == NATIVE_ASSET_OK && animated)
 		*out = (void *)((uintptr_t)*out | 1u);
 	return result;
 }
 
-struct Scalar
+struct ResidentScalar
 {
 	size_t wire, host, bytes, unit;
 };
-static void Scalars(const u8 *wire, void *out, const struct Scalar *s, size_t count)
+static void ResidentScalars(const u8 *wire, void *out, const struct ResidentScalar *s, size_t count)
 {
 	for (size_t i = 0; i < count; i++)
 		for (size_t j = 0; j < s[i].bytes; j += s[i].unit)
@@ -152,45 +171,51 @@ static void Scalars(const u8 *wire, void *out, const struct Scalar *s, size_t co
 		}
 }
 #define S(type, field, wire, unit) {wire, offsetof(struct type, field), sizeof(((struct type *)0)->field), unit}
-#define REF(field, slot, kind, count)                                                   \
-	do                                                                                  \
-	{                                                                                   \
-		void *ptr;                                                                      \
-		enum NativeAssetResult result = Resolve(c, offset + (slot), kind, count, &ptr); \
-		if (result != NATIVE_ASSET_OK)                                                  \
-			return result;                                                              \
-		temp.field = ptr;                                                               \
+#define REF(field, slot, kind, count)                                                                    \
+	do                                                                                                   \
+	{                                                                                                    \
+		void *ptr;                                                                                       \
+		enum NativeAssetResult result = NativeResident_Resolve(c, offset + (slot), kind, count, &ptr);   \
+		if (result != NATIVE_ASSET_OK)                                                                   \
+			return result;                                                                               \
+		temp.field = ptr;                                                                                \
+		if (c->pointerSlot)                                                                              \
+			c->pointerSlot(c->owner, (u8 *)out + ((u8 *)&temp.field - (u8 *)&temp), sizeof(temp.field)); \
 	} while (0)
-#define TERRAIN(field, slot)                                                      \
-	do                                                                            \
-	{                                                                             \
-		void *ptr;                                                                \
-		enum NativeAssetResult result = ResolveTerrain(c, offset + (slot), &ptr); \
-		if (result != NATIVE_ASSET_OK)                                            \
-			return result;                                                        \
-		temp.field = ptr;                                                         \
+#define TERRAIN(field, slot)                                                                             \
+	do                                                                                                   \
+	{                                                                                                    \
+		void *ptr;                                                                                       \
+		enum NativeAssetResult result = ResidentResolveTerrain(c, offset + (slot), &ptr);                \
+		if (result != NATIVE_ASSET_OK)                                                                   \
+			return result;                                                                               \
+		temp.field = ptr;                                                                                \
+		if (c->pointerSlot)                                                                              \
+			c->pointerSlot(c->owner, (u8 *)out + ((u8 *)&temp.field - (u8 *)&temp), sizeof(temp.field)); \
 	} while (0)
-#define ADDR(field, slot, kind, count)                                                  \
-	do                                                                                  \
-	{                                                                                   \
-		void *ptr;                                                                      \
-		enum NativeAssetResult result = Resolve(c, offset + (slot), kind, count, &ptr); \
-		if (result != NATIVE_ASSET_OK)                                                  \
-			return result;                                                              \
-		temp.field = (CtrRuntimeAddress)(uintptr_t)ptr;                                 \
+#define ADDR(field, slot, kind, count)                                                                   \
+	do                                                                                                   \
+	{                                                                                                    \
+		void *ptr;                                                                                       \
+		enum NativeAssetResult result = NativeResident_Resolve(c, offset + (slot), kind, count, &ptr);   \
+		if (result != NATIVE_ASSET_OK)                                                                   \
+			return result;                                                                               \
+		temp.field = (CtrRuntimeAddress)(uintptr_t)ptr;                                                  \
+		if (c->pointerSlot)                                                                              \
+			c->pointerSlot(c->owner, (u8 *)out + ((u8 *)&temp.field - (u8 *)&temp), sizeof(temp.field)); \
 	} while (0)
 
 enum NativeAssetResult NativeResident_DecodeModel(const struct NativeResidentContext *c, u32 offset, struct Model *out)
 {
-	if (!Range(c, offset, 24, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 24, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct Model temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(Model, name, 0x0, 1),
 	    S(Model, id, 0x10, 2),
 	    S(Model, numHeaders, 0x12, 2),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.numHeaders < 0)
 		return NATIVE_ASSET_INVALID_DATA;
 	REF(headers, 0x14, NR_MODEL_HEADER, (u16)temp.numHeaders);
@@ -202,17 +227,17 @@ enum NativeAssetResult NativeResident_DecodeModel(const struct NativeResidentCon
 
 enum NativeAssetResult NativeResident_DecodeModelHeader(const struct NativeResidentContext *c, u32 offset, struct ModelHeader *out)
 {
-	if (!Range(c, offset, 64, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 64, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct ModelHeader temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(ModelHeader, name, 0x0, 1),   S(ModelHeader, unk1, 0x10, 4),       S(ModelHeader, maxDistanceLOD, 0x14, 2), S(ModelHeader, flags, 0x16, 2),
 	    S(ModelHeader, scale, 0x18, 2), S(ModelHeader, _pad_scale, 0x1e, 2), S(ModelHeader, numAnimations, 0x34, 4),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	ADDR(ptrCommandList, 0x20, NR_WORDS, 1);
 	REF(ptrFrameData, 0x24, NR_FRAME, 1);
-	REF(ptrTexLayout, 0x28, NR_TEXTURES, 1);
+	REF(ptrTexLayout, 0x28, NR_TEXTURES, c->materialize ? 0 : 1);
 	REF(ptrColors, 0x2c, NR_WORDS, 1);
 	ADDR(unk3, 0x30, NR_WORDS, 1);
 	REF(ptrAnimations, 0x38, NR_ANIMATIONS, temp.numAnimations);
@@ -225,15 +250,15 @@ enum NativeAssetResult NativeResident_DecodeModelHeader(const struct NativeResid
 
 enum NativeAssetResult NativeResident_DecodeModelAnim(const struct NativeResidentContext *c, u32 offset, struct ModelAnim *out)
 {
-	if (!Range(c, offset, 24, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 24, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct ModelAnim temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(ModelAnim, name, 0x0, 1),
 	    S(ModelAnim, numFrames, 0x10, 2),
 	    S(ModelAnim, frameSize, 0x12, 2),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.frameSize < 0)
 		return NATIVE_ASSET_INVALID_DATA;
 	REF(ptrDeltaArray, 0x14, NR_WORDS, 1);
@@ -243,14 +268,14 @@ enum NativeAssetResult NativeResident_DecodeModelAnim(const struct NativeResiden
 
 enum NativeAssetResult NativeResident_DecodeInstDef(const struct NativeResidentContext *c, u32 offset, struct InstDef *out)
 {
-	if (!Range(c, offset, 64, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 64, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct InstDef temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(InstDef, name, 0x0, 1),   S(InstDef, scale, 0x14, 2), S(InstDef, _pad_scale, 0x1a, 2), S(InstDef, colorRGBA, 0x1c, 4), S(InstDef, flags, 0x20, 4),
 	    S(InstDef, unk24, 0x24, 4), S(InstDef, unk28, 0x28, 4), S(InstDef, pos, 0x30, 2),        S(InstDef, rot, 0x36, 2),       S(InstDef, modelID, 0x3c, 4),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	REF(model, 0x10, NR_MODEL, 1);
 	*out = temp;
 	return NATIVE_ASSET_OK;
@@ -258,14 +283,14 @@ enum NativeAssetResult NativeResident_DecodeInstDef(const struct NativeResidentC
 
 enum NativeAssetResult NativeResident_DecodeMesh(const struct NativeResidentContext *c, u32 offset, struct mesh_info *out)
 {
-	if (!Range(c, offset, 32, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 32, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct mesh_info temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(mesh_info, numQuadBlock, 0x0, 4), S(mesh_info, numVertex, 0x4, 4),    S(mesh_info, unk1, 0x8, 4),
 	    S(mesh_info, unk2, 0x14, 4),        S(mesh_info, numBspNodes, 0x1c, 4),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.numQuadBlock < 0 || temp.numVertex < 0 || temp.numBspNodes < 0)
 		return NATIVE_ASSET_INVALID_DATA;
 	REF(ptrQuadBlockArray, 0xc, NR_QUAD, (u32)temp.numQuadBlock);
@@ -283,7 +308,7 @@ enum NativeAssetResult NativeResident_DecodeMesh(const struct NativeResidentCont
 
 enum NativeAssetResult NativeResident_DecodeWater(const struct NativeResidentContext *c, u32 offset, struct WaterVert *out)
 {
-	if (!Range(c, offset, 8, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 8, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct WaterVert temp = {0};
 	REF(v, 0x0, NR_VERTEX, 1);
@@ -294,15 +319,15 @@ enum NativeAssetResult NativeResident_DecodeWater(const struct NativeResidentCon
 
 enum NativeAssetResult NativeResident_DecodeSC(const struct NativeResidentContext *c, u32 offset, struct SCVert *out)
 {
-	if (!Range(c, offset, 16, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 16, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct SCVert temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(SCVert, offset_pos_xy, 0x4, 4),
 	    S(SCVert, offset_pos_zw, 0x8, 4),
 	    S(SCVert, offset_color_rgba, 0xc, 4),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	REF(v, 0x0, NR_VERTEX, 1);
 	*out = temp;
 	return NATIVE_ASSET_OK;
@@ -310,44 +335,53 @@ enum NativeAssetResult NativeResident_DecodeSC(const struct NativeResidentContex
 
 enum NativeAssetResult NativeResident_DecodePVS(const struct NativeResidentContext *c, u32 offset, struct PVS *out)
 {
-	if (!Range(c, offset, 16, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 16, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct PVS temp = {0};
-	REF(visLeafSrc, 0x0, NR_WORDS, 1);
-	REF(visFaceSrc, 0x4, NR_WORDS, 1);
+	REF(visLeafSrc, 0x0, NR_BYTES, 1);
+	REF(visFaceSrc, 0x4, NR_BYTES, 1);
 	REF(visInstSrc, 0x8, NR_INSTDEFS, 1);
-	REF(visExtraSrc, 0xc, NR_WORDS, 1);
+	REF(visExtraSrc, 0xc, NR_BYTES, 1);
 	*out = temp;
 	return NATIVE_ASSET_OK;
 }
 
 enum NativeAssetResult NativeResident_DecodeNavHeader(const struct NativeResidentContext *c, u32 offset, struct NavHeader *out)
 {
-	if (!Range(c, offset, 76, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 76, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct NavHeader temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(NavHeader, magicNumber, 0x0, 2), S(NavHeader, numPoints, 0x2, 2),  S(NavHeader, posY_firstNode, 0x4, 4),
 	    S(NavHeader, rampPhys1, 0xc, 2),   S(NavHeader, rampPhys2, 0x2c, 2),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.numPoints < 0)
 		return NATIVE_ASSET_INVALID_DATA;
-	REF(last, 0x8, NR_NAVFRAME, 1);
+	// Retail nav 'last' is runtime scratch when absent from PTR, and can
+	// contain a stale PS1 address. Only an explicit relocation is meaningful.
+	void *wireLast = NULL;
+	enum NativePtrMapResult lastResult = NativePtrMap_Resolve(c->map, offset + 8, 0, &wireLast);
+	if (lastResult == NATIVE_PTRMAP_OK)
+	{
+		REF(last, 0x8, NR_NAVFRAME, 0);
+	}
+	else if (lastResult != NATIVE_PTRMAP_SLOT_NOT_FOUND)
+		return NATIVE_ASSET_INVALID_DATA;
 	*out = temp;
 	return NATIVE_ASSET_OK;
 }
 
 enum NativeAssetResult NativeResident_DecodeSkybox(const struct NativeResidentContext *c, u32 offset, struct Skybox *out)
 {
-	if (!Range(c, offset, 56, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 56, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct Skybox temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(Skybox, numVertex, 0x0, 4),
 	    S(Skybox, numFaces, 0x8, 2),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.numVertex < 0)
 		return NATIVE_ASSET_INVALID_DATA;
 	REF(ptrVertex, 0x4, NR_SHORT_VERTEX, (u32)temp.numVertex);
@@ -399,13 +433,13 @@ enum NativeAssetResult NativeResident_DecodeSkybox(const struct NativeResidentCo
 
 enum NativeAssetResult NativeResident_DecodeSpawnPosRot(const struct NativeResidentContext *c, u32 offset, struct SpawnType2 *out)
 {
-	if (!Range(c, offset, 8, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 8, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct SpawnType2 temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(SpawnType2, numCoords, 0x0, 4),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.numCoords < 0)
 		return NATIVE_ASSET_INVALID_DATA;
 	REF(coords.posRot, 0x4, NR_POSROT, (u32)temp.numCoords);
@@ -417,10 +451,10 @@ enum NativeAssetResult NativeResident_DecodeSpawnPosRot(const struct NativeResid
 
 enum NativeAssetResult NativeResident_DecodeQuad(const struct NativeResidentContext *c, u32 offset, struct QuadBlock *out)
 {
-	if (!Range(c, offset, 92, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 92, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct QuadBlock temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(QuadBlock, index, 0x0, 2),
 	    S(QuadBlock, quadFlags, 0x12, 2),
 	    S(QuadBlock, draw_order_low, 0x14, 4),
@@ -435,7 +469,7 @@ enum NativeAssetResult NativeResident_DecodeQuad(const struct NativeResidentCont
 	    S(QuadBlock, triNormalVecBitShift, 0x3f, 1),
 	    S(QuadBlock, triNormalVecDividend, 0x48, 2),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	TERRAIN(ptr_texture_mid[0], 0x1c);
 	TERRAIN(ptr_texture_mid[1], 0x20);
 	TERRAIN(ptr_texture_mid[2], 0x24);
@@ -448,10 +482,10 @@ enum NativeAssetResult NativeResident_DecodeQuad(const struct NativeResidentCont
 
 enum NativeAssetResult NativeResident_DecodeLevel(const struct NativeResidentContext *c, u32 offset, struct Level *out)
 {
-	if (!Range(c, offset, 500, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 500, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct Level temp = {0};
-	static const struct Scalar fields[] = {
+	static const struct ResidentScalar fields[] = {
 	    S(Level, numInstances, 0xc, 4),
 	    S(Level, numModels, 0x14, 4),
 	    S(Level, numWaterVertices, 0x34, 4),
@@ -496,7 +530,7 @@ enum NativeAssetResult NativeResident_DecodeLevel(const struct NativeResidentCon
 	    S(Level, glowGradient[2].colorFrom, 0x64, 4),
 	    S(Level, glowGradient[2].colorTo, 0x68, 4),
 	};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	if (temp.numWaterVertices < 0 || temp.numSpawnType2 < 0 || temp.numSpawnType2_PosRot < 0 || temp.cnt_restart_points < 0 || temp.numSCVert < 0)
 		return NATIVE_ASSET_INVALID_DATA;
 	REF(ptr_mesh_info, 0x0, NR_MESH, 1);
@@ -507,7 +541,7 @@ enum NativeAssetResult NativeResident_DecodeLevel(const struct NativeResidentCon
 	REF(unk3, 0x1c, NR_BYTES, 1);
 	REF(unk4, 0x20, NR_BYTES, 1);
 	REF(ptrInstDefPtrArray, 0x24, NR_INSTDEFS, 1);
-	REF(visOVertSrc, 0x28, NR_WORDS, 1);
+	REF(visOVertSrc, 0x28, NR_BYTES, 1);
 	REF(null1, 0x2c, NR_BYTES, 1);
 	REF(null2, 0x30, NR_BYTES, 1);
 	REF(ptr_water, 0x38, NR_WATER, (u32)temp.numWaterVertices);
@@ -522,9 +556,9 @@ enum NativeAssetResult NativeResident_DecodeLevel(const struct NativeResidentCon
 	REF(build_type, 0xe8, NR_BYTES, 1);
 	REF(ptrSpawnType1, 0x134, NR_SPAWN1, 1);
 	REF(ptrSpawnType2, 0x13c, NR_SPAWN2, (u32)temp.numSpawnType2);
-	REF(ptrSpawnType2_PosRot, 0x144, NR_SPAWN2, (u32)temp.numSpawnType2_PosRot);
+	REF(ptrSpawnType2_PosRot, 0x144, NR_SPAWN2_ROT, (u32)temp.numSpawnType2_PosRot);
 	REF(ptr_restart_points, 0x14c, NR_CHECKPOINT, (u32)temp.cnt_restart_points);
-	REF(visSCVertSrc, 0x170, NR_WORDS, 1);
+	REF(visSCVertSrc, 0x170, NR_BYTES, 1);
 	REF(ptrSCVert, 0x178, NR_SC, (u32)temp.numSCVert);
 	REF(LevNavTable, 0x188, NR_NAVS, 1);
 	REF(visMem, 0x190, NR_VISMEM, 1);
@@ -549,7 +583,7 @@ enum NativeAssetResult NativeResident_DecodeLevel(const struct NativeResidentCon
 // The two spawn arrays have the same wire header and different element types.
 enum NativeAssetResult NativeResident_DecodeSpawnPositions(const struct NativeResidentContext *c, u32 offset, struct SpawnType2 *out)
 {
-	if (!Range(c, offset, 8, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 8, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct SpawnType2 temp = {0};
 	temp.numCoords = (s32)CTR_ReadU32LE(c->map->origin + offset);
@@ -565,32 +599,32 @@ enum NativeAssetResult NativeResident_DecodeSpawnPositions(const struct NativeRe
 // branch/leaf discriminator. Caller chooses the decoder from its owning field.
 enum NativeAssetResult NativeResident_DecodeBspHitbox(const struct NativeResidentContext *c, u32 offset, struct BSP *out)
 {
-	if (!Range(c, offset, 32, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 32, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct BSP temp = {0};
-	static const struct Scalar fields[] = {S(BSP, flag, 0, 2),
-	                                       S(BSP, id, 2, 2),
-	                                       S(BSP, box, 4, 2),
-	                                       S(BSP, data.hitbox.center, 16, 2),
-	                                       S(BSP, data.hitbox.radius, 22, 2),
-	                                       S(BSP, data.hitbox.unk18, 24, 2),
-	                                       S(BSP, data.hitbox.unk1A, 26, 2)};
-	Scalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
+	static const struct ResidentScalar fields[] = {S(BSP, flag, 0, 2),
+	                                               S(BSP, id, 2, 2),
+	                                               S(BSP, box, 4, 2),
+	                                               S(BSP, data.hitbox.center, 16, 2),
+	                                               S(BSP, data.hitbox.radius, 22, 2),
+	                                               S(BSP, data.hitbox.unk18, 24, 2),
+	                                               S(BSP, data.hitbox.unk1A, 26, 2)};
+	ResidentScalars(c->map->origin + offset, &temp, fields, sizeof(fields) / sizeof(*fields));
 	REF(data.hitbox.instDef, 28, NR_INSTDEF, 1);
 	*out = temp;
 	return NATIVE_ASSET_OK;
 }
 enum NativeAssetResult NativeResident_DecodeBsp(const struct NativeResidentContext *c, u32 offset, struct BSP *out)
 {
-	if (!Range(c, offset, 32, out, sizeof(*out)))
+	if (!ResidentRange(c, offset, 32, out, sizeof(*out)))
 		return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct BSP temp = {0};
-	static const struct Scalar common[] = {S(BSP, flag, 0, 2), S(BSP, id, 2, 2), S(BSP, box, 4, 2)};
-	Scalars(c->map->origin + offset, &temp, common, sizeof(common) / sizeof(*common));
+	static const struct ResidentScalar common[] = {S(BSP, flag, 0, 2), S(BSP, id, 2, 2), S(BSP, box, 4, 2)};
+	ResidentScalars(c->map->origin + offset, &temp, common, sizeof(common) / sizeof(*common));
 	if (!(temp.flag & BSP_NODE_FLAG_LEAF))
 	{
-		static const struct Scalar fields[] = {S(BSP, data.branch.axis, 16, 2), S(BSP, data.branch.childID, 24, 2)};
-		Scalars(c->map->origin + offset, &temp, fields, 2);
+		static const struct ResidentScalar fields[] = {S(BSP, data.branch.axis, 16, 2), S(BSP, data.branch.childID, 24, 2)};
+		ResidentScalars(c->map->origin + offset, &temp, fields, 2);
 	}
 	else
 	{
@@ -598,7 +632,7 @@ enum NativeAssetResult NativeResident_DecodeBsp(const struct NativeResidentConte
 		temp.data.leaf.numQuads = (s32)CTR_ReadU32LE(c->map->origin + offset + 24);
 		if (temp.data.leaf.numQuads < 0)
 			return NATIVE_ASSET_INVALID_DATA;
-		REF(data.leaf.bspHitboxArray, 20, NR_BSP, 1);
+		REF(data.leaf.bspHitboxArray, 20, NR_HITBOX, c->materialize ? 0 : 1);
 		REF(data.leaf.ptrQuadBlockArray, 28, NR_QUAD, (u32)temp.data.leaf.numQuads);
 		if (temp.data.leaf.numQuads && !temp.data.leaf.ptrQuadBlockArray)
 			return NATIVE_ASSET_INVALID_DATA;

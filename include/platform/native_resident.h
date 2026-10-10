@@ -16,6 +16,12 @@
 #include <namespace_Vehicle.h>
 #include <platform/native_asset_readers.h>
 
+struct NativeModelPack
+{
+	struct LevTexLookup *icons;
+	struct Model *models[];
+};
+
 // Pointer-bearing retail records are byte sequences, never resident arrays.
 #define CTR_WIRE_RECORD(name, size) \
 	struct name                     \
@@ -79,6 +85,13 @@ enum NativeResidentKind
 	NR_ANIMATIONS,
 	NR_TEXTURES,
 	NR_NAVS,
+	NR_MPK,
+	NR_LEVEL,
+	NR_HITBOX,
+	NR_SPAWN2_ROT,
+	NR_ICONGROUP,
+	NR_ICONGROUPS,
+	NR_BSPLINK,
 	NR_KIND_COUNT
 };
 
@@ -100,7 +113,14 @@ struct NativeResidentContext
 	const struct NativePtrMapView *map;
 	const struct NativeResidentBinding *bindings;
 	size_t count;
+	// Optional graph owner: allocate a missing typed binding, without decoding
+	// or publishing it. NULL retains the allocation-free record API.
+	enum NativeAssetResult (*materialize)(void *, u32, enum NativeResidentKind, size_t, void **);
+	void *owner;
+	void (*pointerSlot)(void *owner, void *slot, size_t width);
 };
+int NativeResident_Layout(enum NativeResidentKind, size_t *wire, size_t *host, size_t *alignment);
+enum NativeAssetResult NativeResident_Resolve(const struct NativeResidentContext *, u32 slot, enum NativeResidentKind, size_t, void **);
 
 // Header/record materialization only: no allocations, publications or PTR
 // patching. Little-endian scalar fields are decoded explicitly. Typed nested

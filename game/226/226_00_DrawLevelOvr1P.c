@@ -1,4 +1,24 @@
 #include <common.h>
+#ifdef CTR_NATIVE
+#include <platform/native_scene_assets.h>
+#endif
+
+static u32 DrawLevelOvr1P_EncodeOt(const u32 *ot)
+{
+#ifdef CTR_NATIVE
+	return NativeGpuLinks_FromHostPointer(ot);
+#else
+	return (u32)(CtrRuntimeAddress)ot;
+#endif
+}
+static u32 *DrawLevelOvr1P_DecodeOt(u32 token)
+{
+#ifdef CTR_NATIVE
+	return NativeGpuLinks_ToHostPointer(token);
+#else
+	return (u32 *)(CtrRuntimeAddress)token;
+#endif
+}
 
 struct DrawLevelOvr1PFaceSelector
 {
@@ -214,7 +234,7 @@ static void Ovr226_800a0d34_SetEntryGteAndCameraScratch(struct PushBuffer *pb);
 
 static struct DrawLevelOvr1PStableScratch *DrawLevelOvr1P_Scratch(void)
 {
-	return CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PStableScratch, 0);
+	return CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PStableScratch, 0);
 }
 
 static struct MainRenderLevelGeometryScratch *DrawLevelOvr1P_RenderScratch(void)
@@ -224,13 +244,13 @@ static struct MainRenderLevelGeometryScratch *DrawLevelOvr1P_RenderScratch(void)
 
 static u32 *DrawLevelOvr1P_TerminalReturnPcScratch(void)
 {
-	return CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_TERMINAL_RETURN_PC_OFFSET);
+	return CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_TERMINAL_RETURN_PC_OFFSET);
 }
 
 static struct DrawLevelOvr1PScratchVertex *DrawLevelOvr1P_TerminalClipVertex(int index)
 {
-	return CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex,
-	                          DRAW_LEVEL_OVR1P_TERMINAL_CLIP_VERTEX_OFFSET + (index * (int)sizeof(struct DrawLevelOvr1PScratchVertex)));
+	return CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex,
+	                            DRAW_LEVEL_OVR1P_TERMINAL_CLIP_VERTEX_OFFSET + (index * (int)sizeof(struct DrawLevelOvr1PScratchVertex)));
 }
 
 static void DrawLevelOvr1P_SetActiveDrawOrderLow(const struct QuadBlock *block)
@@ -245,7 +265,7 @@ static u32 DrawLevelOvr1P_GetActiveDrawOrderLow(void)
 
 static void DrawLevelOvr1P_CopyScratchWords(const u32 *source, const struct DrawLevelOvrBucketSetupCopy *copy)
 {
-	u32 *scratch = CTR_SCRATCHPAD_PTR(u32, copy->scratchOffset);
+	u32 *scratch = CTR_TERRAIN_WORK_PTR(u32, copy->scratchOffset);
 
 	for (u32 scratchWordIndex = 0; scratchWordIndex <= copy->lastWordIndex; scratchWordIndex++)
 	{
@@ -255,7 +275,7 @@ static void DrawLevelOvr1P_CopyScratchWords(const u32 *source, const struct Draw
 
 static void Ovr226_800ab3dc_CopyClipRecordJumpTable(void)
 {
-	u32 *clipRecordJumpTable = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET);
+	u32 *clipRecordJumpTable = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET);
 
 	for (s32 jumpWordIndex = 0; jumpWordIndex < OVR226_CLIP_RECORD_JUMP_WORD_COUNT; jumpWordIndex++)
 	{
@@ -285,7 +305,7 @@ static const struct DrawLevelOvrBucketSetupRecord *DrawLevelOvr1P_FindBucketSetu
 
 static void Ovr226_800a0ddc_CopyScratchInitTable(void)
 {
-	u32 *scratch = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET);
+	u32 *scratch = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET);
 
 	for (s32 scratchWordIndex = 0; scratchWordIndex < OVR226_SCRATCH_INIT_WORD_COUNT; scratchWordIndex++)
 	{
@@ -312,7 +332,7 @@ static u32 DrawLevelOvr1P_Select4x1ProjectedTableWord(const struct QuadBlock *bl
 
 	u32 tableIndex = (DrawLevelOvr1P_GetActiveDrawOrderLow() >> selector->drawOrderShift) & 0x1f;
 
-	return *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET + (int)(tableIndex * sizeof(u32)));
+	return *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET + (int)(tableIndex * sizeof(u32)));
 }
 
 static u32 DrawLevelOvr1P_Select4x1ProjectedIndices(const struct QuadBlock *block, const struct DrawLevelOvr1PFaceSelector *selector, int *indices)
@@ -346,7 +366,7 @@ static u32 DrawLevelOvr1P_GetGridFaceSlotWord(const struct DrawLevelOvr1PScratch
 	return DrawLevelOvr1P_ReadPackedWord((const u8 *)projected + 0xb4);
 }
 
-static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointer(u32 texturePtr)
+static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointer(CtrRuntimeAddress texturePtr)
 {
 	if (texturePtr == 0)
 	{
@@ -363,7 +383,7 @@ static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointer(u32 texturePtr
 
 static struct TextureLayout *DrawLevelOvr1P_ResolveMidTexture(const struct QuadBlock *block, int faceIndex)
 {
-	return DrawLevelOvr1P_ResolveTexturePointer((u32)block->ptr_texture_mid[faceIndex]);
+	return DrawLevelOvr1P_ResolveTexturePointer((CtrRuntimeAddress)block->ptr_texture_mid[faceIndex]);
 }
 
 static int DrawLevelOvr1P_IsPlausibleTextureLayout(const struct TextureLayout *texture)
@@ -379,15 +399,15 @@ static int DrawLevelOvr1P_IsPlausibleTextureLayout(const struct TextureLayout *t
 #ifdef CTR_NATIVE
 // NOTE(aalhendi): Native data-boundary shim. Retail ptrmap leaves PSX address
 // words in level data; native level loads store host-rebased pointers instead.
-static int DrawLevelOvr1P_MempackContains(const struct Mempack *pack, u32 ptr, u32 *span)
+static int DrawLevelOvr1P_MempackContains(const struct Mempack *pack, CtrRuntimeAddress ptr, size_t *span)
 {
-	u32 start = (u32)pack->start;
+	CtrRuntimeAddress start = (CtrRuntimeAddress)pack->start;
 	if ((start == 0) || (pack->packSize <= 0))
 	{
 		return 0;
 	}
 
-	u32 end = start + (u32)pack->packSize;
+	CtrRuntimeAddress end = start + (size_t)pack->packSize;
 
 	if ((end < start) || (ptr < start) || (ptr >= end))
 	{
@@ -402,10 +422,10 @@ static int DrawLevelOvr1P_MempackContains(const struct Mempack *pack, u32 ptr, u
 	return 1;
 }
 
-static const struct Mempack *DrawLevelOvr1P_FindMempackContaining(u32 ptr)
+static const struct Mempack *DrawLevelOvr1P_FindMempackContaining(CtrRuntimeAddress ptr)
 {
 	const struct Mempack *bestPack = NULL;
-	u32 bestSpan = UINTPTR_MAX;
+	size_t bestSpan = SIZE_MAX;
 	struct GameTracker *gGT = sdata->gGT;
 
 	// PtrMempack can point at inactive mask/podium loads while level1 renders.
@@ -419,7 +439,7 @@ static const struct Mempack *DrawLevelOvr1P_FindMempackContaining(u32 ptr)
 	for (s32 packIndex = 0; packIndex < 4; packIndex++)
 	{
 		const struct Mempack *pack = &sdata->mempack[packIndex];
-		u32 span;
+		size_t span;
 
 		if (DrawLevelOvr1P_MempackContains(pack, ptr, &span))
 		{
@@ -434,8 +454,10 @@ static const struct Mempack *DrawLevelOvr1P_FindMempackContaining(u32 ptr)
 	return bestPack;
 }
 
-static int DrawLevelOvr1P_IsNativeLevelSpan(u32 ptr, u32 size)
+static int DrawLevelOvr1P_IsNativeLevelSpan(CtrRuntimeAddress ptr, size_t size)
 {
+	if (NativeSceneAssets_Contains(&gNativeSceneAssets, (void *)ptr, size))
+		return 1;
 	if (size == 0)
 	{
 		return 0;
@@ -447,36 +469,57 @@ static int DrawLevelOvr1P_IsNativeLevelSpan(u32 ptr, u32 size)
 		return 0;
 	}
 
-	u32 end = ptr + size;
+	CtrRuntimeAddress end = ptr + size;
 	if (end < ptr)
 	{
 		return 0;
 	}
 
-	u32 span;
+	size_t span;
 	if (!DrawLevelOvr1P_MempackContains(pack, ptr, &span))
 	{
 		return 0;
 	}
 
-	return end <= (u32)pack->start + span;
+	return end <= (CtrRuntimeAddress)pack->start + span;
 }
 
 #endif
 
-static int DrawLevelOvr1P_IsNativeLevelTexturePointer(u32 value)
+static u32 DrawLevelOvr1P_SeedMosaic(const struct TextureLayout *texture)
+{
+	u32 word = DrawLevelOvr1P_ReadPackedWord((const u8 *)texture + 0x24);
+#ifdef CTR_NATIVE
+	void *target = NULL;
+	// The optional mosaic reference remains a wire offset in the copied asset.
+	// It must be resolved through PTR, never truncated into a host address.
+	NativeSceneAssets_ResolveWireSlot(&gNativeSceneAssets, (const u8 *)texture + 0x24, sizeof(struct TextureLayout), &target);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->mosaicTextureWord, target);
+#endif
+	DrawLevelOvr1P_Scratch()->mosaicTextureWord = word;
+	return word;
+}
+static CtrRuntimeAddress DrawLevelOvr1P_MosaicAddress(void)
+{
+#ifdef CTR_NATIVE
+	return NativeTerrainWork_LoadAddress(&DrawLevelOvr1P_Scratch()->mosaicTextureWord);
+#else
+	return DrawLevelOvr1P_Scratch()->mosaicTextureWord;
+#endif
+}
+static int DrawLevelOvr1P_IsNativeLevelTexturePointer(CtrRuntimeAddress value)
 {
 #ifdef CTR_NATIVE
 	// NOTE(aalhendi): Native classifies host-rebased level texture pointers at
 	// the data boundary; renderer control flow still follows retail sign tests.
-	u32 ptr = (u32)value;
+	CtrRuntimeAddress ptr = value;
 
 	if (!DrawLevelOvr1P_IsNativeLevelSpan(ptr, sizeof(struct TextureLayout)))
 	{
 		return 0;
 	}
 
-	return DrawLevelOvr1P_IsPlausibleTextureLayout((const struct TextureLayout *)ptr);
+	return DrawLevelOvr1P_IsPlausibleTextureLayout((const struct TextureLayout *)(CtrRuntimeAddress)ptr);
 #else
 	(void)value;
 	return 0;
@@ -485,7 +528,11 @@ static int DrawLevelOvr1P_IsNativeLevelTexturePointer(u32 value)
 
 static int DrawLevelOvr1P_TreatAsRetailNegativeTextureWord(u32 value)
 {
-	return (s32)value < 0 || DrawLevelOvr1P_IsNativeLevelTexturePointer(value);
+#ifdef CTR_NATIVE
+	return (s32)value < 0 || DrawLevelOvr1P_MosaicAddress() != 0;
+#else
+	return (s32)value < 0;
+#endif
 }
 
 static int DrawLevelOvr1P_IsRetailOtActiveSlotWord(u32 slotWord)
@@ -506,24 +553,24 @@ static u32 DrawLevelOvr1P_GetProjectedOtSlotWord(const struct DrawLevelOvr1PScra
 }
 
 #ifdef CTR_NATIVE
-static int DrawLevelOvr1P_TryConvertNativeMempackPointerToPsxWord(u32 hostWord, u32 *psxWord)
+static int DrawLevelOvr1P_TryConvertNativeMempackPointerToPsxWord(CtrRuntimeAddress hostWord, u32 *psxWord)
 {
 	const u32 psxRamBase = 0x80000000u;
 	const u32 psxRamSize = 0x200000u;
-	u32 hostPtr = (u32)hostWord;
+	CtrRuntimeAddress hostPtr = hostWord;
 	const struct Mempack *pack = DrawLevelOvr1P_FindMempackContaining(hostPtr);
 	if (pack == NULL || pack->endOfMemory == NULL)
 	{
 		return 0;
 	}
 
-	u32 hostEnd = (u32)pack->endOfMemory;
+	CtrRuntimeAddress hostEnd = (CtrRuntimeAddress)pack->endOfMemory;
 	if (hostEnd < psxRamSize)
 	{
 		return 0;
 	}
 
-	u32 hostBase = hostEnd - psxRamSize;
+	CtrRuntimeAddress hostBase = hostEnd - psxRamSize;
 	if (hostPtr < hostBase || hostPtr >= hostEnd)
 	{
 		return 0;
@@ -534,7 +581,7 @@ static int DrawLevelOvr1P_TryConvertNativeMempackPointerToPsxWord(u32 hostWord, 
 }
 #endif
 
-static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointerChecked(u32 texturePtr)
+static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointerChecked(CtrRuntimeAddress texturePtr)
 {
 #ifdef CTR_NATIVE
 	struct TextureLayout *texture;
@@ -546,7 +593,7 @@ static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointerChecked(u32 tex
 
 	if ((texturePtr & 1) != 0)
 	{
-		u32 activePtrSlot = texturePtr - 1;
+		CtrRuntimeAddress activePtrSlot = texturePtr - 1;
 
 		if (!DrawLevelOvr1P_IsNativeLevelSpan(activePtrSlot, sizeof(texture)))
 		{
@@ -560,7 +607,7 @@ static struct TextureLayout *DrawLevelOvr1P_ResolveTexturePointerChecked(u32 tex
 		texture = (struct TextureLayout *)texturePtr;
 	}
 
-	if (!DrawLevelOvr1P_IsNativeLevelSpan((u32)texture, sizeof(*texture)))
+	if (!DrawLevelOvr1P_IsNativeLevelSpan((CtrRuntimeAddress)texture, sizeof(*texture)))
 	{
 		return NULL;
 	}
@@ -577,7 +624,11 @@ static s8 DrawLevelOvr1P_ReadRetailQuadBlockByte(const struct QuadBlock *block, 
 	if (byteOffset >= 0x1c && byteOffset < 0x2c)
 	{
 		u32 pointerWordOffset = byteOffset & ~3u;
+#if CTR_NATIVE_HOST64
+		CtrRuntimeAddress hostWord = (CtrRuntimeAddress)block->ptr_texture_mid[(pointerWordOffset - 0x1c) / 4];
+#else
 		u32 hostWord = DrawLevelOvr1P_ReadPackedWord((const u8 *)block + pointerWordOffset);
+#endif
 		u32 psxWord;
 
 		// NOTE(aalhendi): Retail reads raw post-ptrmap PSX pointer bytes here;
@@ -607,7 +658,13 @@ static struct TextureLayout *DrawLevelOvr1P_ResolveProjectedMidTexture(const str
 
 	// NOTE(aalhendi): Retail selector bodies load raw `quad+0x1c+slot`.
 	// Native validates the host-rebased word before following it.
-	return DrawLevelOvr1P_ResolveTexturePointerChecked((u32) * (void *const *)((const u8 *)block + 0x1c + slotWord));
+#if CTR_NATIVE_HOST64
+	if (slotWord >= 4 * sizeof(u32))
+		return NULL;
+	return DrawLevelOvr1P_ResolveTexturePointerChecked((CtrRuntimeAddress)block->ptr_texture_mid[slotWord / 4]);
+#else
+	return DrawLevelOvr1P_ResolveTexturePointerChecked((CtrRuntimeAddress) * (void *const *)((const u8 *)block + 0x1c + slotWord));
+#endif
 }
 
 static struct TextureLayout *DrawLevelOvr1P_GetProjectedMidTexture(const struct QuadBlock *block, const struct DrawLevelOvr1PScratchVertex *projected,
@@ -628,7 +685,7 @@ static struct TextureLayout *DrawLevelOvr1P_GetProjectedMidTexture(const struct 
 		return NULL;
 	}
 
-	u32 mosaicWord = DrawLevelOvr1P_ReadPackedWord((const u8 *)texture + 0x24);
+	u32 mosaicWord = DrawLevelOvr1P_SeedMosaic(texture);
 
 	// NOTE(aalhendi): Retail stores texture+0x24 at scratch 0x84 for the
 	// deepest-frame UV reload path.
@@ -824,17 +881,17 @@ static void DrawLevelOvr1P_PrepareDeepestMosaicUv(const struct DrawLevelOvr1PScr
 {
 	u32 reloadSpan;
 
-	if (projected != CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET))
+	if (projected != CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET))
 	{
 		return;
 	}
 
-	u32 mosaicBase = DrawLevelOvr1P_Scratch()->mosaicTextureWord;
+	CtrRuntimeAddress mosaicBase = DrawLevelOvr1P_MosaicAddress();
 #ifdef CTR_NATIVE
 	// NOTE(aalhendi): Retail uses scratch 0x84 directly. Native can inherit
 	// host-rebased pointer words when a wide slot preserves texture state, so
 	// only dereference values that are valid level texture data.
-	if (mosaicBase == 0 || ((s32)mosaicBase < 0 && !DrawLevelOvr1P_IsNativeLevelTexturePointer(mosaicBase)))
+	if (mosaicBase == 0 || !DrawLevelOvr1P_IsNativeLevelTexturePointer(mosaicBase))
 	{
 		DrawLevelOvr1P_RestoreProjectedUvScratch();
 		return;
@@ -855,14 +912,21 @@ static void DrawLevelOvr1P_PrepareDeepestMosaicUv(const struct DrawLevelOvr1PScr
 		return;
 	}
 
-	u32 sourceOffset = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_INDEX_OFFSET) << 1;
+	u32 sourceOffset = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_INDEX_OFFSET) << 1;
 	if ((s32)(DrawLevelOvr1P_Scratch()->selected4x1TableWord << 8) < 0)
 	{
 		sourceOffset += reloadSpan;
 	}
-	sourceOffset += *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_BIAS_OFFSET);
+	sourceOffset += *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_BIAS_OFFSET);
 
-	const u8 *source = (const u8 *)(u32)(mosaicBase + sourceOffset);
+#ifdef CTR_NATIVE
+	if (sourceOffset > UINTPTR_MAX - mosaicBase || !DrawLevelOvr1P_IsNativeLevelSpan(mosaicBase + sourceOffset, 8))
+	{
+		DrawLevelOvr1P_RestoreProjectedUvScratch();
+		return;
+	}
+#endif
+	const u8 *source = (const u8 *)(CtrRuntimeAddress)(mosaicBase + sourceOffset);
 	u32 uv0 = DrawLevelOvr1P_ReadPackedWord(source + 0);
 	u32 uv1 = DrawLevelOvr1P_ReadPackedWord(source + 4);
 
@@ -917,7 +981,7 @@ static u32 DrawLevelOvr1P_GetDefaultGridFaceSlotWord(u32 handlerAddress, int fac
 static struct DrawLevelOvr1PScratchVertex *DrawLevelOvr1P_GetScratchVertices(void)
 {
 	// NOTE(aalhendi): Retail 4x1 handlers build 20-byte projected vertex records at scratch 0x1f8001b4.
-	return CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET);
+	return CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET);
 }
 
 static s32 DrawLevelOvr1P_GetDepthClipThreshold(void)
@@ -927,12 +991,12 @@ static s32 DrawLevelOvr1P_GetDepthClipThreshold(void)
 
 static u8 *DrawLevelOvr1P_GetClipRecordCursor(void)
 {
-	return (u8 *)(u32)DrawLevelOvr1P_Scratch()->entry.clip.clipCursorPtr32;
+	return (u8 *)NativeTerrainWork_LoadAddress(&DrawLevelOvr1P_Scratch()->entry.clip.clipCursorPtr32);
 }
 
 static void DrawLevelOvr1P_SetClipRecordCursor(u8 *cursor)
 {
-	DrawLevelOvr1P_Scratch()->entry.clip.clipCursorPtr32 = (u32)(u32)cursor;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.clipCursorPtr32, cursor);
 }
 
 static u8 *DrawLevelOvr1P_GetClipRecordStart(void)
@@ -1078,14 +1142,14 @@ static void Ovr226_800a0f78_ProjectFullDynamicLowQuad(struct LevVertex *vertices
 
 static void Ovr226_800a0d20_SeedEntryScratchPointers(struct DrawLevelOvr1PRenderList *renderList, struct PushBuffer *pb)
 {
-	DrawLevelOvr1P_Scratch()->entry.clip.clipCursorPtr32 = (u32)(u32)data.PtrClipBuffer[0];
-	DrawLevelOvr1P_Scratch()->pushBufferPtr32[0] = (u32)(u32)pb;
-	DrawLevelOvr1P_Scratch()->renderListPtr32 = (u32)(u32)renderList;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.clipCursorPtr32, data.PtrClipBuffer[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->pushBufferPtr32[0], pb);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->renderListPtr32, renderList);
 }
 
 static void Ovr226_800a0dc4_ClearProjectedScratch(void)
 {
-	u32 *projectedScratch = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET);
+	u32 *projectedScratch = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET);
 
 	// NOTE(aalhendi): Retail 0x800a0dc4 clears through scratch word 0x3d8.
 	for (int offset = 0; offset < 0x228; offset += (int)sizeof(u32))
@@ -1399,7 +1463,7 @@ static int DrawLevelOvr1P_IsProjectedFaceFullyNear(const struct DrawLevelOvr1PSc
 static u32 DrawLevelOvr1P_GetProjectedNearMaskAtScratchOffset(const struct DrawLevelOvr1PScratchVertex *projected, const int *indices, u32 scratchOffset)
 {
 	static const u32 bits[4] = {0x4, 0x8, 0x10, 0x20};
-	u32 threshold = *CTR_SCRATCHPAD_PTR(u32, scratchOffset);
+	u32 threshold = *CTR_TERRAIN_WORK_PTR(u32, scratchOffset);
 	u32 mask = 0;
 
 	for (s32 bitIndex = 0; bitIndex < 4; bitIndex++)
@@ -2431,7 +2495,7 @@ static int DrawLevelOvr1P_WriteRenderedClippedRecordAtOt(struct PushBuffer *pb, 
 
 	record = (struct DrawLevelOvr1PClipRecord *)cursor;
 	record->header = DrawLevelOvr1P_GetRenderedClipRecordHeader(block, count);
-	record->otEntry = (u32)(u32)&pb->ptrOT[otIndex];
+	record->otEntry = DrawLevelOvr1P_EncodeOt(&pb->ptrOT[otIndex]);
 	// NOTE(aalhendi): Retail terminal near writers 0x800a89dc/0x800aa5fc
 	// store the freshly selected scratch UV metadata, not the caller texture.
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
@@ -2473,7 +2537,7 @@ static int DrawLevelOvr1P_WriteWaterRenderedClippedRecordAtOt(struct PushBuffer 
 	// NOTE(aalhendi): Retail water direct helpers 0x800a34d4/0x800a3578 set
 	// bit 31 on clipped-record headers so the consumer keeps the NCLIP result.
 	record->header = count == 4 ? 0x80000001u : 0x80000000u;
-	record->otEntry = (u32)(u32)&pb->ptrOT[otIndex];
+	record->otEntry = DrawLevelOvr1P_EncodeOt(&pb->ptrOT[otIndex]);
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
 	record->clut = DrawLevelOvr1P_Scratch()->uv.uv0.halves.high;
 
@@ -2504,7 +2568,7 @@ static int Ovr226_800a34d4_WriteWaterRenderedClippedRecordAtOtEntry(struct PushB
 	// NOTE(aalhendi): Retail water-rendered clipped-record writers
 	// 0x800a34d4/0x800a3578 store the inherited GP/OT pointer directly.
 	record->header = count == 4 ? 0x80000001u : 0x80000000u;
-	record->otEntry = (u32)(u32)otEntry;
+	record->otEntry = DrawLevelOvr1P_EncodeOt(otEntry);
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
 	record->clut = DrawLevelOvr1P_Scratch()->uv.uv0.halves.high;
 
@@ -2552,7 +2616,7 @@ static void DrawLevelOvr1P_SetClipRecordPageScratch(const struct DrawLevelOvr1PC
 
 static struct DrawLevelOvr1PScratchVertex *DrawLevelOvr1P_GetClipRecordWorkspace(void)
 {
-	return CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET);
+	return CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET);
 }
 
 static u32 DrawLevelOvr1P_StoreClipRecordUvScratch(const struct DrawLevelOvr1PScratchVertex *projected, enum DrawLevelOvr1PUvScratchSlot slot)
@@ -2853,7 +2917,7 @@ static u32 DrawLevelOvr1P_GetClipRecordJumpAddress(int count, u32 nearMask)
 {
 	u32 tableOffset = count == 4 ? DRAW_LEVEL_OVR1P_GT4_CLIP_RECORD_JUMP_TABLE_OFFSET : DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET;
 
-	return *CTR_SCRATCHPAD_PTR(u32, tableOffset + (int)nearMask);
+	return *CTR_TERRAIN_WORK_PTR(u32, tableOffset + (int)nearMask);
 }
 
 static int Ovr226_800aa96c_DispatchGT3ClipRecordLabel(struct PushBuffer *pb, struct PrimMem *primMem, u32 *otEntry, struct DrawLevelOvr1PScratchVertex *work,
@@ -3110,7 +3174,7 @@ static int DrawLevelOvr1P_EmitClipRecordGT4Table(struct PushBuffer *pb, struct P
 static int Ovr226_800aaed4_ProjectFourthClipRecordAndDispatchGT4(struct PushBuffer *pb, struct PrimMem *primMem, struct DrawLevelOvr1PScratchVertex *projected,
                                                                  const struct DrawLevelOvr1PClipRecord *record)
 {
-	u32 *otEntry = (u32 *)(u32)record->otEntry;
+	u32 *otEntry = DrawLevelOvr1P_DecodeOt(record->otEntry);
 
 	Ovr226_800aa858_ProjectClipRecordRawVertex(&projected[3], &record->vertex[3]);
 	DrawLevelOvr1P_PrepareClipRecordDepthScratchRange(projected, 4);
@@ -3155,7 +3219,7 @@ static int Ovr226_800aa848_ProjectFirstThreeClipRecordsAndDispatch(struct PushBu
 	DrawLevelOvr1P_PrepareClipRecordDepthScratchRange(projected, 3);
 	// NOTE(aalhendi): Retail 0x800aa934..0x800aa968 dispatches through scratch
 	// 0x240; native keeps the handler bodies as C cases keyed by copied addresses.
-	return DrawLevelOvr1P_EmitClipRecordGT3Table(pb, primMem, (u32 *)(u32)record->otEntry, projected, record);
+	return DrawLevelOvr1P_EmitClipRecordGT3Table(pb, primMem, DrawLevelOvr1P_DecodeOt(record->otEntry), projected, record);
 }
 
 static int Ovr226_800aa790_TerminalPreamble(struct PushBuffer *pb, const u8 *cursor, const u8 *end)
@@ -3347,7 +3411,7 @@ static int Ovr226_800a18c0_FullDynamicRecursiveGate(const struct DrawLevelOvr1PS
 		return 0;
 	}
 
-	gate->forceDirect = projected == CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET);
+	gate->forceDirect = projected == CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET);
 
 	return 1;
 }
@@ -3359,7 +3423,7 @@ static u32 DrawLevelOvr1P_GetDirectHandlerAddress(u32 directMask)
 		return 0;
 	}
 
-	return *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_HANDLER_TABLE_OFFSET + (int)directMask);
+	return *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_HANDLER_TABLE_OFFSET + (int)directMask);
 }
 
 static int DrawLevelOvr1P_EmitPreparedProjectedTriDirectCodeAtOt(struct PushBuffer *pb, struct PrimMem *primMem, const struct QuadBlock *block,
@@ -3778,7 +3842,7 @@ static u32 DrawLevelOvr1P_GetNearSubdivisionHandlerAddress(u32 nearMask, int wri
 		return writeClipBytes ? DRAW_LEVEL_OVR_RETAIL_LABEL_GROUND_4X1_RENDERED_HELPER_DEFAULT : DRAW_LEVEL_OVR_RETAIL_LABEL_GROUND_4X1_LIST_HELPER_DEFAULT;
 	}
 
-	return *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_NEAR_SUBDIVISION_HANDLER_TABLE_OFFSET + (int)(tableIndex * sizeof(u32)));
+	return *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_NEAR_SUBDIVISION_HANDLER_TABLE_OFFSET + (int)(tableIndex * sizeof(u32)));
 }
 
 static int DrawLevelOvr1P_GetNearSubdivisionTableSlot(u32 nearMask)
@@ -3802,8 +3866,8 @@ static void DrawLevelOvr1P_SetPreviousRecursiveHandler(u32 handlerAddress)
 
 static struct DrawLevelOvr1PScratchVertex *DrawLevelOvr1P_GetSubdivisionFrame(int depth)
 {
-	return CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex,
-	                          DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET + ((depth + 1) * DRAW_LEVEL_OVR1P_RECURSION_FRAME_SIZE));
+	return CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex,
+	                            DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET + ((depth + 1) * DRAW_LEVEL_OVR1P_RECURSION_FRAME_SIZE));
 }
 
 static void DrawLevelOvr1P_BuildGridSubdivisionFrame(struct DrawLevelOvr1PScratchVertex *sub, const struct DrawLevelOvr1PScratchVertex *projected,
@@ -3946,7 +4010,7 @@ static int DrawLevelOvr1P_EmitProjectedGridFace(struct PushBuffer *pb, struct Pr
 
 static int DrawLevelOvr1P_IsDeepestSubdivisionFrame(const struct DrawLevelOvr1PScratchVertex *projected)
 {
-	return projected == CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET);
+	return projected == CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET);
 }
 
 static int DrawLevelOvr1P_HandlerUsesDeepestCompactGrid(u32 handlerAddress)
@@ -4437,7 +4501,7 @@ static struct TextureLayout *Ovr226_800a3e00_SelectGround4x1SelectorTexture(cons
 		return NULL;
 	}
 
-	u32 mosaicWord = DrawLevelOvr1P_ReadPackedWord((const u8 *)texture + 0x24);
+	u32 mosaicWord = DrawLevelOvr1P_SeedMosaic(texture);
 	DrawLevelOvr1P_Scratch()->mosaicTextureWord = mosaicWord;
 
 	if ((s32)maxDepth < DrawLevelOvr1P_RenderScratch()->textureLodDepthThreshold0)
@@ -4478,7 +4542,7 @@ static int Ovr226_800a3eb0_Ground4x1NearOrDirect(struct PushBuffer *pb, struct P
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a3a78_BuildGround4x1ListSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
 	return Ovr226_800a39c4_DispatchGround4x1HelperWrappers(pb, primMem, block, sub, faceIndex, texture, depth + 1, handlerAddress, inheritedOtIndex);
@@ -4486,17 +4550,17 @@ static int Ovr226_800a3eb0_Ground4x1NearOrDirect(struct PushBuffer *pb, struct P
 
 static void Ovr226_800a3f74_PrepareGround4x1DeepestUv(const struct DrawLevelOvr1PScratchVertex *projected, const int *indices)
 {
-	if (projected != CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET))
+	if (projected != CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET))
 	{
 		return;
 	}
 
-	u32 mosaicBase = DrawLevelOvr1P_Scratch()->mosaicTextureWord;
+	CtrRuntimeAddress mosaicBase = DrawLevelOvr1P_MosaicAddress();
 #ifdef CTR_NATIVE
 	// NOTE(aalhendi): Retail dereferences scratch 0x84 directly. Native can
 	// carry host-rebased level words here, so only follow pointer-shaped
 	// values that belong to level texture data.
-	if (mosaicBase == 0 || ((s32)mosaicBase < 0 && !DrawLevelOvr1P_IsNativeLevelTexturePointer(mosaicBase)))
+	if (mosaicBase == 0 || !DrawLevelOvr1P_IsNativeLevelTexturePointer(mosaicBase))
 	{
 		DrawLevelOvr1P_RestoreProjectedUvScratch();
 		return;
@@ -4514,14 +4578,21 @@ static void Ovr226_800a3f74_PrepareGround4x1DeepestUv(const struct DrawLevelOvr1
 		return;
 	}
 
-	u32 sourceOffset = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_INDEX_OFFSET) << 1;
+	u32 sourceOffset = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_INDEX_OFFSET) << 1;
 	if ((s32)(DrawLevelOvr1P_Scratch()->selected4x1TableWord << 8) < 0)
 	{
 		sourceOffset += 0x30;
 	}
-	sourceOffset += *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_BIAS_OFFSET);
+	sourceOffset += *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_BIAS_OFFSET);
 
-	const u8 *source = (const u8 *)(u32)(mosaicBase + sourceOffset);
+#ifdef CTR_NATIVE
+	if (sourceOffset > UINTPTR_MAX - mosaicBase || !DrawLevelOvr1P_IsNativeLevelSpan(mosaicBase + sourceOffset, 8))
+	{
+		DrawLevelOvr1P_RestoreProjectedUvScratch();
+		return;
+	}
+#endif
+	const u8 *source = (const u8 *)(CtrRuntimeAddress)(mosaicBase + sourceOffset);
 	u32 uv0 = DrawLevelOvr1P_ReadPackedWord(source + 0);
 	u32 uv1 = DrawLevelOvr1P_ReadPackedWord(source + 4);
 
@@ -4718,7 +4789,7 @@ static int Ovr226_800a4dcc_WriteGround4x1RenderedClippedRecordAtOtEntry(struct P
 
 	struct DrawLevelOvr1PClipRecord *record = (struct DrawLevelOvr1PClipRecord *)cursor;
 	record->header = DrawLevelOvr1P_GetRenderedClipRecordHeader(block, count);
-	record->otEntry = (u32)(u32)otEntry;
+	record->otEntry = DrawLevelOvr1P_EncodeOt(otEntry);
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
 	record->clut = DrawLevelOvr1P_Scratch()->uv.uv0.halves.high;
 
@@ -4816,16 +4887,16 @@ static int Ovr226_800a4c0c_DispatchGround4x1RenderedDirectTail(struct PushBuffer
 
 static void Ovr226_800a4b54_PrepareGround4x1RenderedDeepestUv(const struct DrawLevelOvr1PScratchVertex *projected, const int *indices)
 {
-	if (projected != CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET))
+	if (projected != CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_DEEPEST_PROJECTED_FRAME_OFFSET))
 	{
 		return;
 	}
 
-	u32 mosaicBase = DrawLevelOvr1P_Scratch()->mosaicTextureWord;
+	CtrRuntimeAddress mosaicBase = DrawLevelOvr1P_MosaicAddress();
 #ifdef CTR_NATIVE
 	// NOTE(aalhendi): Native keeps this as a data-boundary guard for
 	// host-rebased level texture words; non-native code follows retail.
-	if (mosaicBase == 0 || ((s32)mosaicBase < 0 && !DrawLevelOvr1P_IsNativeLevelTexturePointer(mosaicBase)))
+	if (mosaicBase == 0 || !DrawLevelOvr1P_IsNativeLevelTexturePointer(mosaicBase))
 	{
 		DrawLevelOvr1P_RestoreProjectedUvScratch();
 		return;
@@ -4843,14 +4914,21 @@ static void Ovr226_800a4b54_PrepareGround4x1RenderedDeepestUv(const struct DrawL
 		return;
 	}
 
-	u32 sourceOffset = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_INDEX_OFFSET) << 1;
+	u32 sourceOffset = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_INDEX_OFFSET) << 1;
 	if ((s32)(DrawLevelOvr1P_Scratch()->selected4x1TableWord << 8) < 0)
 	{
 		sourceOffset += 0x30;
 	}
-	sourceOffset += *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_BIAS_OFFSET);
+	sourceOffset += *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_MOSAIC_SOURCE_BIAS_OFFSET);
 
-	const u8 *source = (const u8 *)(u32)(mosaicBase + sourceOffset);
+#ifdef CTR_NATIVE
+	if (sourceOffset > UINTPTR_MAX - mosaicBase || !DrawLevelOvr1P_IsNativeLevelSpan(mosaicBase + sourceOffset, 8))
+	{
+		DrawLevelOvr1P_RestoreProjectedUvScratch();
+		return;
+	}
+#endif
+	const u8 *source = (const u8 *)(CtrRuntimeAddress)(mosaicBase + sourceOffset);
 	u32 uv0 = DrawLevelOvr1P_ReadPackedWord(source + 0);
 	u32 uv1 = DrawLevelOvr1P_ReadPackedWord(source + 4);
 
@@ -4888,7 +4966,7 @@ static int Ovr226_800a4ad0_Ground4x1RenderedNearOrDirect(struct PushBuffer *pb, 
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a4594_BuildGround4x1RenderedSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
 	return Ovr226_800a44e0_DispatchGround4x1RenderedHelperWrappers(pb, primMem, block, sub, faceIndex, texture, depth + 1, handlerAddress, inheritedOtEntry);
@@ -5257,7 +5335,7 @@ static int Ovr226_800a5b2c_Ground4x2NearOrDirect(struct PushBuffer *pb, struct P
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a56f4_BuildGround4x2ListSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	int handlerSlot = DrawLevelOvr1P_GetNearSubdivisionTableSlot(nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
@@ -5594,7 +5672,7 @@ static int Ovr226_800a78a8_DynamicListNearOrDirect(struct PushBuffer *pb, struct
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a74a0_BuildDynamicListSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	int handlerSlot = DrawLevelOvr1P_GetNearSubdivisionTableSlot(nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
@@ -5892,7 +5970,7 @@ static int Ovr226_800a94c8_WideDynamicNearOrDirect(struct PushBuffer *pb, struct
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a90c0_BuildWideDynamicSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	int handlerSlot = DrawLevelOvr1P_GetNearSubdivisionTableSlot(nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
@@ -6042,7 +6120,7 @@ static int Ovr226_800a6d6c_WriteGround4x2RenderedClippedRecordAtOtEntry(struct P
 
 	struct DrawLevelOvr1PClipRecord *record = (struct DrawLevelOvr1PClipRecord *)cursor;
 	record->header = DrawLevelOvr1P_GetRenderedClipRecordHeader(block, count);
-	record->otEntry = (u32)(u32)otEntry;
+	record->otEntry = DrawLevelOvr1P_EncodeOt(otEntry);
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
 	record->clut = DrawLevelOvr1P_Scratch()->uv.uv0.halves.high;
 
@@ -6174,7 +6252,7 @@ static int Ovr226_800a69dc_Ground4x2RenderedNearOrDirect(struct PushBuffer *pb, 
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a6510_BuildGround4x2RenderedSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	int handlerSlot = DrawLevelOvr1P_GetNearSubdivisionTableSlot(nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
@@ -6504,7 +6582,7 @@ static int Ovr226_800a898c_WriteDynamicRenderedClippedRecordAtOtEntry(struct Pus
 
 	record = (struct DrawLevelOvr1PClipRecord *)cursor;
 	record->header = DrawLevelOvr1P_GetRenderedClipRecordHeader(block, count);
-	record->otEntry = (u32)(u32)otEntry;
+	record->otEntry = DrawLevelOvr1P_EncodeOt(otEntry);
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
 	record->clut = DrawLevelOvr1P_Scratch()->uv.uv0.halves.high;
 
@@ -6636,7 +6714,7 @@ static int Ovr226_800a861c_DynamicRenderedNearOrDirect(struct PushBuffer *pb, st
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a8150_BuildDynamicRenderedSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	int handlerSlot = DrawLevelOvr1P_GetNearSubdivisionTableSlot(nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
@@ -6932,7 +7010,7 @@ static int Ovr226_800aa5ac_WriteQuad4x4RenderedClippedRecordAtOtEntry(struct Pus
 
 	struct DrawLevelOvr1PClipRecord *record = (struct DrawLevelOvr1PClipRecord *)cursor;
 	record->header = DrawLevelOvr1P_GetRenderedClipRecordHeader(block, count);
-	record->otEntry = (u32)(u32)otEntry;
+	record->otEntry = DrawLevelOvr1P_EncodeOt(otEntry);
 	record->tpage = DrawLevelOvr1P_Scratch()->uv.uv1.halves.high;
 	record->clut = DrawLevelOvr1P_Scratch()->uv.uv0.halves.high;
 
@@ -7064,7 +7142,7 @@ static int Ovr226_800aa23c_Quad4x4RenderedNearOrDirect(struct PushBuffer *pb, st
 	struct DrawLevelOvr1PScratchVertex *sub = DrawLevelOvr1P_GetSubdivisionFrame(depth);
 	Ovr226_800a9d70_BuildQuad4x4RenderedSubdivisionFrame(sub, projected, indices);
 
-	u32 handlerAddress = *CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
+	u32 handlerAddress = *CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_DIRECT_NEAR_HANDLER_TABLE_OFFSET + nearMask);
 	int handlerSlot = DrawLevelOvr1P_GetNearSubdivisionTableSlot(nearMask);
 	DrawLevelOvr1P_SetPreviousRecursiveHandler(handlerAddress);
 
@@ -7310,7 +7388,7 @@ static int DrawLevelOvr1P_Emit4x1ListSelectedFace(struct PushBuffer *pb, struct 
 
 static void DrawLevelOvr1P_SetRenderedListCursor(struct QuadBlock **renderedList)
 {
-	DrawLevelOvr1P_Scratch()->renderedOverflowPtr32 = (u32)(u32)renderedList;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->renderedOverflowPtr32, renderedList);
 }
 
 static void DrawLevelOvr1P_SetRenderedOverflowBase(struct QuadBlock **renderedList)
@@ -7323,7 +7401,7 @@ static void DrawLevelOvr1P_SetViewportScratchContext(struct PushBuffer *pb, cons
 {
 	DrawLevelOvr1P_SetRenderedListCursor(renderedOverflowBase);
 	DrawLevelOvr1P_SetClipRecordCursor(clipCursor);
-	DrawLevelOvr1P_Scratch()->visFaceListPtr32 = (u32)(u32)visFaceList;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListPtr32, visFaceList);
 	DrawLevelOvr1P_SetClipRecordStart(clipStart);
 	DrawLevelOvr1P_SetRenderedOverflowBase(renderedOverflowBase);
 	Ovr226_800a0d34_SetEntryGteAndCameraScratch(pb);
@@ -7361,7 +7439,7 @@ static struct QuadBlock **DrawLevelOvr1P_GetRenderedOverflowBase(void)
 
 static struct QuadBlock **DrawLevelOvr1P_GetRenderedListCursor(void)
 {
-	return (struct QuadBlock **)(u32)DrawLevelOvr1P_Scratch()->renderedOverflowPtr32;
+	return (struct QuadBlock **)NativeTerrainWork_LoadAddress(&DrawLevelOvr1P_Scratch()->renderedOverflowPtr32);
 }
 
 static void DrawLevelOvr1P_AppendRenderedQuadBlock(struct QuadBlock *block)
@@ -7823,7 +7901,7 @@ static int Ovr226_800a170c_FullDynamicHelperSlot11(struct PushBuffer *pb, struct
 static int Ovr226_800a1734_FullDynamicDefaultHelper(struct PushBuffer *pb, struct PrimMem *primMem, struct QuadBlock *block,
                                                     struct DrawLevelOvr1PScratchVertex *projected, struct TextureLayout *texture, int depth)
 {
-	if (projected == CTR_SCRATCHPAD_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET))
+	if (projected == CTR_TERRAIN_WORK_PTR(struct DrawLevelOvr1PScratchVertex, DRAW_LEVEL_OVR1P_PROJECTED_FRAME0_OFFSET))
 	{
 		for (int faceIndex = 0; faceIndex < 4; faceIndex++)
 		{
@@ -7993,7 +8071,7 @@ static void Ovr226_800a0f0c_SeedFullDynamicVisibilityScratch(const int *visFaceL
 	u32 blockID = (u16)block->blockID;
 	const u32 *word = (const u32 *)((const u8 *)visFaceList + ((blockID >> 3) & 0x1fc));
 
-	DrawLevelOvr1P_Scratch()->visibilityWordPtr32 = (u32)(u32)word;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visibilityWordPtr32, word);
 	DrawLevelOvr1P_Scratch()->visibilityBitIndex = blockID & 0x1f;
 	DrawLevelOvr1P_Scratch()->visibilityWord = *word;
 }
@@ -8006,12 +8084,12 @@ static int Ovr226_800a0f34_ConsumeFullDynamicVisibilityBit(void)
 
 	if (bitIndex < 0)
 	{
-		u32 *wordPtr = (u32 *)(u32)DrawLevelOvr1P_Scratch()->visibilityWordPtr32;
+		u32 *wordPtr = (u32 *)NativeTerrainWork_LoadAddress(&DrawLevelOvr1P_Scratch()->visibilityWordPtr32);
 
 		bitIndex = 0x1f;
 		word = wordPtr[1];
 		wordPtr++;
-		DrawLevelOvr1P_Scratch()->visibilityWordPtr32 = (u32)(u32)wordPtr;
+		NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visibilityWordPtr32, wordPtr);
 		DrawLevelOvr1P_Scratch()->visibilityWord = word;
 	}
 
@@ -9021,7 +9099,7 @@ static int Ovr226_800a25d0_WaterListFaceGate(struct PushBuffer *pb, struct PrimM
 
 static void Ovr226_800a1e30_SeedWaterListState(void)
 {
-	const struct TextureLayout *waterEnvMap = (const struct TextureLayout *)(u32)DrawLevelOvr1P_Scratch()->waterEnvMapPtr32;
+	const struct TextureLayout *waterEnvMap = (const struct TextureLayout *)NativeTerrainWork_LoadAddress(&DrawLevelOvr1P_Scratch()->waterEnvMapPtr32);
 
 	// NOTE(aalhendi): Retail 0x800a1e30 uses the global 1P retry list, not the
 	// current render-list field, before walking the water BSP list.
@@ -9565,7 +9643,7 @@ static int Ovr226_800a2904_DrawWaterRenderedListWithDefaultHandler(struct QuadBl
 
 		if (block == NULL)
 		{
-			*CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_WATER_RENDERED_SENTINEL_OFFSET) = 0;
+			*CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_WATER_RENDERED_SENTINEL_OFFSET) = 0;
 			return 1;
 		}
 
@@ -9715,9 +9793,9 @@ static int Ovr226_800a0e78_DispatchBucketHandler(u32 handlerAddress, void *bucke
 static int Ovr226_800a0e10_DispatchBucketTable(struct DrawLevelOvr1PRenderList *renderList, struct PushBuffer *pb, struct mesh_info *mesh,
                                                struct PrimMem *primMem, const int *visFaceList)
 {
-	for (s32 renderListOffset = DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_FULL_DYNAMIC_LIST; renderListOffset >= 0; renderListOffset -= (s32)sizeof(u32))
+	for (s32 renderListOffset = DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_FULL_DYNAMIC_LIST; renderListOffset >= 0; renderListOffset -= (s32)sizeof(void *))
 	{
-		u32 bucketIndex = (u32)renderListOffset / sizeof(u32);
+		u32 bucketIndex = (u32)renderListOffset / sizeof(void *);
 		const struct DrawLevelOvr1PBucket *bucket = &sDrawLevelOvr1PBuckets[bucketIndex];
 		void *bucketValue = DrawLevelOvr1P_GetRenderListBucketValue(renderList, bucket);
 		u32 setupAddress = R226.bucketSetupAddresses[bucketIndex];
@@ -9749,22 +9827,28 @@ void DrawLevelOvr1P(void *LevRenderList, struct PushBuffer *pb, struct BSP *bspL
 {
 	struct DrawLevelOvr1PRenderList *renderList = LevRenderList;
 	struct mesh_info *mesh = (struct mesh_info *)bspList;
-	u32 hostStackAnchor;
+#ifndef CTR_NATIVE
+	int hostStackAnchor = 0;
+#endif
 
-	// NOTE(aalhendi): Retail 0x800a0cf0 saves `sp` in scratch 0x38 and
-	// restores it at 0x800a0eb8. Native records a stack anchor only so later
-	// scratch users see the same entry-owned word; the host ABI owns SP.
-	DrawLevelOvr1P_Scratch()->savedStackPtr32 = (u32)(u32)&hostStackAnchor;
+// NOTE(aalhendi): Retail 0x800a0cf0 saves `sp` in scratch 0x38 and
+// restores it at 0x800a0eb8. Native records a stack anchor only so later
+// scratch users see the same entry-owned word; the host ABI owns SP.
+#ifdef CTR_NATIVE
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->savedStackPtr32, NULL);
+#else
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->savedStackPtr32, &hostStackAnchor);
+#endif
 
-	DrawLevelOvr1P_Scratch()->primMemEndPtr32 = (u32)(u32)primMem->end;
-	DrawLevelOvr1P_Scratch()->visFaceListPtr32 = (u32)(u32)visFaceList;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->primMemEndPtr32, primMem->end);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListPtr32, visFaceList);
 
 	if (visFaceList == NULL)
 	{
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->waterEnvMapPtr32 = (u32)(u32)waterEnvMap;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->waterEnvMapPtr32, waterEnvMap);
 
 	if (mesh->ptrQuadBlockArray == NULL)
 	{

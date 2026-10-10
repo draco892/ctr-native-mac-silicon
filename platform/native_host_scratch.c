@@ -1,7 +1,10 @@
 #include <platform/native_host_scratch.h>
 #include <ctr_scratchpad.h>
 #include <string.h>
-enum { NATIVE_HOST_SCRATCH_BYTES=2048 };
+enum
+{
+	NATIVE_HOST_SCRATCH_BYTES = 4096
+};
 union NativeHostScratchSlot { max_align_t alignment; u8 bytes[NATIVE_HOST_SCRATCH_BYTES]; };
 static struct { u32 sizes[NATIVE_HOST_SCRATCH_COUNT]; union NativeHostScratchSlot slots[NATIVE_HOST_SCRATCH_COUNT]; } hostScratch;
 void NativeHostScratch_Reset(void) { memset(&hostScratch,0,sizeof(hostScratch)); }

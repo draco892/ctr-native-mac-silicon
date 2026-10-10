@@ -27,7 +27,7 @@
 // Version 6 includes separate collision/camera host workspaces and pointer traversal.
 // Version 5 introduced 64-bit addresses and explicit slot/host widths.
 // Payload regions remain ABI-specific; older versions are rejected.
-#define NATIVE_CHECKPOINT_VERSION            8u
+#define NATIVE_CHECKPOINT_VERSION            9u
 #define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  20u
 #define NATIVE_CHECKPOINT_POINTER_SLOT_CAP   65536u
 #define NATIVE_CHECKPOINT_CREDITS_STRING_CAP 4096u

@@ -205,6 +205,7 @@ struct DriverCollisionSearch
 
 CTR_STATIC_ASSERT(offsetof(struct DriverCollisionSearch, bucket) == 0);
 CTR_STATIC_ASSERT(offsetof(struct DriverCollisionSearch, hitDir) == sizeof(struct BucketSearchParams));
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Thread, driverHitRadiusSquared) == 0x38);
 CTR_STATIC_ASSERT(offsetof(struct Thread, driverCollisionReserved_0x3c) == 0x3c);
 CTR_STATIC_ASSERT(offsetof(struct Thread, driverCollisionReserved_0x3e) == 0x3e);
@@ -217,6 +218,12 @@ CTR_STATIC_ASSERT(offsetof(struct BucketSearchParams, bestDistSq) == 0xc);
 CTR_STATIC_ASSERT(offsetof(struct BucketSearchParams, dist) == 0x10);
 CTR_STATIC_ASSERT(sizeof(struct BucketSearchParams) == 0x18);
 CTR_STATIC_ASSERT(sizeof(struct DriverCollisionSearch) == 0x20);
+#else
+CTR_STATIC_ASSERT(offsetof(struct Thread, prev) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct Thread, object) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(sizeof(((struct Thread *)0)->funcThTick) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct BucketSearchParams, th) % _Alignof(void *) == 0);
+#endif
 
 // These are used to recursively
 // search threads with unidirectional
@@ -249,6 +256,10 @@ struct ThreadBucket
 	// size is 0x14
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct ThreadBucket) == 0x14);
+#else
+CTR_STATIC_ASSERT(_Alignof(struct ThreadBucket) >= _Alignof(void *));
+#endif
 
 #endif

@@ -1,4 +1,29 @@
 #include <common.h>
+#if CTR_NATIVE_HOST64
+#include <platform/native_scene_assets.h>
+#endif
+static struct Model *LOAD_ModelFromDram(void *file)
+{
+#if defined(CTR_NATIVE_HOST64) && defined(CTR_NATIVE_GAME_SCENE)
+	void *root = NULL;
+	if (NativeSceneAssets_Materialize(&gNativeSceneAssets, (u8 *)file + LOAD_MODEL_FILE_HEADER_BYTES, NR_MODEL, &root) != NATIVE_ASSET_OK)
+	{
+		Platform_LogError("[CTR Native] Cannot publish standalone model\n");
+		CTR_TRAP();
+	}
+	return root;
+#else
+	return (struct Model *)((u8 *)file + LOAD_MODEL_FILE_HEADER_BYTES);
+#endif
+}
+static struct Icon *LOAD_MpkFirstIcon(CtrRuntimeAddress address)
+{
+#if CTR_NATIVE_HOST64
+	return ((struct LevTexLookup *)address)->firstIcon;
+#else
+	return (struct Icon *)*(u32 *)(address + 4);
+#endif
+}
 
 #ifdef CTR_NATIVE
 enum
@@ -427,8 +452,10 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 
 		if (sdata->ptrMPK != 0)
 		{
-#ifdef CTR_NATIVE
-            GAME_PLAYER_OBJECT_LIST = (struct Model **)((u8 *)sdata->ptrMPK + 4);
+#if CTR_NATIVE_HOST64
+			GAME_PLAYER_OBJECT_LIST = ((struct NativeModelPack *)sdata->ptrMPK)->models;
+#elif defined(CTR_NATIVE)
+			GAME_PLAYER_OBJECT_LIST = (struct Model **)((u8 *)sdata->ptrMPK + 4);
 #else
             GAME_PLAYER_OBJECT_LIST = (struct Model **)((u32)sdata->ptrMPK + 4);
 #endif
@@ -445,7 +472,11 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 		if ((mpkForIcons != 0) && ((icons = *(struct LevTexLookup **)mpkForIcons) != 0))
 		{
 			DecalGlobal_Store(GAME_TRACKER, icons);
+#if CTR_NATIVE_HOST64
+			GAME_TRACKER->mpkIcons = (uintptr_t)icons;
+#else
 			GAME_TRACKER->mpkIcons = *(int *)sdata->ptrMPK;
+#endif
 		}
 		else
 		{
@@ -498,7 +529,7 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 		{
 			if (GAME_DRIVER_MODEL_EXTRAS[i].fileBase != NULL)
 			{
-				GAME_DRIVER_MODEL_EXTRAS[i].model = (struct Model *)((u8 *)GAME_DRIVER_MODEL_EXTRAS[i].fileBase + LOAD_MODEL_FILE_HEADER_BYTES);
+				GAME_DRIVER_MODEL_EXTRAS[i].model = LOAD_ModelFromDram(GAME_DRIVER_MODEL_EXTRAS[i].fileBase);
 			}
 		}
 
@@ -663,10 +694,10 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 		// if linked list of icons exists
 		if (GAME_TRACKER->mpkIcons != 0)
 		{
-			GAME_TRACKER->trafficLightIcon[0] = DecalGlobal_FindInMPK((struct Icon *)*(u32 *)(GAME_TRACKER->mpkIcons + 4), GAME_RDATA_NAME(s_lightredoff));
-			GAME_TRACKER->trafficLightIcon[1] = DecalGlobal_FindInMPK((struct Icon *)*(u32 *)(GAME_TRACKER->mpkIcons + 4), GAME_RDATA_NAME(s_lightredon));
-			GAME_TRACKER->trafficLightIcon[2] = DecalGlobal_FindInMPK((struct Icon *)*(u32 *)(GAME_TRACKER->mpkIcons + 4), GAME_RDATA_NAME(s_lightgreenoff));
-			GAME_TRACKER->trafficLightIcon[3] = DecalGlobal_FindInMPK((struct Icon *)*(u32 *)(GAME_TRACKER->mpkIcons + 4), GAME_RDATA_NAME(s_lightgreenon));
+			GAME_TRACKER->trafficLightIcon[0] = DecalGlobal_FindInMPK(LOAD_MpkFirstIcon(GAME_TRACKER->mpkIcons), GAME_RDATA_NAME(s_lightredoff));
+			GAME_TRACKER->trafficLightIcon[1] = DecalGlobal_FindInMPK(LOAD_MpkFirstIcon(GAME_TRACKER->mpkIcons), GAME_RDATA_NAME(s_lightredon));
+			GAME_TRACKER->trafficLightIcon[2] = DecalGlobal_FindInMPK(LOAD_MpkFirstIcon(GAME_TRACKER->mpkIcons), GAME_RDATA_NAME(s_lightgreenoff));
+			GAME_TRACKER->trafficLightIcon[3] = DecalGlobal_FindInMPK(LOAD_MpkFirstIcon(GAME_TRACKER->mpkIcons), GAME_RDATA_NAME(s_lightgreenon));
 		}
 
 		GAME_TRACKER->gameMode1_prevFrame = 1;
@@ -775,7 +806,7 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 
 				if (i < LOAD_PODIUM_MODELS_WITH_FILE_HEADER)
 				{
-					modelPtrArr[i] = (struct Model *)((u8 *)m + LOAD_MODEL_FILE_HEADER_BYTES);
+					modelPtrArr[i] = LOAD_ModelFromDram(m);
 					CTR_PSX_MEMORY_BARRIER();
 					m = modelPtrArr[i];
 				}

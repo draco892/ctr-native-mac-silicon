@@ -898,7 +898,7 @@ void RenderAllLevelGeometry(struct GameTracker *gGT, struct Level *level1, struc
 
 		// camera of player 1
 		pushBuffer = &gGT->pushBuffer[0];
-		scratch = CTR_SCRATCHPAD_PTR(struct MainRenderLevelGeometryScratch, 0);
+		scratch = CTR_TERRAIN_WORK_PTR(struct MainRenderLevelGeometryScratch, 0);
 
 		if (
 		    // adv character selection screen

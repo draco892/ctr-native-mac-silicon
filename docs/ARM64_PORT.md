@@ -1750,3 +1750,83 @@ Next work, in dependency order:
    checks are satisfied; the CMake and game-layout guards remain active until then.
 4. Validate real menu/race behavior, multiplayer/cutscene cameras, GPU rendering,
    input/controllers, audio, replay/save-state round trips and memory lifetimes.
+
+## Stage 15 — renderer workspaces and owned resident graphs
+
+This stage implements the renderer/loader preparation in isolation. It does
+**not** enable `CTR_BUILD_GAME` on ARM64. The full-game pointer-width guard and
+unresolved global/overlay contracts remain active.
+
+RenderBucket scalar state, colors and the complete 256-entry projected-vertex
+cache use a bounded host workspace. Tire ordering-table addresses, clamps and
+range checks retain host width; GPU packets and dispatch label IDs remain
+32-bit. Frame-origin interpolation avoids shifting a negative signed value.
+Texture cycles use full-width frame arrays and active slots, reject invalid
+counts/shifts and preserve the LEV versus model destination semantics.
+
+Terrain overlays 226–229 use a separate 1 KiB scalar workspace with declared
+full-width pointer slots. Retail tables, 20-byte vertex records and 0xb8 recursion
+frames keep their scalar offsets. Render-list traversal uses the host pointer
+stride. Packed clipped records carry GPU OT tokens, with explicit decoding;
+optional mosaic references are resolved through the retained PTR map instead of
+casting their four-byte wire offsets to host addresses. Mid-texture selection
+uses the typed resident array and rejects selectors outside that array.
+MainRenderFrame and RenderLists seed/read the same host threshold workspace.
+
+`NativeResidentGraph` owns a private wire/PTR copy and all expanded records.
+Allocation precedes conversion, so shared/cyclic references do not require a
+recursive loader. The bounded queue handles complete MPK/LEV/model roots,
+pointer tables, inline animation/navigation payloads, icon groups, three NAV
+paths, hitbox sentinels and variable texture-animation chains. Model command and
+vertex streams are validated before publication. Retail NAV `last` values can
+contain a stale unlisted PS1 address; the resident end is derived from the inline
+frame count. Unused model texture tables can alias scalar color storage and are
+not decoded as populated pointer arrays.
+
+Scene asset owners cache completed graphs, translate resident Model/Level
+references back to bounded views and release graphs when their mempack identity
+range is forgotten. ARM64 DRAM callbacks retain wire bytes without legacy
+four-byte pointer patching; LEV with an external PTR remains pending until that
+map validates. Real LEV/driver-pack/mask/podium callbacks publish typed roots.
+MPK model lists use their aligned resident flexible array; standalone driver and
+podium model consumers materialize roots from their DRAM payload. The native
+loader queue copies complete `LoadQueueSlot` objects, including host callbacks.
+
+Graph snapshots encode declared pointer slots as owner/offset pairs, validate
+allocation counts/strides and reject unresolved external references. Asset-owner
+snapshot version 2 prepares every graph before rebasing cross-owner references,
+then publishes the pending owner set only on success. Graph/owner checkpoints
+are tested independently; global game checkpoint traversal into those heap
+graphs is still part of the remaining integration work. Payload version is 9
+because host-workspace storage and owner snapshots changed.
+
+Validation: **32/32 CTest entries pass normally and with ASan/UBSan** (31 without
+`assets/ctr-u.bin`). New production-code tests cover RenderBucket/tire packets,
+texture cycles, all four terrain viewport entries, ground/water/full-dynamic
+midpoints, near dispatch through both recursive frames, GT3/GT4 and clipped OT
+links, resident mosaic/tagged texture resolution, sharing, failed publication,
+source lifetime, real loader callback sequences and relocated cross-owner
+checkpoints. The optional disc test requires materialization and checkpoint
+rebasing for both MPK packs, Dingo Canyon, Coco Park and separate-PTR menu data.
+These tests do not establish complete retail image or game behavior parity.
+
+The syntax audit records **307 layout guards, 290 pointer/integer casts and
+39 scratchpad source sites**, with **zero other errors** (previous stage:
+382/411/86). Counts are diagnostics, not remaining work units. There is still
+no successful full ARM64 executable or playable race.
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R 'render_bucket|terrain_renderer|resident_graph|asset_retail' -V
+```
+
+At the user's current boundary, work stops after renderer and MPK/LEV loader
+preparation. Remaining work: migrate remaining global/overlay/direct-offset
+consumers and global checkpoint visitors, integrate/build the full executable,
+then validate and fix real menu/race/input/audio/GPU behavior. See
+[the cumulative Italian progress list](ARM64_PROGRESS_IT.md).

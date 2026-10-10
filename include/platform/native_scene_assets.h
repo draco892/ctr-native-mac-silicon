@@ -1,6 +1,7 @@
 #ifndef PLATFORM_NATIVE_SCENE_ASSETS_H
 #define PLATFORM_NATIVE_SCENE_ASSETS_H
 #include <platform/native_model_library.h>
+#include <platform/native_resident_graph.h>
 struct NativeSceneAssetOwner;
 struct NativeSceneAssets { struct NativeSceneAssetOwner *owners; struct NativeModelLibrary library; };
 // Host-only shadow ownership for legacy loader integration. Initialize to zero.
@@ -14,6 +15,11 @@ enum NativePtrMapResult NativeSceneAssets_CompletePtr(struct NativeSceneAssets *
 void NativeSceneAssets_ForgetRange(struct NativeSceneAssets *assets,const void *begin,const void *end);
 enum NativeAssetResult NativeSceneAssets_GetLevel(const struct NativeSceneAssets *assets,const void *source,struct NativeLevelView *out);
 enum NativeAssetResult NativeSceneAssets_GetModel(const struct NativeSceneAssets *assets,const void *sourceModel,struct NativeModelView *out);
+// Publish only after every reachable resident record has validated.
+enum NativeAssetResult NativeSceneAssets_Materialize(struct NativeSceneAssets *, const void *source, enum NativeResidentKind, void **root);
+int NativeSceneAssets_ResolveWireSlot(const struct NativeSceneAssets *, const void *slot, size_t targetBytes, void **target);
+int NativeSceneAssets_Contains(const struct NativeSceneAssets *, const void *, size_t);
+int NativeSceneAssets_RebaseSavedPointer(const void *, size_t, const struct NativeSceneAssets *, uintptr_t, void **);
 // Versioned snapshot of immutable owners, pending maps and library references.
 // Source identities are rebased by the caller; restore replaces state only after
 // every owner/map/model has validated. No serialized host view is dereferenced.

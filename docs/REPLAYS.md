@@ -2,7 +2,9 @@
 
 Use this for bug reports in internal builds.
 
-Current checkpoints use payload version 8 and replay headers use version 2.
+Current checkpoints use payload version 9 and replay headers use version 2.
+Version 9 accounts for the expanded RenderBucket/terrain host workspaces and
+asset-owner snapshot version 2, which embeds resident graph checkpoints.
 Version 8 accounts for the new resident Camera/PushBuffer/Driver/Instance layouts,
 full-width instance peer links and the shadow OT pointer. Version 7 added
 Torch/skid/shadow workspaces to the collision/camera storage from version 6.

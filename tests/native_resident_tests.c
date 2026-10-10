@@ -95,7 +95,7 @@ static int LevelAndModels(void)
 	                                           {NR_MODELS, 0x300, 2, modelPtrs},
 	                                           {NR_MODEL, 0x340, 2, models},
 	                                           {NR_MODEL_HEADER, 0x400, 2, headers}};
-	struct NativeResidentContext c = {&f.map, bindings, 5};
+	struct NativeResidentContext c = {.map = &f.map, .bindings = bindings, .count = 5};
 	struct Level level;
 	CHECK(NativeResident_DecodeLevel(&c, 0, &level) == NATIVE_ASSET_OK);
 	CHECK(level.ptr_mesh_info == &mesh && level.ptrInstDefs == defs && level.ptrModelsPtrArray == modelPtrs);
@@ -146,7 +146,7 @@ static int Geometry(void)
 	struct NativeResidentBinding bindings[] = {{NR_QUAD, 0x200, 2, quads},          {NR_BSP, 0x300, 2, bsp},           {NR_VERTEX, 0x400, 2, vertices},
 	                                           {NR_INSTDEF, 0x500, 1, &def},        {NR_OVERT, 0x580, 1, &ocean},      {NR_NAVFRAME, 0x600, 2, nav},
 	                                           {NR_ICONGROUP4, 0x700, 1, &texture}, {NR_ANIMTEX, 0x780, 1, &animation}};
-	struct NativeResidentContext c = {&f.map, bindings, 8};
+	struct NativeResidentContext c = {.map = &f.map, .bindings = bindings, .count = 8};
 	CTR_WriteU32LE(f.bytes, 2);
 	CTR_WriteU32LE(f.bytes + 4, 2);
 	CTR_WriteU32LE(f.bytes + 28, 2);
@@ -204,7 +204,7 @@ static int AuxiliaryAndErrors(void)
 	struct Fixture f;
 	Init(&f);
 	CHECK(Decode(&f));
-	struct NativeResidentContext c = {&f.map, NULL, 0};
+	struct NativeResidentContext c = {.map = &f.map, .bindings = NULL, .count = 0};
 	struct ModelAnim anim;
 	struct PVS pvs;
 	struct Skybox sky;

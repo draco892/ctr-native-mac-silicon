@@ -15,7 +15,7 @@
 #include <platform/native_terrain_material.h>
 #include <platform/native_scene_render.h>
 #include <platform/native_vertex_animation.h>
-#include <platform/native_resident.h>
+#include <platform/native_resident_graph.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -367,7 +367,7 @@ static int Validator_ResidentInstance(const struct NativeLevelView *level, u32 i
 		return 0;
 	struct NativeResidentBinding bindings[] = {{NR_MODEL, view->model.offset, 1, &model},
 	                                           {NR_MODEL_HEADER, view->model.headersOffset, view->model.headerCount, headers}};
-	struct NativeResidentContext context = {level->map, bindings, 2};
+	struct NativeResidentContext context = {.map = level->map, .bindings = bindings, .count = 2};
 	int ok = NativeResident_DecodeModel(&context, view->model.offset, &model) == NATIVE_ASSET_OK &&
 	         NativeResident_DecodeInstDef(&context, level->instancesOffset + index * NATIVE_INSTANCE_DEF_BYTES, &definition) == NATIVE_ASSET_OK;
 	if (ok)
@@ -381,8 +381,53 @@ static int Validator_ResidentInstance(const struct NativeLevelView *level, u32 i
 	return ok;
 }
 
+static int Validator_ResidentGraph(const struct NativeLevelView *level, const struct NativeMpkView *mpk)
+{
+	struct NativeResidentGraph *graph = NULL;
+	struct NativeResidentGraphError error = {0};
+	enum NativeAssetResult result = NativeResidentGraph_Build(level ? level->map : mpk->map, level ? NR_LEVEL : NR_MPK, 0, &graph, &error);
+	if (result != NATIVE_ASSET_OK)
+	{
+		fprintf(stderr, "Resident graph failed: kind %u offset 0x%x count %zu result %u\n", error.kind, error.offset, error.count, result);
+		return 0;
+	}
+	struct Level *resident = NativeResidentGraph_Root(graph);
+	size_t checkpointBytes = NativeResidentGraph_CheckpointSize(graph);
+	void *checkpoint = malloc(checkpointBytes);
+	struct NativeResidentGraph *restored = NULL;
+	if (!checkpoint || !NativeResidentGraph_CaptureCheckpoint(graph, checkpoint, checkpointBytes) ||
+	    !NativeResidentGraph_RestoreCheckpoint(checkpoint, checkpointBytes, &restored, NULL, NULL))
+	{
+		fprintf(stderr, "Resident graph checkpoint failed\n");
+		free(checkpoint);
+		NativeResidentGraph_Free(graph);
+		return 0;
+	}
+	int valid = NativeResidentGraph_Root(restored) != NativeResidentGraph_Root(graph);
+	if (level)
+	{
+		struct Level *copy = NativeResidentGraph_Root(restored);
+		valid = valid && copy->numModels == resident->numModels && copy->numInstances == resident->numInstances;
+		if (resident->numInstances)
+			valid = valid && copy->ptrInstDefs != resident->ptrInstDefs && copy->ptrInstDefs[0].model != resident->ptrInstDefs[0].model;
+	}
+	printf("Resident graph OK: %zu objects, checkpoint %zu bytes, rebased references %s\n", NativeResidentGraph_ObjectCount(graph), checkpointBytes,
+	       valid ? "OK" : "FAILED");
+	free(checkpoint);
+	NativeResidentGraph_Free(restored);
+	if (!valid)
+	{
+		NativeResidentGraph_Free(graph);
+		return 0;
+	}
+	NativeResidentGraph_Free(graph);
+	return 1;
+}
+
 static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level, const struct NativeVramView *vram)
 {
+	if (!Validator_ResidentGraph(level, mpk))
+		return 0;
 	struct NativeModelLibrary library;
 	struct ValidatorDrawStats drawStats={0},instanceStats={0};
 	size_t animations = 0, frames = 0, staticFrames = 0, interpolated = 0;

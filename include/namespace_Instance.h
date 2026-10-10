@@ -323,7 +323,7 @@ struct ModelFrame
 
 	// char verts[0];
 };
-#define MODELFRAME_GETVERT(x) ((char *)&mf[0] + mf->vertexOffset)
+#define MODELFRAME_GETVERT(x) ((char *)(x) + (x)->vertexOffset)
 
 struct ModelAnim
 {

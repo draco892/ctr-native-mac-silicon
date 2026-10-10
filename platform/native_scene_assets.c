@@ -6,10 +6,19 @@ struct NativeSceneAssetOwner {
     uintptr_t source; size_t bytes;
     u8 *wire; struct NativePtrMapEntry *entries; struct NativePtrMapView map;
     int ready;
+	struct NativeResidentGraph *graph;
+	const void *savedGraph;
+	size_t savedGraphBytes;
 };
 struct NativeSceneAssets gNativeSceneAssets={0};
 static void SceneAssets_Free(struct NativeSceneAssets *assets,struct NativeSceneAssetOwner *owner)
-{ NativeModelLibrary_DropOwner(&assets->library,&owner->map); free(owner->entries); free(owner->wire); free(owner); }
+{
+	NativeModelLibrary_DropOwner(&assets->library, &owner->map);
+	NativeResidentGraph_Free(owner->graph);
+	free(owner->entries);
+	free(owner->wire);
+	free(owner);
+}
 void NativeSceneAssets_Reset(struct NativeSceneAssets *assets)
 {
     if(assets==NULL) return;
@@ -77,12 +86,57 @@ enum NativePtrMapResult NativeSceneAssets_CompletePtr(struct NativeSceneAssets *
     if(owner==NULL || owner->ready) return NATIVE_PTRMAP_INVALID_ARGUMENT;
     return SceneAssets_Decode(owner,ptr,ptrBytes);
 }
+enum NativeAssetResult NativeSceneAssets_Materialize(struct NativeSceneAssets *assets, const void *source, enum NativeResidentKind kind, void **root)
+{
+	if (!root || (kind != NR_LEVEL && kind != NR_MPK && kind != NR_MODEL))
+		return NATIVE_ASSET_INVALID_ARGUMENT;
+	struct NativeSceneAssetOwner *o = SceneAssets_Find(assets, source);
+	if (!o || !o->ready)
+		return NATIVE_ASSET_NOT_FOUND;
+	if (o->graph)
+	{
+		u32 offset;
+		if (!NativeResidentGraph_WireOffset(o->graph, NativeResidentGraph_Root(o->graph), kind, &offset) || offset)
+			return NATIVE_ASSET_INVALID_ARGUMENT;
+	}
+	else
+	{
+		struct NativeResidentGraph *pending = NULL;
+		enum NativeAssetResult r = NativeResidentGraph_Build(&o->map, kind, 0, &pending, NULL);
+		if (r != NATIVE_ASSET_OK)
+			return r;
+		o->graph = pending;
+	}
+	*root = NativeResidentGraph_Root(o->graph);
+	return NATIVE_ASSET_OK;
+}
+int NativeSceneAssets_Contains(const struct NativeSceneAssets *assets, const void *p, size_t bytes)
+{
+	if (!assets)
+		return 0;
+	for (const struct NativeSceneAssetOwner *o = assets->owners; o; o = o->next)
+		if (NativeResidentGraph_Contains(o->graph, p, bytes))
+			return 1;
+	return 0;
+}
 enum NativeAssetResult NativeSceneAssets_GetLevel(const struct NativeSceneAssets *assets,const void *source,struct NativeLevelView *out)
 {
     if(out==NULL) return NATIVE_ASSET_INVALID_ARGUMENT; memset(out,0,sizeof(*out));
     struct NativeSceneAssetOwner *owner=SceneAssets_Find(assets,source);
-    if(owner==NULL || !owner->ready) return NATIVE_ASSET_NOT_FOUND;
-    return NativeLevel_Open(&owner->map,out);
+	if (!owner && assets)
+		for (struct NativeSceneAssetOwner *o = assets->owners; o; o = o->next)
+			if (o->graph && NativeResidentGraph_Root(o->graph) == source)
+			{
+				u32 offset;
+				if (NativeResidentGraph_WireOffset(o->graph, source, NR_LEVEL, &offset))
+				{
+					owner = o;
+					break;
+				}
+			}
+	if (owner == NULL || !owner->ready)
+		return NATIVE_ASSET_NOT_FOUND;
+	return NativeLevel_Open(&owner->map,out);
 }
 enum NativeAssetResult NativeSceneAssets_GetModel(const struct NativeSceneAssets *assets,const void *sourceModel,struct NativeModelView *out)
 {
@@ -90,8 +144,11 @@ enum NativeAssetResult NativeSceneAssets_GetModel(const struct NativeSceneAssets
     if(assets==NULL || sourceModel==NULL) return NATIVE_ASSET_NOT_FOUND;
     uintptr_t address=(uintptr_t)sourceModel;
     for(struct NativeSceneAssetOwner *owner=assets->owners;owner!=NULL;owner=owner->next) {
-        if(owner->ready && address>=owner->source && address-owner->source<owner->bytes)
-            return NativeModel_Open(&owner->map,(u32)(address-owner->source),out);
+		u32 offset;
+		if (owner->graph && NativeResidentGraph_WireOffset(owner->graph, sourceModel, NR_MODEL, &offset))
+			return NativeModel_Open(&owner->map, offset, out);
+		if (owner->ready && address >= owner->source && address - owner->source < owner->bytes)
+			return NativeModel_Open(&owner->map,(u32)(address-owner->source),out);
     }
     return NATIVE_ASSET_NOT_FOUND;
 }
@@ -106,9 +163,13 @@ size_t NativeSceneAssets_CheckpointSize(const struct NativeSceneAssets *assets)
     size_t bytes=SCENE_CHECKPOINT_HEADER;
     for(const struct NativeSceneAssetOwner *o=assets->owners;o!=NULL;o=o->next) {
         if(o->bytes>UINT32_MAX || o->map.count>UINT32_MAX/4) return 0;
-        u64 extra=SCENE_CHECKPOINT_OWNER_HEADER+(u64)o->bytes+(u64)o->map.count*4;
-        if(extra>UINT32_MAX || bytes>UINT32_MAX-extra) return 0;
-        bytes+=(size_t)extra;
+		size_t graphBytes = o->graph ? NativeResidentGraph_CheckpointSize(o->graph) : 0;
+		if (o->graph && !graphBytes)
+			return 0;
+		u64 extra = graphBytes + SCENE_CHECKPOINT_OWNER_HEADER + (u64)o->bytes + (u64)o->map.count * 4;
+		if (extra > UINT32_MAX || bytes > UINT32_MAX - extra)
+			return 0;
+		bytes+=(size_t)extra;
     }
     return bytes;
 }
@@ -117,32 +178,62 @@ int NativeSceneAssets_CaptureCheckpoint(const struct NativeSceneAssets *assets,v
     size_t size=NativeSceneAssets_CheckpointSize(assets);
     if(!size || dst==NULL || bytes<size) return 0;
     u8 *out=dst; memset(out,0,size);
-    CTR_WriteU32LE(out,0x53414353u); CTR_WriteU32LE(out+4,1); CTR_WriteU32LE(out+8,(u32)size);
-    for(u32 i=0;i<NATIVE_MODEL_LIBRARY_SLOTS;i++) {
-        u32 owner=0; const struct NativeSceneAssetOwner *o=assets->owners;
+	CTR_WriteU32LE(out, 0x53414353u);
+	CTR_WriteU32LE(out + 4, 2);
+	CTR_WriteU32LE(out + 8, (u32)size);
+	for (u32 i = 0; i < NATIVE_MODEL_LIBRARY_SLOTS; i++)
+	{
+		u32 owner=0; const struct NativeSceneAssetOwner *o=assets->owners;
         if(assets->library.slots[i].owner!=NULL) {
             for(;o!=NULL;o=o->next,owner++) if(&o->map==assets->library.slots[i].owner) break;
             if(o==NULL || !o->ready) return 0;
         } else owner=UINT32_MAX;
         CTR_WriteU32LE(out+16+i*8,owner); CTR_WriteU32LE(out+20+i*8,assets->library.slots[i].offset);
-    }
-    size_t at=SCENE_CHECKPOINT_HEADER; u32 count=0;
+	}
+	size_t at=SCENE_CHECKPOINT_HEADER; u32 count=0;
     for(const struct NativeSceneAssetOwner *o=assets->owners;o!=NULL;o=o->next) {
         SceneCheckpoint_Write64(out+at,o->source); CTR_WriteU32LE(out+at+8,(u32)o->bytes);
         CTR_WriteU32LE(out+at+12,(u32)o->map.count); CTR_WriteU32LE(out+at+16,(u32)o->ready);
-        at+=SCENE_CHECKPOINT_OWNER_HEADER; memcpy(out+at,o->wire,o->bytes); at+=o->bytes;
-        for(size_t i=0;i<o->map.count;i++,at+=4) CTR_WriteU32LE(out+at,o->entries[i].slotOffset);
-        count++;
-    }
-    CTR_WriteU32LE(out+12,count); return 1;
+		size_t graphBytes = o->graph ? NativeResidentGraph_CheckpointSize(o->graph) : 0;
+		CTR_WriteU32LE(out + at + 20, (u32)graphBytes);
+		at += SCENE_CHECKPOINT_OWNER_HEADER;
+		memcpy(out + at, o->wire, o->bytes);
+		at += o->bytes;
+		for(size_t i=0;i<o->map.count;i++,at+=4) CTR_WriteU32LE(out+at,o->entries[i].slotOffset);
+		if (graphBytes && !NativeResidentGraph_CaptureCheckpoint(o->graph, out + at, graphBytes))
+			return 0;
+		at += graphBytes;
+		count++;
+	}
+	CTR_WriteU32LE(out+12,count); return 1;
+}
+struct SceneGraphRebase
+{
+	struct NativeSceneAssets *assets;
+	NativeSceneSourceRebase source;
+	void *user;
+};
+static int SceneAssets_RebaseGraph(void *user, uintptr_t saved, void **live)
+{
+	struct SceneGraphRebase *ctx = user;
+	for (unsigned pass = 0; pass < 2; pass++)
+		for (struct NativeSceneAssetOwner *o = ctx->assets->owners; o; o = o->next)
+			if (o->savedGraph && NativeResidentGraph_RebaseSavedRange(o->savedGraph, o->savedGraphBytes, o->graph, saved, pass ? 0 : 1, live))
+				return 1;
+	uintptr_t address;
+	if (!ctx->source(ctx->user, saved, 0, &address))
+		return 0;
+	*live = (void *)address;
+	return 1;
 }
 int NativeSceneAssets_RestoreCheckpoint(struct NativeSceneAssets *assets,const void *src,size_t bytes,NativeSceneSourceRebase rebase,void *user)
 {
     if(assets==NULL || src==NULL || rebase==NULL || bytes<SCENE_CHECKPOINT_HEADER) return 0;
     const u8 *wire=src;
-    if(CTR_ReadU32LE(wire)!=0x53414353u || CTR_ReadU32LE(wire+4)!=1 || CTR_ReadU32LE(wire+8)!=bytes) return 0;
-    u32 count=CTR_ReadU32LE(wire+12);
-    if(count>(bytes-SCENE_CHECKPOINT_HEADER)/SCENE_CHECKPOINT_OWNER_HEADER) return 0;
+	if (CTR_ReadU32LE(wire) != 0x53414353u || CTR_ReadU32LE(wire + 4) != 2 || CTR_ReadU32LE(wire + 8) != bytes)
+		return 0;
+	u32 count = CTR_ReadU32LE(wire + 12);
+	if(count>(bytes-SCENE_CHECKPOINT_HEADER)/SCENE_CHECKPOINT_OWNER_HEADER) return 0;
     struct NativeSceneAssets staged={0};
     struct NativeSceneAssetOwner **owners=calloc(count ? count : 1,sizeof(*owners));
     if(owners==NULL) return 0;
@@ -151,9 +242,11 @@ int NativeSceneAssets_RestoreCheckpoint(struct NativeSceneAssets *assets,const v
     for(u32 index=0;index<count;index++) {
         if(at>bytes || bytes-at<SCENE_CHECKPOINT_OWNER_HEADER) goto done;
         u64 oldSource=SceneCheckpoint_Read64(wire+at); u32 payload=CTR_ReadU32LE(wire+at+8),slots=CTR_ReadU32LE(wire+at+12),ready=CTR_ReadU32LE(wire+at+16);
-        if(!payload || ready>1 || (!ready && slots) || CTR_ReadU32LE(wire+at+20)) goto done;
-        uintptr_t live;
-        if(!rebase(user,oldSource,payload,&live) || !live || payload>UINTPTR_MAX-live) goto done;
+		u32 graphBytes = CTR_ReadU32LE(wire + at + 20);
+		if (!payload || ready > 1 || (!ready && (slots || graphBytes)))
+			goto done;
+		uintptr_t live;
+		if(!rebase(user,oldSource,payload,&live) || !live || payload>UINTPTR_MAX-live) goto done;
         at+=SCENE_CHECKPOINT_OWNER_HEADER;
         if(payload>bytes-at) goto done;
         struct NativeSceneAssetOwner *o=SceneAssets_Copy(wire+at,payload); if(o==NULL) goto done;
@@ -172,16 +265,83 @@ int NativeSceneAssets_RestoreCheckpoint(struct NativeSceneAssets *assets,const v
             if(result!=NATIVE_PTRMAP_OK) goto done;
         }
         at+=(size_t)slots*4;
-    }
-    if(at!=bytes) goto done;
-    for(u32 i=0;i<NATIVE_MODEL_LIBRARY_SLOTS;i++) {
-        u32 index=CTR_ReadU32LE(wire+16+i*8),offset=CTR_ReadU32LE(wire+20+i*8);
+		if (graphBytes > bytes - at)
+			goto done;
+		if (graphBytes)
+		{
+			o->savedGraph = wire + at;
+			o->savedGraphBytes = graphBytes;
+			if (!NativeResidentGraph_PrepareCheckpoint(wire + at, graphBytes, &o->graph))
+				goto done;
+		}
+		at += graphBytes;
+	}
+	if(at!=bytes) goto done;
+	struct SceneGraphRebase graphRebase = {&staged, rebase, user};
+	for (u32 i = 0; i < count; i++)
+		if (owners[i]->graph &&
+		    !NativeResidentGraph_ApplyCheckpoint(owners[i]->savedGraph, owners[i]->savedGraphBytes, owners[i]->graph, SceneAssets_RebaseGraph, &graphRebase))
+			goto done;
+	for (u32 i = 0; i < count; i++)
+	{
+		owners[i]->savedGraph = NULL;
+		owners[i]->savedGraphBytes = 0;
+	}
+	for (u32 i = 0; i < NATIVE_MODEL_LIBRARY_SLOTS; i++)
+	{
+		u32 index=CTR_ReadU32LE(wire+16+i*8),offset=CTR_ReadU32LE(wire+20+i*8);
         if(index==UINT32_MAX) continue;
         if(index>=count || !owners[index]->ready) goto done;
         struct NativeModelView model;
         if(NativeModel_Open(&owners[index]->map,offset,&model)!=NATIVE_ASSET_OK || model.id!=(s32)i || NativeModelLibrary_StoreModel(&staged.library,&model)!=NATIVE_ASSET_OK) goto done;
-    }
-    NativeSceneAssets_Reset(assets); *assets=staged; memset(&staged,0,sizeof(staged)); success=1;
+	}
+	NativeSceneAssets_Reset(assets); *assets=staged; memset(&staged,0,sizeof(staged)); success=1;
 done:
     NativeSceneAssets_Reset(&staged); free(owners); return success;
+}
+
+int NativeSceneAssets_RebaseSavedPointer(const void *blob, size_t bytes, const struct NativeSceneAssets *assets, uintptr_t saved, void **live)
+{
+	if (!blob || !assets || !live || bytes < SCENE_CHECKPOINT_HEADER)
+		return 0;
+	const u8 *p = blob;
+	if (CTR_ReadU32LE(p) != 0x53414353u || CTR_ReadU32LE(p + 4) != 2 || CTR_ReadU32LE(p + 8) != bytes)
+		return 0;
+	size_t at = SCENE_CHECKPOINT_HEADER;
+	u32 count = CTR_ReadU32LE(p + 12);
+	const struct NativeSceneAssetOwner *o = assets->owners;
+	for (u32 i = 0; i < count; i++, o = o->next)
+	{
+		if (!o || at > bytes || bytes - at < SCENE_CHECKPOINT_OWNER_HEADER)
+			return 0;
+		u32 payload = CTR_ReadU32LE(p + at + 8), slots = CTR_ReadU32LE(p + at + 12), graphBytes = CTR_ReadU32LE(p + at + 20);
+		at += SCENE_CHECKPOINT_OWNER_HEADER;
+		if (payload > bytes - at)
+			return 0;
+		at += payload;
+		if (slots > (bytes - at) / 4)
+			return 0;
+		at += (size_t)slots * 4;
+		if (graphBytes > bytes - at)
+			return 0;
+		if (graphBytes && NativeResidentGraph_RebaseSavedPointer(p + at, graphBytes, o->graph, saved, live))
+			return 1;
+		at += graphBytes;
+	}
+	return 0;
+}
+
+int NativeSceneAssets_ResolveWireSlot(const struct NativeSceneAssets *assets, const void *slot, size_t targetBytes, void **target)
+{
+	if (!assets || !slot || !target)
+		return 0;
+	for (const struct NativeSceneAssetOwner *o = assets->owners; o; o = o->next)
+		if (o->graph)
+		{
+			const struct NativePtrMapView *map = NativeResidentGraph_Map(o->graph);
+			uintptr_t address = (uintptr_t)slot, base = (uintptr_t)map->origin;
+			if (address >= base && address - base <= map->originSize && sizeof(u32) <= map->originSize - (address - base))
+				return NativePtrMap_Resolve(map, (u32)(address - base), targetBytes, target) == NATIVE_PTRMAP_OK;
+		}
+	return 0;
 }

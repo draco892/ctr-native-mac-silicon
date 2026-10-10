@@ -1,5 +1,7 @@
 #ifndef CTR_NATIVE_NAMESPACE_DRAWLEVEL_H
 #define CTR_NATIVE_NAMESPACE_DRAWLEVEL_H
+#include <ctr_render_work.h>
+#include <platform/native_terrain_work.h>
 
 enum DrawLevelOvr1PRenderListConstant
 {
@@ -70,6 +72,7 @@ struct DrawLevelOvr1PBucket
 	u8 lodMode;
 };
 
+#if !CTR_NATIVE_HOST64
 CTR_STATIC_ASSERT(sizeof(struct DrawLevelOvr1PRenderListSlot) == 0x8);
 CTR_STATIC_ASSERT(offsetof(struct DrawLevelOvr1PRenderListSlot, ptrQuadBlocksRendered) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct DrawLevelOvr1PRenderListSlot, bspListStart) == 0x4);
@@ -77,6 +80,12 @@ CTR_STATIC_ASSERT(sizeof(struct DrawLevelOvr1PRenderList) == 0x30);
 CTR_STATIC_ASSERT(offsetof(struct DrawLevelOvr1PRenderList, list) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct DrawLevelOvr1PRenderList, bspListStart_FullDynamic) == 0x28);
 CTR_STATIC_ASSERT(offsetof(struct DrawLevelOvr1PRenderList, ptrQuadBlocksRendered_FullDynamic) == 0x2c);
+
+#else
+CTR_STATIC_ASSERT(sizeof(struct DrawLevelOvr1PRenderListSlot) == 2 * sizeof(void *));
+CTR_STATIC_ASSERT(sizeof(struct DrawLevelOvr1PRenderList) == 12 * sizeof(void *));
+CTR_STATIC_ASSERT(DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_FULL_DYNAMIC_RENDERED <= UINT8_MAX);
+#endif
 
 enum DrawLevelOvr1PUvScratchSlot
 {

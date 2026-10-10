@@ -249,7 +249,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ctr_native_terrain_material COMMAND ctr_native_terrain_material_tests)
 
-    add_executable(ctr_native_scene_runtime_tests tests/native_scene_runtime_tests.c game/MEMPACK.c platform/native_mempack_arena.c platform/native_scene_gpu.c platform/native_gpu_links.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_geometry.c platform/native_vertex_animation.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c)
+    add_executable(ctr_native_scene_runtime_tests tests/native_scene_runtime_tests.c platform/native_resident_graph.c platform/native_resident.c game/MEMPACK.c platform/native_mempack_arena.c platform/native_scene_gpu.c platform/native_gpu_links.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_geometry.c platform/native_vertex_animation.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c)
     set_target_properties(ctr_native_scene_runtime_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(ctr_native_scene_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_definitions(ctr_native_scene_runtime_tests PRIVATE CTR_NATIVE CTR_NATIVE_GAME_SCENE)
@@ -353,7 +353,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ctr_native_vertex_animation COMMAND ctr_native_vertex_animation_tests)
 
-    add_executable(ctr_native_asset_validate tools/native_asset_validate.c platform/native_resident.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_geometry.c platform/native_vertex_animation.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c platform/native_disc_image.c)
+    add_executable(ctr_native_asset_validate tools/native_asset_validate.c platform/native_resident.c platform/native_resident_graph.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_geometry.c platform/native_vertex_animation.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c platform/native_disc_image.c)
     set_target_properties(ctr_native_asset_validate PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(ctr_native_asset_validate PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_definitions(ctr_native_asset_validate PRIVATE CTR_NATIVE)
@@ -364,6 +364,32 @@ if(BUILD_TESTING)
             target_link_options(ctr_native_asset_validate PRIVATE -fsanitize=address,undefined)
         endif()
     endif()
+
+    set(CTR_RESIDENT_TEST_SOURCES
+        platform/native_resident.c platform/native_resident_graph.c
+        platform/native_scene_assets.c platform/native_model_library.c
+        platform/native_asset_readers.c platform/native_model_animation.c
+        platform/native_model_vertices.c platform/native_model_commands.c platform/native_ptrmap.c)
+    add_executable(ctr_native_render_bucket_tests tests/native_render_bucket_tests.c
+        platform/native_host_scratch.c platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)
+    add_executable(ctr_native_terrain_renderer_tests tests/native_terrain_renderer_tests.c
+        ${CTR_RESIDENT_TEST_SOURCES} platform/native_terrain_work.c platform/native_host_scratch.c
+        platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)
+    add_executable(ctr_native_resident_graph_tests tests/native_resident_graph_tests.c ${CTR_RESIDENT_TEST_SOURCES} platform/native_asset_loading.c)
+    target_compile_definitions(ctr_native_resident_graph_tests PRIVATE CTR_NATIVE_GAME_SCENE)
+    foreach(target ctr_native_render_bucket_tests ctr_native_terrain_renderer_tests ctr_native_resident_graph_tests)
+        set_target_properties(${target} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+        target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        target_compile_definitions(${target} PRIVATE CTR_NATIVE)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -Wno-unused-function)
+            if(CTR_ENABLE_SANITIZERS)
+                target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+                target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+            endif()
+        endif()
+        add_test(NAME ${target} COMMAND ${target})
+    endforeach()
 
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ctr_native_asset_validate

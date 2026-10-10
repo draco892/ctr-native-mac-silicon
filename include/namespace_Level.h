@@ -131,7 +131,11 @@ struct AnimTex
 	// 0x0
 	// pointer to IconGroup4 struct to be animated
 	// cycles through the entirety of ptrarray
+#ifdef CTR_NATIVE
+	void *ptrActiveTex; // IconGroup4 (LEV), TextureLayout pointer slot (model)
+#else
 	int *ptrActiveTex;
+#endif
 
 	// 0x4
 	s16 numFrames;

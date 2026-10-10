@@ -108,6 +108,11 @@ void LOAD_QueueNextBody()
 		if (retry == 0)
 		{
 			int pendingLength;
+#ifdef CTR_NATIVE
+			pendingLength = sdata->queueLength;
+			data.currSlot = sdata->queueSlots[0];
+			destPage = OFFSETOF_DATA(currSlot) & 0xffff0000u;
+#else
 			{
 				register CtrPackedU32 *destWords CTR_PSX_REGISTER("$10");
 				register CtrPackedU32 *sourceWords CTR_PSX_REGISTER("$11");
@@ -139,6 +144,8 @@ void LOAD_QueueNextBody()
 				__asm__("sw %1,16(%2)\n\tsw %3,20(%2)" : "+r"(pendingLength) : "r"(word0), "r"(destWords), "r"(word1));
 #endif
 			}
+
+#endif
 
 			if (i < pendingLength)
 			{

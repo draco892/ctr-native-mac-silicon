@@ -16,12 +16,9 @@ struct Mempack *Platform_GetMempackPools(void) { return scenePools; }
 void NativeCheckpoint_OnMempackArenaReset(void) {}
 void CTR_ErrorScreen(u8 r,u8 g,u8 b) { (void)r; (void)g; (void)b; }
 #define COMMON_H
-struct Model { char name[16]; s16 id,numHeaders; void *headers; };
 struct GameTracker { struct Model *modelPtr[NATIVE_MODEL_LIBRARY_SLOTS]; };
 void Platform_LogError(const char *format,...) { (void)format; }
 #include "../game/LibraryOfModels.c"
-struct SceneTestMatrix { s16 m[3][3]; s32 t[3]; };
-struct PushBuffer { struct { s16 w,h; } rect; s32 distanceToScreen_PREV; struct SceneTestMatrix matrix_Camera,matrix_ViewProj; u32 *ptrOT; };
 struct PrimMem { void *cursor,*end; s32 primitiveCount; };
 #include "../game/RenderLevel/NativeSceneConsumer.c"
 static void Put16(u8 *p,u16 n) { p[0]=(u8)n; p[1]=(u8)(n>>8); }
@@ -193,9 +190,10 @@ int main(void)
     gpu.count=gpu.capacity; u32 preserved=ot[2];
     CHECK(NativeSceneGpu_Emit(&gpu,&triangle)==NATIVE_ASSET_OUTPUT_TOO_SMALL && ot[2]==preserved);
     for(unsigned k=0;k<0x400;k++) ot[k]=NATIVE_GPU_LINK_TERMINATOR;
-    struct PushBuffer pb={.rect={512,512},.distanceToScreen_PREV=256,.ptrOT=ot};
-    for(unsigned k=0;k<3;k++) pb.matrix_ViewProj.m[k][k]=4096;
-    struct PrimMem memory={.cursor=packets,.end=packets+1}; u32 visibleNodes;
+	struct PushBuffer pb = {.rect = {.w = 512, .h = 512}, .distanceToScreen_PREV = 256, .ptrOT = ot};
+	for (unsigned k = 0; k < 3; k++)
+		pb.matrix_ViewProj.m[k][k] = 4096;
+	struct PrimMem memory={.cursor=packets,.end=packets+1}; u32 visibleNodes;
     CHECK(!NativeSceneConsumer_Terrain(asset,&pb,&memory,NULL,NULL,0,&visibleNodes));
     CHECK(memory.cursor==packets && ot[6]==NATIVE_GPU_LINK_TERMINATOR);
     memory.end=packets+16;
