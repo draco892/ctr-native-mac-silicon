@@ -1090,7 +1090,7 @@ void UI_RenderFrame_Wumpa3D_2P3P4P(struct GameTracker *gGT)
 
 	// NOTE(aalhendi): Retail reads the gp slot populated by UI_INSTANCE_InitAll
 	// with ptrPushBufferUI, not the adjacent ptrFruitDisp instance slot.
-	wumpaPushBuffer = (struct PushBuffer *)(u32)sdata->ptrPushBufferUI;
+	wumpaPushBuffer = (struct PushBuffer *)sdata->ptrPushBufferUI;
 
 	if (wumpaPushBuffer != NULL)
 	{

@@ -8,8 +8,12 @@
 #include "platform/native_memory.h"
 #include "platform/native_lng.h"
 #include "platform/native_state.h"
+#include <platform/native_checkpoint_relocation.h>
+#include <platform/native_host_scratch.h>
+#include <platform/native_scene_assets.h>
 
 #include <string.h>
+#include <stdlib.h>
 
 #define NATIVE_CHECKPOINT_FOURCC(a, b, c, d) ((u32)(a) | ((u32)(b) << 8) | ((u32)(c) << 16) | ((u32)(d) << 24))
 
@@ -17,10 +21,10 @@
 // and retail globals are defined, so they can snapshot the same process-local
 // regions the game mutates.
 #define NATIVE_CHECKPOINT_MAGIC              NATIVE_CHECKPOINT_FOURCC('C', 'T', 'R', 'C')
-// Version 4 keeps LNG file offsets unmodified and its host table separately in
-// MEMPACK. Older payloads contain patched addresses inside the LNG file.
-#define NATIVE_CHECKPOINT_VERSION            4u
-#define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  19u
+// Version 5 records 64-bit addresses and explicit slot/host widths.
+// Payload regions remain ABI-specific; older versions are rejected.
+#define NATIVE_CHECKPOINT_VERSION            5u
+#define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  20u
 #define NATIVE_CHECKPOINT_POINTER_SLOT_CAP   65536u
 #define NATIVE_CHECKPOINT_CREDITS_STRING_CAP 4096u
 #define NATIVE_CHECKPOINT_LNG_STRING_CAP     NATIVE_LNG_MAX_STRINGS
@@ -46,6 +50,8 @@ enum NativeCheckpointRegionKind
 	NATIVE_CHECKPOINT_REGION_CRD3 = NATIVE_CHECKPOINT_FOURCC('C', 'R', 'D', '3'),  // credits runtime state
 	NATIVE_CHECKPOINT_REGION_MPAK = NATIVE_CHECKPOINT_FOURCC('M', 'P', 'A', 'K'),  // mempack backing store
 	NATIVE_CHECKPOINT_REGION_SCRP = NATIVE_CHECKPOINT_FOURCC('S', 'C', 'R', 'P'),  // PS1 scratchpad RAM
+	NATIVE_CHECKPOINT_REGION_SCAS = NATIVE_CHECKPOINT_FOURCC('S', 'C', 'A', 'S'), // immutable asset owners
+	NATIVE_CHECKPOINT_REGION_HSCR = NATIVE_CHECKPOINT_FOURCC('H', 'S', 'C', 'R'), // host workspaces
 	NATIVE_CHECKPOINT_REGION_PMAP = NATIVE_CHECKPOINT_FOURCC('P', 'M', 'A', 'P'),  // native pointer-map relocation slots
 	NATIVE_CHECKPOINT_REGION_NATS = NATIVE_CHECKPOINT_FOURCC('N', 'A', 'T', 'S'),  // native subsystem state bundle
 };
@@ -55,19 +61,6 @@ struct NativeCheckpointRegion
 	u32 kind;
 	u32 offset;
 	u32 size;
-};
-
-struct NativeCheckpointAddressRange
-{
-	u32 kind;
-	u32 start;
-	u32 size;
-};
-
-struct NativeCheckpointPointerSlotRecord
-{
-	u32 slotRegion;
-	u32 slotOffset;
 };
 
 struct NativeCheckpointPointerSlotState
@@ -88,11 +81,12 @@ struct NativeCheckpointFieldRelocation
 {
 	u32 offset;
 	u32 kind;
+	u32 width;
 };
 
-#define NATIVE_CHECKPOINT_FIELD_PTR(type, field)          {OFFSETOF(type, field), NATIVE_CHECKPOINT_FIELD_POINTER}
-#define NATIVE_CHECKPOINT_FIELD_IMAGE(type, field)        {OFFSETOF(type, field), NATIVE_CHECKPOINT_FIELD_IMAGE_POINTER}
-#define NATIVE_CHECKPOINT_FIELD_PTR_OR_IMAGE(type, field) {OFFSETOF(type, field), NATIVE_CHECKPOINT_FIELD_POINTER_OR_IMAGE}
+#define NATIVE_CHECKPOINT_FIELD_PTR(type, field)          {OFFSETOF(type, field), NATIVE_CHECKPOINT_FIELD_POINTER, sizeof(((type *)0)->field)}
+#define NATIVE_CHECKPOINT_FIELD_IMAGE(type, field)        {OFFSETOF(type, field), NATIVE_CHECKPOINT_FIELD_IMAGE_POINTER, sizeof(((type *)0)->field)}
+#define NATIVE_CHECKPOINT_FIELD_PTR_OR_IMAGE(type, field) {OFFSETOF(type, field), NATIVE_CHECKPOINT_FIELD_POINTER_OR_IMAGE, sizeof(((type *)0)->field)}
 
 struct NativeCheckpointHeader
 {
@@ -100,17 +94,20 @@ struct NativeCheckpointHeader
 	u32 version;
 	u32 size;
 	u32 regionCount;
-	struct PlatformMempackArena mempackArena;
+	u32 pointerWidth;
+	u32 endianMarker;
 	u32 psxRandSeed;
 	s32 activeMempackIndex;
 	u32 addressRangeCount;
-	u32 codeAnchor;
+	u64 codeAnchor;
 	struct NativeCheckpointAddressRange addressRanges[NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP];
-	struct NativeCheckpointRegion regions[14];
+	struct NativeCheckpointRegion regions[16];
 };
 
 global_variable void *s_nativeCheckpointPointerSlots[NATIVE_CHECKPOINT_POINTER_SLOT_CAP];
 global_variable u32 s_nativeCheckpointPointerSlotCount;
+global_variable u32 s_nativeCheckpointPointerWidths[NATIVE_CHECKPOINT_POINTER_SLOT_CAP];
+global_variable int s_nativeCheckpointPointerSlotOverflow;
 
 internal int NativeCheckpoint_InitHeader(struct NativeCheckpointHeader *header);
 
@@ -119,63 +116,45 @@ internal u32 NativeCheckpoint_Align4(u32 value)
 	return (value + 3u) & ~3u;
 }
 
-internal b32 NativeCheckpoint_PtrToU32(const void *ptr, u32 *out)
+internal b32 NativeCheckpoint_PtrToAddress(const void *ptr, u64 *out)
 {
-	uintptr_t value = (uintptr_t)ptr;
-
-	if ((ptr == NULL) || (out == NULL) || (value > 0xffffffffu))
-	{
-		return 0;
-	}
-
-	*out = (u32)value;
-	return 1;
-}
-
-internal b32 NativeCheckpoint_ReadU32Slot(const void *slot, u32 *out)
-{
-	if ((slot == NULL) || (out == NULL))
-	{
-		return 0;
-	}
-
-	memcpy(out, slot, sizeof(*out));
-	return 1;
-}
-
-internal void NativeCheckpoint_WriteU32Slot(void *slot, u32 value)
-{
-	if (slot != NULL)
-	{
-		memcpy(slot, &value, sizeof(value));
-	}
+    if(ptr==NULL || out==NULL) return 0;
+    *out=(u64)(uintptr_t)ptr; return 1;
 }
 
 void NativeCheckpoint_OnMempackArenaReset(void)
 {
 	s_nativeCheckpointPointerSlotCount = 0;
+    s_nativeCheckpointPointerSlotOverflow = 0;
 }
 
-void NativeCheckpoint_RegisterPointerSlot(void *slot)
+void NativeCheckpoint_RegisterPointerSlotSized(void *slot, u32 width)
 {
+    if(width!=4 && width!=8) { s_nativeCheckpointPointerSlotOverflow=1; return; }
 	if (slot == NULL)
 	{
 		return;
 	}
 	if (s_nativeCheckpointPointerSlotCount >= NATIVE_CHECKPOINT_POINTER_SLOT_CAP)
 	{
+        s_nativeCheckpointPointerSlotOverflow=1;
 		return;
 	}
 	for (u32 i = 0; i < s_nativeCheckpointPointerSlotCount; i++)
 	{
 		if (s_nativeCheckpointPointerSlots[i] == slot)
 		{
+            if(s_nativeCheckpointPointerWidths[i]!=width) s_nativeCheckpointPointerSlotOverflow=1;
 			return;
 		}
 	}
 
+	s_nativeCheckpointPointerWidths[s_nativeCheckpointPointerSlotCount]=width;
 	s_nativeCheckpointPointerSlots[s_nativeCheckpointPointerSlotCount++] = slot;
 }
+
+void NativeCheckpoint_RegisterPointerSlot(void *slot)
+{ NativeCheckpoint_RegisterPointerSlotSized(slot,4); }
 
 internal int NativeCheckpoint_GetActiveMempackIndex(void)
 {
@@ -237,6 +216,10 @@ internal int NativeCheckpoint_GetRegionSize(u32 kind)
 		return Platform_GetMempackBackingSize();
 	case NATIVE_CHECKPOINT_REGION_SCRP:
 		return (int)CTR_SCRATCHPAD_SIZE;
+	case NATIVE_CHECKPOINT_REGION_SCAS:
+        return 6*1024*1024; // Fixed replay payload capacity for the 2 MiB arena.
+    case NATIVE_CHECKPOINT_REGION_HSCR:
+        return (int)NativeHostScratch_StorageSize();
 	case NATIVE_CHECKPOINT_REGION_PMAP:
 		return (int)sizeof(struct NativeCheckpointPointerSlotState);
 	case NATIVE_CHECKPOINT_REGION_NATS:
@@ -288,6 +271,8 @@ internal void *NativeCheckpoint_GetRegionPtr(u32 kind)
 		return Platform_GetMempackBacking();
 	case NATIVE_CHECKPOINT_REGION_SCRP:
 		return CTR_SCRATCHPAD_BASE;
+    case NATIVE_CHECKPOINT_REGION_HSCR:
+        return NativeHostScratch_Storage();
 	}
 
 	return NULL;
@@ -297,7 +282,7 @@ internal int NativeCheckpoint_AddAddressRange(struct NativeCheckpointHeader *hea
 {
 	void *ptr = NativeCheckpoint_GetRegionPtr(kind);
 	int size = NativeCheckpoint_GetRegionSize(kind);
-	u32 start;
+	u64 start;
 
 	if ((header == NULL) || (ptr == NULL) || (size <= 0))
 	{
@@ -307,7 +292,7 @@ internal int NativeCheckpoint_AddAddressRange(struct NativeCheckpointHeader *hea
 	{
 		return 0;
 	}
-	if (!NativeCheckpoint_PtrToU32(ptr, &start))
+	if (!NativeCheckpoint_PtrToAddress(ptr, &start))
 	{
 		return 0;
 	}
@@ -330,7 +315,7 @@ internal int NativeCheckpoint_FillAddressRanges(struct NativeCheckpointHeader *h
 	    NATIVE_CHECKPOINT_REGION_D230,  NATIVE_CHECKPOINT_REGION_V230, NATIVE_CHECKPOINT_REGION_R231,  NATIVE_CHECKPOINT_REGION_D231,
 	    NATIVE_CHECKPOINT_REGION_R232,  NATIVE_CHECKPOINT_REGION_D232, NATIVE_CHECKPOINT_REGION_CSTN,  NATIVE_CHECKPOINT_REGION_CSPN,
 	    NATIVE_CHECKPOINT_REGION_CSIN,  NATIVE_CHECKPOINT_REGION_D233, NATIVE_CHECKPOINT_REGION_CSCN,  NATIVE_CHECKPOINT_REGION_GAR3,
-	    NATIVE_CHECKPOINT_REGION_CRD3,  NATIVE_CHECKPOINT_REGION_MPAK, NATIVE_CHECKPOINT_REGION_SCRP,
+	    NATIVE_CHECKPOINT_REGION_CRD3,  NATIVE_CHECKPOINT_REGION_MPAK, NATIVE_CHECKPOINT_REGION_SCRP, NATIVE_CHECKPOINT_REGION_HSCR,
 	};
 
 	if (header == NULL)
@@ -377,10 +362,10 @@ internal b32 NativeCheckpoint_IsAddressRangeValid(const struct NativeCheckpointA
 		return false;
 	}
 
-	return range->start + range->size >= range->start;
+	return range->start!=0 && range->start<=UINT64_MAX-range->size;
 }
 
-internal const struct NativeCheckpointAddressRange *NativeCheckpoint_FindAddressOwner(const struct NativeCheckpointHeader *header, u32 address, u32 *offsetOut)
+internal const struct NativeCheckpointAddressRange *NativeCheckpoint_FindAddressOwner(const struct NativeCheckpointHeader *header, u64 address, u32 *offsetOut)
 {
 	if (header == NULL)
 	{
@@ -390,7 +375,7 @@ internal const struct NativeCheckpointAddressRange *NativeCheckpoint_FindAddress
 	for (u32 i = 0; i < header->addressRangeCount; i++)
 	{
 		const struct NativeCheckpointAddressRange *range = &header->addressRanges[i];
-		const u32 end = range->start + range->size;
+		const u64 end = range->start + range->size;
 
 		if (NativeCheckpoint_IsAddressRangeValid(range) && (address >= range->start) && (address < end))
 		{
@@ -417,37 +402,18 @@ internal void *NativeCheckpoint_GetAddressFromRangeOffset(const struct NativeChe
 	return (void *)(uintptr_t)(range->start + offset);
 }
 
-internal int NativeCheckpoint_RelocateAddress(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader, u32 oldAddress,
-                                              u32 *newAddressOut)
+internal int NativeCheckpoint_RelocateAddress(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader, u64 oldAddress,
+                                              u64 *newAddressOut)
 {
-	u32 offset;
-
-	if ((oldAddress == 0) || (newAddressOut == NULL))
-	{
-		return 0;
-	}
-
-	const struct NativeCheckpointAddressRange *oldRange = NativeCheckpoint_FindAddressOwner(oldHeader, oldAddress, &offset);
-	if (oldRange == NULL)
-	{
-		return 0;
-	}
-
-	const struct NativeCheckpointAddressRange *liveRange = NativeCheckpoint_FindAddressRange(liveHeader, oldRange->kind);
-	if ((liveRange == NULL) || (offset >= liveRange->size))
-	{
-		return 0;
-	}
-
-	*newAddressOut = liveRange->start + offset;
-	return 1;
+    return oldHeader!=NULL && liveHeader!=NULL && NativeCheckpointRanges_Rebase(
+        oldHeader->addressRanges,oldHeader->addressRangeCount,liveHeader->addressRanges,liveHeader->addressRangeCount,oldAddress,newAddressOut);
 }
 
 internal int NativeCheckpoint_IsLivePointer(const struct NativeCheckpointHeader *liveHeader, const void *ptr)
 {
-	u32 address;
+	u64 address;
 
-	if (!NativeCheckpoint_PtrToU32(ptr, &address))
+	if (!NativeCheckpoint_PtrToAddress(ptr, &address))
 	{
 		return 0;
 	}
@@ -455,60 +421,57 @@ internal int NativeCheckpoint_IsLivePointer(const struct NativeCheckpointHeader 
 	return NativeCheckpoint_FindAddressOwner(liveHeader, address, NULL) != NULL;
 }
 
-internal void NativeCheckpoint_RelocatePointerSlot(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader, void *slot)
+internal void NativeCheckpoint_RelocatePointerSlotWidth(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader, void *slot, u32 width)
 {
-	u32 oldAddress;
-	u32 newAddress;
+	u64 oldAddress;
+	u64 newAddress;
 
-	if (!NativeCheckpoint_ReadU32Slot(slot, &oldAddress))
+	if (!NativeCheckpointSlot_Read(slot, width, &oldAddress))
 	{
 		return;
 	}
 
 	if (NativeCheckpoint_RelocateAddress(oldHeader, liveHeader, oldAddress, &newAddress))
 	{
-		NativeCheckpoint_WriteU32Slot(slot, newAddress);
+		(void)NativeCheckpointSlot_Write(slot, width, newAddress);
 	}
 }
 
-internal void NativeCheckpoint_RelocateImagePointerSlot(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader,
-                                                        void *slot)
+internal void NativeCheckpoint_RelocateImagePointerSlotWidth(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader,
+                                                        void *slot, u32 width)
 {
-	u32 oldAddress;
+	u64 oldAddress;
 
-	if ((oldHeader == NULL) || (liveHeader == NULL) || (oldHeader->codeAnchor == 0) || (liveHeader->codeAnchor == 0))
-	{
-		return;
-	}
-	if (!NativeCheckpoint_ReadU32Slot(slot, &oldAddress) || (oldAddress == 0) || (oldAddress == 0xffffffffu) || (oldAddress == 0xfffffffeu))
-	{
-		return;
-	}
-
-	u32 newAddress = oldAddress + (liveHeader->codeAnchor - oldHeader->codeAnchor);
-	NativeCheckpoint_WriteU32Slot(slot, newAddress);
+    u64 newAddress;
+    if(oldHeader!=NULL && liveHeader!=NULL && NativeCheckpointSlot_Read(slot,width,&oldAddress) &&
+       NativeCheckpointImage_Rebase(oldAddress,oldHeader->codeAnchor,liveHeader->codeAnchor,width,&newAddress))
+        (void)NativeCheckpointSlot_Write(slot,width,newAddress);
 }
 
-internal void NativeCheckpoint_RelocatePointerOrImageSlot(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader,
-                                                          void *slot)
+internal void NativeCheckpoint_RelocatePointerOrImageSlotWidth(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader,
+                                                          void *slot, u32 width)
 {
-	u32 oldAddress;
-	u32 newAddress;
+	u64 oldAddress;
+	u64 newAddress;
 
-	if (!NativeCheckpoint_ReadU32Slot(slot, &oldAddress))
+	if (!NativeCheckpointSlot_Read(slot, width, &oldAddress))
 	{
 		return;
 	}
 
 	if (NativeCheckpoint_RelocateAddress(oldHeader, liveHeader, oldAddress, &newAddress))
 	{
-		NativeCheckpoint_WriteU32Slot(slot, newAddress);
+		(void)NativeCheckpointSlot_Write(slot, width, newAddress);
 	}
 	else
 	{
-		NativeCheckpoint_RelocateImagePointerSlot(oldHeader, liveHeader, slot);
+		NativeCheckpoint_RelocateImagePointerSlotWidth(oldHeader, liveHeader, slot, width);
 	}
 }
+
+#define NativeCheckpoint_RelocatePointerSlot(old,live,slot) NativeCheckpoint_RelocatePointerSlotWidth(old,live,slot,sizeof(*(slot)))
+#define NativeCheckpoint_RelocateImagePointerSlot(old,live,slot) NativeCheckpoint_RelocateImagePointerSlotWidth(old,live,slot,sizeof(*(slot)))
+#define NativeCheckpoint_RelocatePointerOrImageSlot(old,live,slot) NativeCheckpoint_RelocatePointerOrImageSlotWidth(old,live,slot,sizeof(*(slot)))
 
 internal void NativeCheckpoint_RelocateFields(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader, void *base,
                                               const struct NativeCheckpointFieldRelocation *fields, u32 fieldCount)
@@ -527,13 +490,13 @@ internal void NativeCheckpoint_RelocateFields(const struct NativeCheckpointHeade
 		switch (fields[i].kind)
 		{
 		case NATIVE_CHECKPOINT_FIELD_POINTER:
-			NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, slot);
+			NativeCheckpoint_RelocatePointerSlotWidth(oldHeader, liveHeader, slot, fields[i].width);
 			break;
 		case NATIVE_CHECKPOINT_FIELD_IMAGE_POINTER:
-			NativeCheckpoint_RelocateImagePointerSlot(oldHeader, liveHeader, slot);
+			NativeCheckpoint_RelocateImagePointerSlotWidth(oldHeader, liveHeader, slot, fields[i].width);
 			break;
 		case NATIVE_CHECKPOINT_FIELD_POINTER_OR_IMAGE:
-			NativeCheckpoint_RelocatePointerOrImageSlot(oldHeader, liveHeader, slot);
+			NativeCheckpoint_RelocatePointerOrImageSlotWidth(oldHeader, liveHeader, slot, fields[i].width);
 			break;
 		}
 	}
@@ -1877,14 +1840,14 @@ internal int NativeCheckpoint_CapturePointerSlotState(void *dst, int dstSize)
 
 	for (u32 i = 0; i < s_nativeCheckpointPointerSlotCount; i++)
 	{
-		u32 slotAddress;
+		u64 slotAddress;
 		u32 slotOffset;
 
 		if (count >= NATIVE_CHECKPOINT_POINTER_SLOT_CAP)
 		{
 			return 0;
 		}
-		if (!NativeCheckpoint_PtrToU32(s_nativeCheckpointPointerSlots[i], &slotAddress))
+		if (!NativeCheckpoint_PtrToAddress(s_nativeCheckpointPointerSlots[i], &slotAddress))
 		{
 			continue;
 		}
@@ -1897,6 +1860,8 @@ internal int NativeCheckpoint_CapturePointerSlotState(void *dst, int dstSize)
 
 		state->records[count].slotRegion = slotRange->kind;
 		state->records[count].slotOffset = slotOffset;
+        state->records[count].width=s_nativeCheckpointPointerWidths[i];
+        if(slotOffset>slotRange->size || state->records[count].width>slotRange->size-slotOffset) return 0;
 		count++;
 	}
 
@@ -1919,6 +1884,7 @@ internal int NativeCheckpoint_ApplyPointerSlotState(const struct NativeCheckpoin
 	}
 
 	s_nativeCheckpointPointerSlotCount = 0;
+    s_nativeCheckpointPointerSlotOverflow=0;
 
 	for (u32 i = 0; i < state->count; i++)
 	{
@@ -1930,8 +1896,8 @@ internal int NativeCheckpoint_ApplyPointerSlotState(const struct NativeCheckpoin
 			return 0;
 		}
 
-		NativeCheckpoint_RelocatePointerSlot(oldHeader, liveHeader, slot);
-		NativeCheckpoint_RegisterPointerSlot(slot);
+		NativeCheckpoint_RelocatePointerSlotWidth(oldHeader, liveHeader, slot, record->width);
+		NativeCheckpoint_RegisterPointerSlotSized(slot, record->width);
 	}
 
 	return 1;
@@ -1958,7 +1924,13 @@ internal void NativeCheckpoint_RelocateMempackPointers(const struct NativeCheckp
 
 internal int NativeCheckpoint_CaptureRegion(u32 kind, void *dst, int dstSize)
 {
-	if (kind == NATIVE_CHECKPOINT_REGION_PMAP)
+	if(kind==NATIVE_CHECKPOINT_REGION_SCAS) {
+        size_t bytes=NativeSceneAssets_CheckpointSize(&gNativeSceneAssets);
+        if(!bytes || bytes>(size_t)dstSize) return 0;
+        memset(dst,0,(size_t)dstSize);
+        return NativeSceneAssets_CaptureCheckpoint(&gNativeSceneAssets,dst,(size_t)dstSize);
+    }
+    if (kind == NATIVE_CHECKPOINT_REGION_PMAP)
 	{
 		return NativeCheckpoint_CapturePointerSlotState(dst, dstSize);
 	}
@@ -1996,19 +1968,21 @@ internal int NativeCheckpoint_InitHeader(struct NativeCheckpointHeader *header)
 	local_persist const u32 regionKinds[] = {
 	    NATIVE_CHECKPOINT_REGION_RDATA, NATIVE_CHECKPOINT_REGION_DATA, NATIVE_CHECKPOINT_REGION_SDATA, NATIVE_CHECKPOINT_REGION_D230,
 	    NATIVE_CHECKPOINT_REGION_V230,  NATIVE_CHECKPOINT_REGION_D231, NATIVE_CHECKPOINT_REGION_D232,  NATIVE_CHECKPOINT_REGION_D233,
-	    NATIVE_CHECKPOINT_REGION_GAR3,  NATIVE_CHECKPOINT_REGION_CRD3, NATIVE_CHECKPOINT_REGION_MPAK,  NATIVE_CHECKPOINT_REGION_SCRP,
-	    NATIVE_CHECKPOINT_REGION_PMAP,  NATIVE_CHECKPOINT_REGION_NATS,
+	    NATIVE_CHECKPOINT_REGION_GAR3,  NATIVE_CHECKPOINT_REGION_CRD3, NATIVE_CHECKPOINT_REGION_MPAK,  NATIVE_CHECKPOINT_REGION_SCRP, NATIVE_CHECKPOINT_REGION_HSCR,
+	    NATIVE_CHECKPOINT_REGION_PMAP,  NATIVE_CHECKPOINT_REGION_NATS, NATIVE_CHECKPOINT_REGION_SCAS,
 	};
 
 	memset(header, 0, sizeof(*header));
 	header->magic = NATIVE_CHECKPOINT_MAGIC;
 	header->version = NATIVE_CHECKPOINT_VERSION;
+    header->pointerWidth=sizeof(void *);
+    header->endianMarker=0x01020304u;
 	header->regionCount = (u32)len(regionKinds);
-	if (!NativeCheckpoint_PtrToU32((const void *)(uintptr_t)&NativeCheckpoint_GetSize, &header->codeAnchor))
+	if (!NativeCheckpoint_PtrToAddress((const void *)(uintptr_t)&NativeCheckpoint_GetSize, &header->codeAnchor))
 	{
 		return 0;
 	}
-	if (!NativeCheckpoint_FillAddressRanges(header))
+	if (!NativeCheckpoint_FillAddressRanges(header) || !NativeCheckpointRanges_Validate(header->addressRanges,header->addressRangeCount))
 	{
 		return 0;
 	}
@@ -2046,7 +2020,7 @@ internal int NativeCheckpoint_ValidateHeader(const struct NativeCheckpointHeader
 	{
 		return 0;
 	}
-	if ((header->magic != NATIVE_CHECKPOINT_MAGIC) || (header->version != NATIVE_CHECKPOINT_VERSION))
+	if ((header->magic != NATIVE_CHECKPOINT_MAGIC) || (header->version != NATIVE_CHECKPOINT_VERSION) || header->pointerWidth!=sizeof(void *) || header->endianMarker!=0x01020304u)
 	{
 		return 0;
 	}
@@ -2062,7 +2036,8 @@ internal int NativeCheckpoint_ValidateHeader(const struct NativeCheckpointHeader
 	{
 		return 0;
 	}
-	if (header->addressRangeCount != liveHeader.addressRangeCount)
+	if(header->addressRangeCount>NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP || header->regionCount>len(header->regions)) return 0;
+	if (header->activeMempackIndex<0 || header->activeMempackIndex>=4 || header->codeAnchor==0 || header->codeAnchor>UINTPTR_MAX || !NativeCheckpointRanges_Validate(header->addressRanges,header->addressRangeCount) || header->addressRangeCount != liveHeader.addressRangeCount)
 	{
 		return 0;
 	}
@@ -2076,7 +2051,7 @@ internal int NativeCheckpoint_ValidateHeader(const struct NativeCheckpointHeader
 		{
 			return 0;
 		}
-		if (!NativeCheckpoint_IsAddressRangeValid(range) || !NativeCheckpoint_IsAddressRangeValid(liveRange))
+		if (!NativeCheckpoint_IsAddressRangeValid(range) || range->start>UINTPTR_MAX || range->size>UINTPTR_MAX-range->start || !NativeCheckpoint_IsAddressRangeValid(liveRange))
 		{
 			return 0;
 		}
@@ -2127,7 +2102,7 @@ int NativeCheckpoint_Capture(void *dst, int dstSize)
 		return 0;
 	}
 
-	header.mempackArena = *Platform_GetMempackArena();
+	if(s_nativeCheckpointPointerSlotOverflow) return 0;
 	header.psxRandSeed = PSX_BIOS_GetRandSeed();
 	header.activeMempackIndex = NativeCheckpoint_GetActiveMempackIndex();
 
@@ -2147,13 +2122,35 @@ int NativeCheckpoint_Capture(void *dst, int dstSize)
 	return 1;
 }
 
+struct NativeCheckpointSceneRebase { const struct NativeCheckpointHeader *oldHeader,*liveHeader; };
+static int NativeCheckpoint_RebaseSceneSource(void *user,u64 address,u32 bytes,uintptr_t *live)
+{
+    struct NativeCheckpointSceneRebase *ctx=user; u64 target; u32 index,offset;
+    if(!NativeCheckpointRanges_Owner(ctx->oldHeader->addressRanges,ctx->oldHeader->addressRangeCount,address,&index,&offset)) return 0;
+    const struct NativeCheckpointAddressRange *range=&ctx->oldHeader->addressRanges[index];
+    if(offset>range->size || bytes>range->size-offset || !NativeCheckpoint_RelocateAddress(ctx->oldHeader,ctx->liveHeader,address,&target) || target>UINTPTR_MAX) return 0;
+    *live=(uintptr_t)target; return 1;
+}
+static int NativeCheckpoint_ValidatePointerState(const struct NativeCheckpointHeader *header,const void *src,u32 bytes)
+{
+    if(bytes!=sizeof(struct NativeCheckpointPointerSlotState)) return 0;
+    const struct NativeCheckpointPointerSlotState *state=src;
+    if(state->count>NATIVE_CHECKPOINT_POINTER_SLOT_CAP) return 0;
+    for(u32 i=0;i<state->count;i++) if(state->records[i].width>header->pointerWidth) return 0;
+    return NativeCheckpointSlots_Validate(header->addressRanges,header->addressRangeCount,state->records,state->count);
+}
+
 int NativeCheckpoint_Restore(const void *src, int srcSize)
 {
-	const struct NativeCheckpointHeader *header = (const struct NativeCheckpointHeader *)src;
+	struct NativeCheckpointHeader savedHeader;
+    if(src==NULL || srcSize<(int)sizeof(savedHeader)) return 0;
+    memcpy(&savedHeader,src,sizeof(savedHeader));
+    const struct NativeCheckpointHeader *header=&savedHeader;
 	const u8 *bytes = (const u8 *)src;
 	const struct NativeCheckpointRegion *nativeStateRegion = NULL;
 	const struct NativeCheckpointRegion *pointerMapRegion = NULL;
 	struct NativeCheckpointHeader liveHeader;
+    struct NativeSceneAssets stagedScene={0};
 
 	if (!NativeCheckpoint_ValidateHeader(header, srcSize))
 	{
@@ -2164,6 +2161,17 @@ int NativeCheckpoint_Restore(const void *src, int srcSize)
 		return 0;
 	}
 
+    const struct NativeCheckpointRegion *sceneRegion=NULL;
+    for(u32 i=0;i<header->regionCount;i++) {
+        const struct NativeCheckpointRegion *r=&header->regions[i];
+        if(r->kind==NATIVE_CHECKPOINT_REGION_SCAS) sceneRegion=r;
+        if(r->kind==NATIVE_CHECKPOINT_REGION_PMAP && !NativeCheckpoint_ValidatePointerState(header,bytes+r->offset,r->size)) return 0;
+    }
+    if(sceneRegion==NULL || sceneRegion->size<16) return 0;
+    u32 sceneBytes=CTR_ReadU32LE(bytes+sceneRegion->offset+8);
+    struct NativeCheckpointSceneRebase rebase={header,&liveHeader};
+    if(sceneBytes>sceneRegion->size || !NativeSceneAssets_RestoreCheckpoint(&stagedScene,bytes+sceneRegion->offset,sceneBytes,NativeCheckpoint_RebaseSceneSource,&rebase)) return 0;
+
 	// NOTE(aalhendi): Restore defaults for uncaptured data, such as the credits
 	// position prefix. The regions restored below include the complete D233 image.
 	OVR233_ResetRuntimeState();
@@ -2172,6 +2180,7 @@ int NativeCheckpoint_Restore(const void *src, int srcSize)
 	{
 		const struct NativeCheckpointRegion *region = &header->regions[i];
 
+		if(region->kind==NATIVE_CHECKPOINT_REGION_SCAS) continue;
 		if (region->kind == NATIVE_CHECKPOINT_REGION_NATS)
 		{
 			nativeStateRegion = region;
@@ -2184,7 +2193,7 @@ int NativeCheckpoint_Restore(const void *src, int srcSize)
 		{
 			if (!NativeCheckpoint_RestoreRegion(region->kind, &bytes[region->offset], (int)region->size))
 			{
-				return 0;
+				goto failed;
 			}
 		}
 	}
@@ -2195,22 +2204,25 @@ int NativeCheckpoint_Restore(const void *src, int srcSize)
 	NativeCheckpoint_RelocateRuntimePointers(header, &liveHeader);
 	if (pointerMapRegion == NULL)
 	{
-		return 0;
+		goto failed;
 	}
 	if (!NativeCheckpoint_ApplyPointerSlotState(header, &liveHeader, &bytes[pointerMapRegion->offset], (int)pointerMapRegion->size))
 	{
-		return 0;
+		goto failed;
 	}
 	Platform_RepairResidentPointers(header->activeMempackIndex);
 
 	if (nativeStateRegion == NULL)
 	{
-		return 0;
+		goto failed;
 	}
 	if (!NativeState_Restore(&bytes[nativeStateRegion->offset], (int)nativeStateRegion->size))
 	{
-		return 0;
+		goto failed;
 	}
 
-	return 1;
+    NativeSceneAssets_Reset(&gNativeSceneAssets); gNativeSceneAssets=stagedScene;
+    return 1;
+failed:
+    NativeSceneAssets_Reset(&stagedScene); return 0;
 }

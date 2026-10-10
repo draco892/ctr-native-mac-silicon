@@ -48,11 +48,17 @@ extern char *_scratchData;
 
 extern int CheckCallback(void);
 extern void PadInit(int mode);
+#ifdef CTR_NATIVE
+typedef void (*NativeVSyncCallback)(void);
+extern NativeVSyncCallback ResetCallback(void);
+extern NativeVSyncCallback VSyncCallback(NativeVSyncCallback f);
+#else
 extern int ResetCallback(void);
+extern int VSyncCallback(void (*f)(void));
+#endif
 extern int RestartCallback(void);
 extern int StopCallback(void);
 extern int VSync(int mode);
-extern int VSyncCallback(void (*f)(void));
 extern int GetVideoMode(void);
 extern int SetVideoMode(int mode);
 extern u32 PadRead(int id);

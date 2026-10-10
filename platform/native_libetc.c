@@ -10,9 +10,9 @@
 void (*vsync_callback)(void) = NULL;
 global_variable int s_videoMode = -1;
 
-int VSyncCallback(void (*func)(void))
+NativeVSyncCallback VSyncCallback(NativeVSyncCallback func)
 {
-	int old = (int)vsync_callback;
+	NativeVSyncCallback old = vsync_callback;
 
 	vsync_callback = func;
 	return old;
@@ -23,9 +23,9 @@ int StopCallback(void)
 	return 0;
 }
 
-int ResetCallback(void)
+NativeVSyncCallback ResetCallback(void)
 {
-	int old = (int)vsync_callback;
+	NativeVSyncCallback old = vsync_callback;
 
 	vsync_callback = NULL;
 	return old;

@@ -1,5 +1,11 @@
 #include <ctr_gte_transfer.h>
 #include <common.h>
+#ifdef CTR_NATIVE
+#include <platform/native_host_scratch.h>
+#ifdef CTR_INTERNAL
+#include <platform/native_checkpoint.h>
+#endif
+#endif
 
 enum
 {
@@ -505,7 +511,7 @@ struct ParticleRenderListScratch
 };
 
 CTR_STATIC_ASSERT(offsetof(struct ParticleRenderListScratch, ot) == 0x20);
-CTR_STATIC_ASSERT(offsetof(struct ParticleRenderListScratch, depth) == 0x30);
+CTR_STATIC_ASSERT(offsetof(struct ParticleRenderListScratch, depth) == 0x2c + sizeof(void *));
 
 struct ParticleSpecialLineBody
 {
@@ -548,7 +554,15 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 	u32 *payload;
 	s32 cameraID;
 	PushBuffer_SetPsyqGeom(pb);
-	scratch = CTR_SCRATCHPAD_PTR(struct ParticleRenderListScratch, 0);
+#ifdef CTR_NATIVE
+    scratch = NativeHostScratch_Get(NATIVE_HOST_SCRATCH_PARTICLES,sizeof(*scratch),_Alignof(struct ParticleRenderListScratch));
+    if(scratch==NULL) CTR_TRAP();
+#ifdef CTR_INTERNAL
+    NativeCheckpoint_RegisterPointerSlotSized(&scratch->ot,sizeof(scratch->ot));
+#endif
+#else
+    scratch = CTR_SCRATCHPAD_PTR(struct ParticleRenderListScratch, 0);
+#endif
 	scratch->view.viewProjWords[0] = CTR_ReadU32AlignedLE(&pb->matrix_ViewProj.m[0][0]);
 	scratch->view.viewProjWords[1] = CTR_ReadU32AlignedLE(&pb->matrix_ViewProj.m[0][2]);
 	scratch->view.viewProjWords[2] = CTR_ReadU32AlignedLE(&pb->matrix_ViewProj.m[1][1]);

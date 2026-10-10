@@ -104,7 +104,7 @@ void LOAD_Robots1P(int characterID)
 static void (*const LOAD_DriverMPK_SetPointer)(struct LoadQueueSlot *) = LOAD_QUEUE_CALLBACK_SET_POINTER;
 
 // NOTE(aalhendi): Retail queues fixed LOD slots and pack files in branch-local calls.
-int LOAD_DriverMPK(struct BigHeader *bigfile, int levelLOD, void (*callback)(struct LoadQueueSlot *))
+CtrRuntimePointer LOAD_DriverMPK(struct BigHeader *bigfile, int levelLOD, void (*callback)(struct LoadQueueSlot *))
 {
 	int gameMode1;
 	struct GameTracker *gGT;

@@ -236,7 +236,7 @@ static int RenderLists_Walk1P2P(struct BSP *bspRoot, const int *visLeafList, str
                                 u8 numPlyr)
 {
 	struct RenderListsScratchRecord *stackBase = CTR_SCRATCHPAD_PTR(struct RenderListsScratchRecord, RENDER_LISTS_STACK_OFFSET);
-	struct RenderListsScratchRecord *stackEnd = CTR_SCRATCHPAD_PTR(struct RenderListsScratchRecord, CTR_SCRATCHPAD_SIZE);
+	struct RenderListsScratchRecord *stackEnd = CTR_SCRATCHPAD_END(struct RenderListsScratchRecord);
 	struct RenderListsScratchRecord *stack = stackBase;
 	struct BSP *branch = bspRoot;
 	int lodDistanceThreshold = (numPlyr == 1) ? CTR_SCRATCHPAD_PTR(struct MainRenderLevelGeometryScratch, 0)->bspLodDistanceThreshold : 0x1540;
@@ -291,7 +291,7 @@ static int RenderLists_Walk1P2P(struct BSP *bspRoot, const int *visLeafList, str
 static int RenderLists_Walk3P4P(struct BSP *bspRoot, const int *visLeafList, struct PushBuffer *pb, void *LevRenderList, struct VisMemBspListNode *bspList)
 {
 	struct RenderListsScratchRecord *stackBase = CTR_SCRATCHPAD_PTR(struct RenderListsScratchRecord, RENDER_LISTS_STACK_OFFSET);
-	struct RenderListsScratchRecord *stackEnd = CTR_SCRATCHPAD_PTR(struct RenderListsScratchRecord, CTR_SCRATCHPAD_SIZE);
+	struct RenderListsScratchRecord *stackEnd = CTR_SCRATCHPAD_END(struct RenderListsScratchRecord);
 	struct RenderListsScratchRecord *stack = stackBase;
 	struct BSP *branch = bspRoot;
 	int count = 0;

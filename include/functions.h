@@ -316,7 +316,7 @@ void *LIST_GetFirstItem(struct LinkedList *L);
 void *LIST_GetNextItem(struct Item *I);
 
 void LOAD_AppendQueue(struct BigHeader *bigfile, int type, int fileIndex, void *destinationPtr, void (*callback)(struct LoadQueueSlot *));
-int LOAD_DriverMPK(struct BigHeader *bigfile, int levelLOD, void (*callback)(struct LoadQueueSlot *));
+CtrRuntimePointer LOAD_DriverMPK(struct BigHeader *bigfile, int levelLOD, void (*callback)(struct LoadQueueSlot *));
 void LOAD_Hub_Main(struct BigHeader *bigfilePtr);
 void LOAD_Hub_ReadFile(struct BigHeader *bigfile, int levID, int packID);
 void LIST_Init(struct LinkedList *L, struct Item *item, int itemSize, int numItems);
@@ -347,8 +347,8 @@ void *LOAD_ReadFile_ex(struct BigHeader *bigfile, u32 loadType, int subfileIndex
 // void* LOAD_ReadFile(struct BigHeader* bigfile, /*u32 loadType,*/ int subfileIndex, void* destination, /*int *size,*/ void * callback);
 
 
-void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, int callbackOrFlags);
-void *LOAD_DramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, int callbackOrFlags);
+void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, CtrCallbackArg callbackOrFlags);
+void *LOAD_DramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, CtrCallbackArg callbackOrFlags);
 void *LOAD_ReadDirectory(char *filename);
 void *LOAD_XnfFile(char *filename, void *ptrDestination, int *size);
 int LOAD_TenStages(struct GameTracker *gGT, int loadingStage, struct BigHeader *bigfile);
@@ -669,7 +669,7 @@ int UI_ConvertX_2(int posX, int scale);
 int UI_ConvertY_2(int posY, int scale);
 
 void UI_INSTANCE_InitAll(void);
-struct Instance *UI_INSTANCE_BirthWithThread(int modelID, int tickFunc, int hudSlot, int rotateToHud, int pushBuffer, int threadName);
+struct Instance *UI_INSTANCE_BirthWithThread(int modelID, CtrCallbackArg tickFunc, int hudSlot, int rotateToHud, CtrRuntimePointer pushBuffer, CtrCallbackArg threadName);
 
 void UI_DrawBattleScores(int posX, int posY, struct Driver *d);
 void UI_BattleDrawHeadArrows(struct Driver *player);

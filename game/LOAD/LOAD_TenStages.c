@@ -427,7 +427,11 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 
 		if (sdata->ptrMPK != 0)
 		{
-			GAME_PLAYER_OBJECT_LIST = (struct Model **)((u32)sdata->ptrMPK + 4);
+#ifdef CTR_NATIVE
+            GAME_PLAYER_OBJECT_LIST = (struct Model **)((u8 *)sdata->ptrMPK + 4);
+#else
+            GAME_PLAYER_OBJECT_LIST = (struct Model **)((u32)sdata->ptrMPK + 4);
+#endif
 		}
 		else
 		{

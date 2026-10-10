@@ -199,7 +199,7 @@ void LOAD_DramFileCallback(struct LoadQueueSlot *lqs)
 	sdata->queueReady = 1;
 }
 
-void *LOAD_DramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, int callbackOrFlags)
+void *LOAD_DramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, CtrCallbackArg callbackOrFlags)
 {
 	struct LoadQueueSlot lqs;
 	void *loadedFile;
@@ -269,7 +269,7 @@ void LOAD_VramFileCallback(struct LoadQueueSlot *lqs)
 	sdata->frameFinishedVRAM = sdata->gGT->frameTimer_VsyncCallback;
 }
 
-void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, int callbackOrFlags)
+void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, CtrCallbackArg callbackOrFlags)
 {
 	struct LoadQueueSlot lqs;
 	void *loadedFile;

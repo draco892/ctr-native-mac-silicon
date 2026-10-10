@@ -131,7 +131,11 @@ The PS1 scratchpad is 1 KiB:
 
 Native uses a process-local scratchpad buffer and routes `CTR_SCRATCHPAD_PTR`
 through that runtime base. Retail absolute scratchpad addresses are translated
-back to offsets from this buffer.
+back to offsets from this buffer. Native typed access checks bounds and alignment;
+the buffer has max_align_t alignment. RenderBucket temporary host pointers and
+particle render state use separate host workspaces, whose pointer slots and bytes
+participate in version-5 checkpoints. Other pointer-bearing overlays still need
+migration; widening the retail byte buffer is not a substitute for that work.
 
 Scratchpad-heavy areas include:
 

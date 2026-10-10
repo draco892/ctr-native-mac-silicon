@@ -1547,7 +1547,7 @@ struct Data
 	} voiceData[0x10];
 
 	// 8008389c
-	int voiceSetPtr[0x10];
+	CtrVoiceSetPointer voiceSetPtr[0x10];
 
 	// 800838dc
 	u8 voiceID[0x18];
@@ -2549,7 +2549,7 @@ struct sData
 	// ============================
 
 	// 8008d088
-	int ptrMPK; // maybe is `void*` instead of `int`
+	CtrRuntimePointer ptrMPK; // maybe is `void*` instead of `int`
 
 	// 8008d08c
 	// ptrLEV, stored here during loading,
@@ -2958,10 +2958,10 @@ struct sData
 	int boolOpenTokenRelicMenu;
 
 	// 8008d4b4 -- ptr to 8009ad18 (pushBuffer) for multiplayer wumpa
-	int ptrPushBufferUI;
+	CtrRuntimePointer ptrPushBufferUI;
 
 	// 8008d4b8
-	int ptrFruitDisp; // should maybe be `struct Instance*` instead of `int`?
+	CtrRuntimePointer ptrFruitDisp; // should maybe be `struct Instance*` instead of `int`?
 
 	// 8008d4bc
 	int menuReadyToPass;
@@ -3312,7 +3312,7 @@ struct sData
 
 	// 8008d770
 	// spu address of some type
-	int audioAllocPtr;
+	int audioAllocPtr; // SPU address in 8-byte units, not a host pointer.
 
 	// 8008d774
 	u8 bankLoadStage;
@@ -3636,7 +3636,7 @@ struct sData
 	u16 typeTimer;
 
 	// 8008d8f4
-	int ptrLoadSaveObj;
+	CtrRuntimePointer ptrLoadSaveObj;
 
 	// 8008d8f8
 

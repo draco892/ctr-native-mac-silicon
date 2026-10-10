@@ -1,4 +1,28 @@
 #include <common.h>
+#ifdef CTR_NATIVE
+#include <platform/native_host_scratch.h>
+#ifdef CTR_INTERNAL
+#include <platform/native_checkpoint.h>
+#endif
+struct RenderBucketNativePointers {
+    struct RenderBucketEntry *nextEntry;
+    struct PushBuffer *pushBuffer;
+    struct PrimMem *primMem;
+    struct Instance *inst;
+};
+static struct RenderBucketNativePointers *RenderBucket_HostPointers(void)
+{
+    struct RenderBucketNativePointers *p=NativeHostScratch_Get(NATIVE_HOST_SCRATCH_RENDER_BUCKET,sizeof(*p),_Alignof(struct RenderBucketNativePointers));
+    if(p==NULL) CTR_TRAP();
+#ifdef CTR_INTERNAL
+    NativeCheckpoint_RegisterPointerSlotSized(&p->nextEntry,sizeof(p->nextEntry));
+    NativeCheckpoint_RegisterPointerSlotSized(&p->pushBuffer,sizeof(p->pushBuffer));
+    NativeCheckpoint_RegisterPointerSlotSized(&p->primMem,sizeof(p->primMem));
+    NativeCheckpoint_RegisterPointerSlotSized(&p->inst,sizeof(p->inst));
+#endif
+    return p;
+}
+#endif
 
 
 struct RenderBucketEntry
@@ -5198,10 +5222,22 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 
 	anim = RenderBucket_GetAnim(inst, mh);
 
-	scratch->instPtr32 = (u32)(u32)inst;
-	if (scratch->pushBufferPtr32 != (u32)(u32)pb)
+#ifdef CTR_NATIVE
+    RenderBucket_HostPointers()->inst=inst;
+#else
+    scratch->instPtr32 = (u32)(u32)inst;
+#endif
+#ifdef CTR_NATIVE
+    if(RenderBucket_HostPointers()->pushBuffer!=pb)
+#else
+    if (scratch->pushBufferPtr32 != (u32)(u32)pb)
+#endif
 	{
-		scratch->pushBufferPtr32 = (u32)(u32)pb;
+#ifdef CTR_NATIVE
+        RenderBucket_HostPointers()->pushBuffer=pb;
+#else
+        scratch->pushBufferPtr32 = (u32)(u32)pb;
+#endif
 		scratch->geomW = pb->rect.w;
 		scratch->geomH = pb->rect.h;
 		gte_SetGeomOffset(pb->rect.w >> 1, pb->rect.h >> 1);
@@ -5265,13 +5301,22 @@ void RenderBucket_Execute(void *param_1, struct PrimMem *param_2)
 	struct RenderBucketExecuteScratch *scratch = RenderBucket_Scratch();
 
 	// Native uses the explicit RenderBucketDrawContext scratch/register ABI.
-	scratch->primMemPtr32 = (u32)(u32)param_2;
-	scratch->pushBufferPtr32 = 0;
+#ifdef CTR_NATIVE
+    RenderBucket_HostPointers()->primMem=param_2;
+    RenderBucket_HostPointers()->pushBuffer=NULL;
+#else
+    scratch->primMemPtr32 = (u32)(u32)param_2;
+    scratch->pushBufferPtr32 = 0;
+#endif
 	for (; entry->inst != 0; entry++)
 	{
 		struct RenderBucketDrawContext ctx = {0};
 
-		scratch->nextEntryPtr32 = (u32)(u32)(entry + 1);
+#ifdef CTR_NATIVE
+        RenderBucket_HostPointers()->nextEntry=entry+1;
+#else
+        scratch->nextEntryPtr32 = (u32)(u32)(entry + 1);
+#endif
 
 		if (RenderBucket_PrepareDrawContext(&ctx, entry->inst, entry->instPlayerBase, param_2) == 0)
 		{

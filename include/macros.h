@@ -26,6 +26,17 @@ typedef unsigned int size_t;
 #define CTR_STATIC_ASSERT(expr) extern char CTR_JOIN(ctr_static_assert_, __LINE__)[(expr) ? 1 : -1]
 #endif
 
+// Runtime callback transport retains host width; PS1 ABI stays one word.
+#if defined(CTR_NATIVE)
+typedef intptr_t CtrCallbackArg;
+typedef void *CtrRuntimePointer;
+typedef void *CtrVoiceSetPointer;
+#else
+typedef int CtrCallbackArg;
+typedef int CtrRuntimePointer;
+typedef int CtrVoiceSetPointer;
+#endif
+
 typedef unsigned long long u64;
 typedef signed long long s64;
 typedef unsigned int u32;

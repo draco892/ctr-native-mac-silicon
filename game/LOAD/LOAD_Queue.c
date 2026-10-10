@@ -240,8 +240,8 @@ void LOAD_QueueNextBody()
 			register u32 subfileIndex CTR_PSX_REGISTER("$5") = curr->subfileIndex;
 			register void *destination CTR_PSX_REGISTER("$6") = curr->ptrDestination;
 			register u32 *sizePtr CTR_PSX_REGISTER("$7") = &curr->size_UNUSED;
-			register u32 callback CTR_PSX_REGISTER("$2") = (u32)(s32)curr->callbackFuncPtr;
-			curr->ptrDestination = LOAD_DramFile(bigfile, subfileIndex, destination, sizePtr, (int)callback);
+			register CtrCallbackArg callback CTR_PSX_REGISTER("$2") = (CtrCallbackArg)curr->callbackFuncPtr;
+			curr->ptrDestination = LOAD_DramFile(bigfile, subfileIndex, destination, sizePtr, callback);
 			break;
 		}
 
@@ -252,10 +252,10 @@ void LOAD_QueueNextBody()
 			    CTR_PSX_PAGE_LVALUE(struct BigHeader *, destPage, OFFSETOF_DATA(currSlot) & 0xffffu, curr->ptrBigfileCdPos_UNUSED);
 			register u32 subfileIndex CTR_PSX_REGISTER("$5") = curr->subfileIndex;
 			register void *destination CTR_PSX_REGISTER("$6") = curr->ptrDestination;
-			register u32 callback CTR_PSX_REGISTER("$2");
+			register CtrCallbackArg callback CTR_PSX_REGISTER("$2");
 			CTR_PSX_OBSERVE_VALUE(sizePtr);
-			callback = (u32)(s32)curr->callbackFuncPtr;
-			curr->ptrDestination = LOAD_VramFile(bigfile, subfileIndex, destination, sizePtr, (int)callback);
+			callback = (CtrCallbackArg)curr->callbackFuncPtr;
+			curr->ptrDestination = LOAD_VramFile(bigfile, subfileIndex, destination, sizePtr, callback);
 			break;
 		}
 		}

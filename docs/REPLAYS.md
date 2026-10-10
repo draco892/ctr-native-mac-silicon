@@ -2,6 +2,15 @@
 
 Use this for bug reports in internal builds.
 
+Current checkpoints use payload version 5 and replay headers use version 2.
+Previous versions are rejected. Pointer width, endian marker and platform/CPU
+identity are checked; bypassing build identity does not bypass format/ABI checks.
+The outer CTST container remains version 1. Checkpoints now include immutable
+asset owners and host workspaces; the fixed asset-owner region adds 6 MiB to each
+payload. Full ARM64 gameplay/replay validation remains blocked by resident layout
+migration; the portable relocation/container tests run independently on ARM64.
+See [ARM64 progress](ARM64_PORT.md) for supported tests and remaining work.
+
 ## Quick State
 
 - `F5`: save `debug/states/quick.ctrstates`

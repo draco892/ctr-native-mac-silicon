@@ -98,7 +98,7 @@ void MainFrame_ResetDB(struct GameTracker *gGT)
 #if defined(CTR_NATIVE)
 	if (sdata->ptrPushBufferUI != 0)
 	{
-		struct PushBuffer *wumpaPushBuffer = (struct PushBuffer *)(u32)sdata->ptrPushBufferUI;
+		struct PushBuffer *wumpaPushBuffer = (struct PushBuffer *)sdata->ptrPushBufferUI;
 
 		// NOTE(aalhendi): Retail stores PS1 RAM OT addresses here. Native stores
 		// host pointers, so reset the fake UI pushbuffer to the current backbuffer

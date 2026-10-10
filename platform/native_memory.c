@@ -1,6 +1,7 @@
 #include <platform.h>
 #include "ctr_scratchpad.h"
 #include "platform/native_memory.h"
+#include <platform/native_host_scratch.h>
 
 #include <common.h>
 #include <macros.h>
@@ -11,6 +12,7 @@
 
 union NativeScratchpadStorage
 {
+	max_align_t alignment;
 	u8 bytes[CTR_SCRATCHPAD_SIZE];
 	u32 words[CTR_SCRATCHPAD_SIZE / sizeof(u32)];
 };
@@ -25,6 +27,7 @@ void Platform_InitScratchpad(void)
 #if defined(CTR_NATIVE)
 	gCTRNativeScratchpadBase = &s_scratchpadMemory.bytes[0];
 	memset(&s_scratchpadMemory, 0, sizeof(s_scratchpadMemory));
+    NativeHostScratch_Reset();
 #endif
 }
 

@@ -3359,12 +3359,12 @@ struct Data
                                           {&data.voiceData[15].index[20], 1},
                                       }}},
 
-            .voiceSetPtr = {(int)&data.voiceData[0].voiceSet[0], (int)&data.voiceData[1].voiceSet[0], (int)&data.voiceData[2].voiceSet[0],
-                            (int)&data.voiceData[3].voiceSet[0], (int)&data.voiceData[4].voiceSet[0], (int)&data.voiceData[5].voiceSet[0],
-                            (int)&data.voiceData[6].voiceSet[0], (int)&data.voiceData[7].voiceSet[0], (int)&data.voiceData[8].voiceSet[0],
-                            (int)&data.voiceData[9].voiceSet[0], (int)&data.voiceData[10].voiceSet[0], (int)&data.voiceData[11].voiceSet[0],
-                            (int)&data.voiceData[12].voiceSet[0], (int)&data.voiceData[13].voiceSet[0], (int)&data.voiceData[14].voiceSet[0],
-                            (int)&data.voiceData[15].voiceSet[0]},
+            .voiceSetPtr = {(CtrVoiceSetPointer)&data.voiceData[0].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[1].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[2].voiceSet[0],
+                            (CtrVoiceSetPointer)&data.voiceData[3].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[4].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[5].voiceSet[0],
+                            (CtrVoiceSetPointer)&data.voiceData[6].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[7].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[8].voiceSet[0],
+                            (CtrVoiceSetPointer)&data.voiceData[9].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[10].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[11].voiceSet[0],
+                            (CtrVoiceSetPointer)&data.voiceData[12].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[13].voiceSet[0], (CtrVoiceSetPointer)&data.voiceData[14].voiceSet[0],
+                            (CtrVoiceSetPointer)&data.voiceData[15].voiceSet[0]},
 
             .voiceID = {4, 1, 5, 2, 1, 1, 1, 3, 6, 6, 7, 7, 7, 7, 7, 4, 0, 0, 0, 0, 0, 8, 8, 8},
 

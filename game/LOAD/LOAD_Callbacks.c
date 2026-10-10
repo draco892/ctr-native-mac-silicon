@@ -94,10 +94,10 @@ void LOAD_Callback_PatchMem(struct LoadQueueSlot *lqs)
 
 void LOAD_Callback_DriverModels(struct LoadQueueSlot *lqs)
 {
-	int destination = (int)lqs->ptrDestination;
+	CtrRuntimePointer destination = (CtrRuntimePointer)lqs->ptrDestination;
 
 	sdata->load_inProgress = 0;
-	*(volatile int *)&sdata->ptrMPK = destination;
+	*(volatile CtrRuntimePointer *)&sdata->ptrMPK = destination;
 }
 
 void LOAD_HubCallback(struct LoadQueueSlot *lqs)

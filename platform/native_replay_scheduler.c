@@ -29,7 +29,7 @@
 // NOTE(aalhendi): Little-endian tags `CTRR`/`RFRM` = CTR native Replay.
 #define NATIVE_REPLAY_FILE_MAGIC                 0x52525443u
 #define NATIVE_REPLAY_FRAME_MAGIC                0x4d524652u
-#define NATIVE_REPLAY_FILE_VERSION               1u
+#define NATIVE_REPLAY_FILE_VERSION               2u
 #define NATIVE_REPLAY_FNV_OFFSET                 2166136261u
 #define NATIVE_REPLAY_FNV_PRIME                  16777619u
 #define NATIVE_REPLAY_CHECKPOINT_INTERVAL_FRAMES 300u
@@ -73,7 +73,9 @@ struct NativeReplayFileHeader
 	u32 checkpointPolicy;
 	char buildId[NATIVE_REPLAY_BUILD_ID_BYTES];
 	char platformId[NATIVE_REPLAY_PLATFORM_ID_BYTES];
-	u32 reserved[3];
+	u32 pointerWidth;
+	u32 endianMarker;
+	u32 reserved;
 };
 
 struct NativeReplayFrameRecord
@@ -241,12 +243,22 @@ internal void NativeReplayScheduler_CopyFixedString(char *dst, u32 dstSize, cons
 
 internal const char *NativeReplayScheduler_PlatformID(void)
 {
-#if defined(_WIN32)
-	return "win32";
+#if defined(_WIN32) && defined(_WIN64)
+    return "windows-x64";
+#elif defined(_WIN32)
+    return "windows-x86";
+#elif defined(__APPLE__) && defined(__aarch64__)
+    return "macos-arm64";
+#elif defined(__APPLE__) && defined(__x86_64__)
+    return "macos-x64";
 #elif defined(__APPLE__)
-	return "macos";
+    return "macos-x86";
+#elif defined(__linux__) && defined(__aarch64__)
+    return "linux-arm64";
+#elif defined(__linux__) && defined(__x86_64__)
+    return "linux-x64";
 #elif defined(__linux__)
-	return "linux";
+    return "linux-x86";
 #else
 	return "unknown";
 #endif
@@ -264,6 +276,8 @@ internal u32 NativeReplayScheduler_IdentityChecksum(const struct NativeReplayFil
 	hash = NativeReplayScheduler_Fnv1aStep(hash, &header->nativeStateSize, sizeof(header->nativeStateSize));
 	hash = NativeReplayScheduler_Fnv1aStep(hash, header->buildId, sizeof(header->buildId));
 	hash = NativeReplayScheduler_Fnv1aStep(hash, header->platformId, sizeof(header->platformId));
+    hash = NativeReplayScheduler_Fnv1aStep(hash, &header->pointerWidth, sizeof(header->pointerWidth));
+    hash = NativeReplayScheduler_Fnv1aStep(hash, &header->endianMarker, sizeof(header->endianMarker));
 	return hash;
 }
 
@@ -277,6 +291,7 @@ internal void NativeReplayScheduler_InitHeader(struct NativeReplayFileHeader *he
 	header->checkpointSize = (u32)NativeCheckpoint_GetSize();
 	header->nativeStateSize = (u32)NativeState_GetSize();
 	header->checkpointPolicy = (u32)s_checkpointPolicy;
+    header->pointerWidth=sizeof(void *); header->endianMarker=0x01020304u;
 	NativeReplayScheduler_CopyFixedString(header->buildId, sizeof(header->buildId), CTR_NATIVE_BUILD_ID);
 	NativeReplayScheduler_CopyFixedString(header->platformId, sizeof(header->platformId), NativeReplayScheduler_PlatformID());
 	header->identityChecksum = NativeReplayScheduler_IdentityChecksum(header);
@@ -289,8 +304,12 @@ internal s32 NativeReplayScheduler_HeaderFormatValid(const struct NativeReplayFi
 		return 0;
 	}
 
+    char livePlatform[NATIVE_REPLAY_PLATFORM_ID_BYTES];
+    NativeReplayScheduler_CopyFixedString(livePlatform,sizeof(livePlatform),NativeReplayScheduler_PlatformID());
 	return (header->magic == NATIVE_REPLAY_FILE_MAGIC) && (header->version == NATIVE_REPLAY_FILE_VERSION) &&
-	       (header->headerSize == sizeof(struct NativeReplayFileHeader)) && (header->frameRecordSize == sizeof(struct NativeReplayFrameRecord));
+	       (header->headerSize == sizeof(struct NativeReplayFileHeader)) && (header->frameRecordSize == sizeof(struct NativeReplayFrameRecord)) &&
+           header->pointerWidth==sizeof(void *) && header->endianMarker==0x01020304u && header->reserved==0 &&
+           memcmp(header->platformId,livePlatform,sizeof(livePlatform))==0;
 }
 
 internal s32 NativeReplayScheduler_HeaderIdentityValid(const struct NativeReplayFileHeader *header)

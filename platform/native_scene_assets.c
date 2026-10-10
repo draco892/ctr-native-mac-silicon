@@ -95,3 +95,93 @@ enum NativeAssetResult NativeSceneAssets_GetModel(const struct NativeSceneAssets
     }
     return NATIVE_ASSET_NOT_FOUND;
 }
+
+// Header + stable library owner-index/offset pairs; owners use wire/PTR records.
+enum { SCENE_CHECKPOINT_HEADER=16+NATIVE_MODEL_LIBRARY_SLOTS*8, SCENE_CHECKPOINT_OWNER_HEADER=24 };
+static u64 SceneCheckpoint_Read64(const u8 *p) { return CTR_ReadU32LE(p)|((u64)CTR_ReadU32LE(p+4)<<32); }
+static void SceneCheckpoint_Write64(u8 *p,u64 value) { CTR_WriteU32LE(p,(u32)value); CTR_WriteU32LE(p+4,(u32)(value>>32)); }
+size_t NativeSceneAssets_CheckpointSize(const struct NativeSceneAssets *assets)
+{
+    if(assets==NULL) return 0;
+    size_t bytes=SCENE_CHECKPOINT_HEADER;
+    for(const struct NativeSceneAssetOwner *o=assets->owners;o!=NULL;o=o->next) {
+        if(o->bytes>UINT32_MAX || o->map.count>UINT32_MAX/4) return 0;
+        u64 extra=SCENE_CHECKPOINT_OWNER_HEADER+(u64)o->bytes+(u64)o->map.count*4;
+        if(extra>UINT32_MAX || bytes>UINT32_MAX-extra) return 0;
+        bytes+=(size_t)extra;
+    }
+    return bytes;
+}
+int NativeSceneAssets_CaptureCheckpoint(const struct NativeSceneAssets *assets,void *dst,size_t bytes)
+{
+    size_t size=NativeSceneAssets_CheckpointSize(assets);
+    if(!size || dst==NULL || bytes<size) return 0;
+    u8 *out=dst; memset(out,0,size);
+    CTR_WriteU32LE(out,0x53414353u); CTR_WriteU32LE(out+4,1); CTR_WriteU32LE(out+8,(u32)size);
+    for(u32 i=0;i<NATIVE_MODEL_LIBRARY_SLOTS;i++) {
+        u32 owner=0; const struct NativeSceneAssetOwner *o=assets->owners;
+        if(assets->library.slots[i].owner!=NULL) {
+            for(;o!=NULL;o=o->next,owner++) if(&o->map==assets->library.slots[i].owner) break;
+            if(o==NULL || !o->ready) return 0;
+        } else owner=UINT32_MAX;
+        CTR_WriteU32LE(out+16+i*8,owner); CTR_WriteU32LE(out+20+i*8,assets->library.slots[i].offset);
+    }
+    size_t at=SCENE_CHECKPOINT_HEADER; u32 count=0;
+    for(const struct NativeSceneAssetOwner *o=assets->owners;o!=NULL;o=o->next) {
+        SceneCheckpoint_Write64(out+at,o->source); CTR_WriteU32LE(out+at+8,(u32)o->bytes);
+        CTR_WriteU32LE(out+at+12,(u32)o->map.count); CTR_WriteU32LE(out+at+16,(u32)o->ready);
+        at+=SCENE_CHECKPOINT_OWNER_HEADER; memcpy(out+at,o->wire,o->bytes); at+=o->bytes;
+        for(size_t i=0;i<o->map.count;i++,at+=4) CTR_WriteU32LE(out+at,o->entries[i].slotOffset);
+        count++;
+    }
+    CTR_WriteU32LE(out+12,count); return 1;
+}
+int NativeSceneAssets_RestoreCheckpoint(struct NativeSceneAssets *assets,const void *src,size_t bytes,NativeSceneSourceRebase rebase,void *user)
+{
+    if(assets==NULL || src==NULL || rebase==NULL || bytes<SCENE_CHECKPOINT_HEADER) return 0;
+    const u8 *wire=src;
+    if(CTR_ReadU32LE(wire)!=0x53414353u || CTR_ReadU32LE(wire+4)!=1 || CTR_ReadU32LE(wire+8)!=bytes) return 0;
+    u32 count=CTR_ReadU32LE(wire+12);
+    if(count>(bytes-SCENE_CHECKPOINT_HEADER)/SCENE_CHECKPOINT_OWNER_HEADER) return 0;
+    struct NativeSceneAssets staged={0};
+    struct NativeSceneAssetOwner **owners=calloc(count ? count : 1,sizeof(*owners));
+    if(owners==NULL) return 0;
+    size_t at=SCENE_CHECKPOINT_HEADER; int success=0;
+    struct NativeSceneAssetOwner **tail=&staged.owners;
+    for(u32 index=0;index<count;index++) {
+        if(at>bytes || bytes-at<SCENE_CHECKPOINT_OWNER_HEADER) goto done;
+        u64 oldSource=SceneCheckpoint_Read64(wire+at); u32 payload=CTR_ReadU32LE(wire+at+8),slots=CTR_ReadU32LE(wire+at+12),ready=CTR_ReadU32LE(wire+at+16);
+        if(!payload || ready>1 || (!ready && slots) || CTR_ReadU32LE(wire+at+20)) goto done;
+        uintptr_t live;
+        if(!rebase(user,oldSource,payload,&live) || !live || payload>UINTPTR_MAX-live) goto done;
+        at+=SCENE_CHECKPOINT_OWNER_HEADER;
+        if(payload>bytes-at) goto done;
+        struct NativeSceneAssetOwner *o=SceneAssets_Copy(wire+at,payload); if(o==NULL) goto done;
+        at+=payload; o->source=live;
+        // Identity ranges must remain disjoint; publication must not drop peers.
+        for(u32 previous=0;previous<index;previous++) if(live<owners[previous]->source+owners[previous]->bytes && owners[previous]->source<live+payload) { SceneAssets_Free(&staged,o); goto done; }
+        *tail=o; tail=&o->next; owners[index]=o;
+        if(slots>(bytes-at)/4 || slots>UINT32_MAX/4) goto done;
+#if SIZE_MAX <= UINT32_MAX
+        if(slots>(SIZE_MAX-4)/4) goto done;
+#endif
+        if(ready) {
+            size_t ptrBytes=4+(size_t)slots*4; u8 *ptr=malloc(ptrBytes); if(ptr==NULL) goto done;
+            CTR_WriteU32LE(ptr,slots*4); memcpy(ptr+4,wire+at,(size_t)slots*4);
+            enum NativePtrMapResult result=SceneAssets_Decode(o,ptr,ptrBytes); free(ptr);
+            if(result!=NATIVE_PTRMAP_OK) goto done;
+        }
+        at+=(size_t)slots*4;
+    }
+    if(at!=bytes) goto done;
+    for(u32 i=0;i<NATIVE_MODEL_LIBRARY_SLOTS;i++) {
+        u32 index=CTR_ReadU32LE(wire+16+i*8),offset=CTR_ReadU32LE(wire+20+i*8);
+        if(index==UINT32_MAX) continue;
+        if(index>=count || !owners[index]->ready) goto done;
+        struct NativeModelView model;
+        if(NativeModel_Open(&owners[index]->map,offset,&model)!=NATIVE_ASSET_OK || model.id!=(s32)i || NativeModelLibrary_StoreModel(&staged.library,&model)!=NATIVE_ASSET_OK) goto done;
+    }
+    NativeSceneAssets_Reset(assets); *assets=staged; memset(&staged,0,sizeof(staged)); success=1;
+done:
+    NativeSceneAssets_Reset(&staged); free(owners); return success;
+}

@@ -1251,7 +1251,7 @@ driver extras and normal instance/vehicle animation frame-count queries can use
 these readers. MEMPACK release, shrink, bookmark rollback and arena reuse drop
 owner maps and borrowed model library references. Snapshot storage is additional
 host heap memory. Borrowed views expire on release/reset/replacement; this is not
-a checkpoint restore integration.
+a checkpoint restore integration at that milestone (see the later migration below).
 
 `NativeSceneConsumer_Terrain` is an actual one-player game adapter: it reads the
 PushBuffer camera and decompressed PVS, preflights capacity, emits native GPU
@@ -1316,6 +1316,101 @@ advancing frames and refusal to overwrite. Material tests cover all selector
 modes, UVs, tagged animation and malformed data; runtime tests cover camera,
 PVS/blockID masks, disabled children, cycles, packet links and MEMPACK ownership.
 
+## Host-width audit and checkpoint migration (current milestone)
+
+The suite now contains **23 tests with the disc, 22 without it**. Normal ARM64
+and AddressSanitizer/UndefinedBehaviorSanitizer runs pass, including the new
+`ctr_native_checkpoint_relocation` and the extended scene ownership tests.
+
+The native loader uses `CtrCallbackArg` (intptr_t) when transporting callback
+addresses or -1/-2 flags; the PS1 ABI remains int. Native VSync registration and
+reset return the previous typed function pointer. UI creation carries tick/name
+addresses at host width. Resident MPK, UI push-buffer, fruit-display and load/save
+object slots now use native host pointers. The audio voice-set table contains
+native pointers rather than cast int initializers. SPU addresses, retail dispatch
+IDs, wire offsets and GPU tokens remain narrow integers.
+
+Scratchpad storage is max_align_t-aligned. Native typed access checks byte range
+and alignment; one-past-end traversal has a separate end helper. Host-only
+workspaces hold RenderBucket's temporary object pointers and the particle
+render-list state, preventing their wider fields from colliding with retail byte
+slots. Their pointer slots are registered with explicit widths, and the host
+workspace region participates in checkpoints. Other scratch overlays still need
+semantic migration: especially collision/camera unions, Torch, skid/shadow and
+recursive level-renderer overlays. Bounds checks do not prove that overlapping
+views have compatible lifetimes or layouts.
+
+`native_checkpoint_relocation.c` is the portable production relocation core.
+Address ranges use fixed 16-byte records (kind/size u32, start u64). It validates
+non-overlap, unique IDs and arithmetic overflow. Relocation preserves interior
+and one-past-end pointers; an actual owner takes priority at an adjacent boundary.
+Slots explicitly declare 4 or 8 bytes and use memcpy for unaligned access; writing
+a high address into a four-byte slot fails. Image rebasing handles positive and
+negative ASLR deltas, null/-1/-2 sentinels and overflow.
+
+The game checkpoint consumer now uses this core. Typed fields derive their width
+from sizeof(field), while legacy LOAD_RunPtrMap registrations remain four bytes.
+Registered slot records store width and are checked for out-of-range/overlapping
+locations before restore. Registration overflow makes capture fail rather than
+silently dropping pointers. Address tables no longer reject addresses above 4 GB.
+
+Checkpoint payloads are **version 5** and record host pointer width and an endian
+marker. Replay headers are **version 2**, with pointer-width/endian fields in the
+identity checksum and architecture-specific platform IDs. Older versions and
+incompatible ABIs are rejected even when bypassing replay build identity. The
+outer CTST checkpoint container stays version 1 because it stores opaque payloads.
+These are same-build, same-ABI snapshots, not interchangeable PS1/native saves.
+
+Scene owners now have a separate bounded, versioned serialization: immutable
+wire bytes, PTR slot offsets, source identities, pending-map state and model
+library references. Restore rebuilds maps against owned copies, rebases source
+identities and validates every library reference before replacing old owners.
+The game consumer stages this before writing game regions. A fixed **6 MiB**
+scene region keeps replay allocation/header size stable as owners change inside
+the existing 2 MiB arena; capture fails if snapshots exceed it. Each checkpoint
+therefore gains that storage plus expanded pointer-slot records. Overall game
+restore still has the existing partial-write behavior if a later subsystem restore
+fails; scene-owner reconstruction itself is transactional.
+
+Tests exercise high host addresses, narrowing failures, unaligned slots, ASLR
+in both directions, one-past-end/adjacent ranges, malformed/overlapping metadata,
+actual VSync callback return values, separate aligned workspaces, and the actual
+CTST writer/reader with checksum corruption. Scene tests restore ready and pending
+owners at rebased identities, restore library references and preserve existing
+state on malformed snapshots. The full game checkpoint traversal and replay loop
+cannot yet run on ARM64 because resident and wire structs still share 32-bit
+layout contracts.
+
+The full-game syntax audit now reports **667 active layout assertions and no
+other syntax errors**. The previous voice-set initializer error is fixed; one
+particle scratch assertion now checks its explicit host-width layout. It also
+reports **545 pointer/integer cast warnings** requiring review. These counts are
+a compiler inventory, not a count of independent bugs: some casts represent
+retail IDs or tokens. The source inventory lists 101 scratchpad call sites,
+including PS1 fallback branches. Neither areas 3 nor 4 are fully verified for a
+playable 64-bit game; the remaining consumers and scratch overlays must be
+migrated before removing the full-game guard.
+
+Run the suites and inspect the inventory:
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R 'checkpoint_relocation|scene_runtime' -V
+
+# Expected to fail on the remaining layout guards; preserve diagnostics.
+/usr/bin/clang -fsyntax-only -ferror-limit=0 -std=c17 -DCTR_NATIVE -DCTR_INTERNAL -DCTR_NATIVE_GAME_SCENE -DCTR_NATIVE_DECODED_TERRAIN -DCTR_NATIVE_BUILD_ID='"port-check"' -DCTR_NATIVE_VERSION='"port-check"' -Iinclude -I/opt/homebrew/include main.c > build-macos-arm64-memory/stage34-syntax.log 2>&1
+python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage34-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
+```
+
+The syntax command uses the local Homebrew SDL include directory; adjust that
+include path if SDL is installed elsewhere. The audit tool reads diagnostics and
+inventories source call sites; it does not disable assertions or certify a build.
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -1339,10 +1434,10 @@ and offsets) from runtime objects (host pointers). In particular:
    coexist until their callers are migrated.
 2. Validate material/visibility and camera/renderer parity in the complete game,
    including remaining model and gameplay consumers and the LNG integration.
-3. Audit resident globals, callbacks carried in integers and fixed scratchpad
-   offsets; host structures must not overlap retail-sized scratchpad slots.
-4. Port checkpoint pointer slots and address tables before enabling 64-bit
-   replay/savestate support.
+3. Resolve the remaining pointer/integer audit findings and migrate collision,
+   camera and other scratch overlays to explicit host workspaces.
+4. Verify the migrated checkpoint traversal against all remaining host objects
+   and scratch overlays before enabling full ARM64 replay/savestate support.
 5. Enable the full macOS ARM64 target only after those contracts are satisfied,
    then validate OpenGL context/shaders, audio and gameplay with retail assets.
 
@@ -1350,8 +1445,7 @@ The PS1 allocator path retains its original four-byte alignment and pointer
 arithmetic. The existing native 32-bit game remains the baseline for behavior;
 this milestone does not establish full game or PS1 binary parity.
 
-A full-game ARM64 syntax audit with the new integrations and experimental terrain
-flag still encounters the existing **668 binary-layout assertions**, plus the
-existing nonconstant initializer in `game/zGlobal_DATA.c:3362`. It reports no
-additional integration syntax errors. This is not a successful full-game build;
-the CMake pointer-width guard and all layout assertions remain enabled.
+The current full-game ARM64 syntax audit encounters **667 active binary-layout
+assertions and no other syntax errors**; the voice-set initializer is fixed.
+This is not a successful full-game build. The CMake pointer-width guard and
+remaining retail layout assertions stay enabled.

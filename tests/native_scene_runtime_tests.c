@@ -56,6 +56,13 @@ static void Fixture(u8 *a,u8 *ptr)
     CTR_WriteU32LE(a+0xa64,0x80010000); CTR_WriteU32LE(a+0xa68,0x00020000); CTR_WriteU32LE(a+0xa6c,0x00030000); CTR_WriteU32LE(a+0xa70,0xffffffff); CTR_WriteU32LE(a+0xa80,0x00808080);
     CTR_WriteU32LE(ptr,sizeof(slots)); for(unsigned k=0;k<sizeof(slots)/sizeof(*slots);k++) CTR_WriteU32LE(ptr+4+k*4,slots[k]);
 }
+struct SceneTestRebase { uintptr_t source,target; u32 size; };
+static int RebaseOwner(void *user,u64 source,u32 bytes,uintptr_t *live)
+{
+    struct SceneTestRebase *ctx=user;
+    if(source!=ctx->source || bytes!=ctx->size) return 0;
+    *live=ctx->target; return 1;
+}
 static enum NativeAssetResult Count(void *user,const struct NativeDrawTriangle *triangle)
 { (*(size_t *)user)++; return triangle->depth[0] ? NATIVE_ASSET_OK : NATIVE_ASSET_INVALID_DATA; }
 static enum NativeAssetResult Reject(void *user,const struct NativeDrawTriangle *triangle)
@@ -110,11 +117,34 @@ int main(void)
     struct NativeSceneAssets owners={0}; struct NativeModelView model;
     CHECK(NativeSceneAssets_BeginRaw(&owners,asset,0xb00)==NATIVE_PTRMAP_OK);
     CHECK(NativeSceneAssets_GetLevel(&owners,asset,&level)==NATIVE_ASSET_NOT_FOUND);
+    size_t pendingSize=NativeSceneAssets_CheckpointSize(&owners); u8 *pending=malloc(pendingSize); CHECK(pending!=NULL);
+    CHECK(NativeSceneAssets_CaptureCheckpoint(&owners,pending,pendingSize));
+    struct NativeSceneAssets pendingOwner={0}; struct SceneTestRebase pendingRebase={(uintptr_t)asset,(uintptr_t)asset,0xb00};
+    CHECK(NativeSceneAssets_RestoreCheckpoint(&pendingOwner,pending,pendingSize,RebaseOwner,&pendingRebase));
+    CHECK(NativeSceneAssets_GetLevel(&pendingOwner,asset,&level)==NATIVE_ASSET_NOT_FOUND);
+    CHECK(NativeSceneAssets_CompletePtr(&pendingOwner,asset,ptr,sizeof(ptr))==NATIVE_PTRMAP_OK);
+    CHECK(NativeSceneAssets_GetModel(&pendingOwner,asset+0x900,&model)==NATIVE_ASSET_OK);
+    NativeSceneAssets_Reset(&pendingOwner); free(pending);
+
     CHECK(NativeSceneAssets_CompletePtr(&owners,asset,ptr,3)!=NATIVE_PTRMAP_OK);
     CHECK(NativeSceneAssets_CompletePtr(&owners,asset,ptr,sizeof(ptr))==NATIVE_PTRMAP_OK);
     CHECK(NativeSceneAssets_CompletePtr(&owners,asset,ptr,sizeof(ptr))==NATIVE_PTRMAP_INVALID_ARGUMENT);
     CHECK(NativeSceneAssets_GetModel(&owners,asset+0x900,&model)==NATIVE_ASSET_OK && model.id==17);
     CHECK(NativeModelLibrary_StoreModel(&owners.library,&model)==NATIVE_ASSET_OK);
+    size_t checkpointSize=NativeSceneAssets_CheckpointSize(&owners);
+    u8 *checkpoint=malloc(checkpointSize); CHECK(checkpoint!=NULL);
+    CHECK(NativeSceneAssets_CaptureCheckpoint(&owners,checkpoint,checkpointSize));
+    struct NativeSceneAssets restored={0};
+    struct SceneTestRebase rebase={(uintptr_t)asset,(uintptr_t)asset+0x100000,0xb00};
+    CHECK(NativeSceneAssets_RestoreCheckpoint(&restored,checkpoint,checkpointSize,RebaseOwner,&rebase));
+    CHECK(NativeSceneAssets_GetModel(&restored,(void *)(rebase.target+0x900),&model)==NATIVE_ASSET_OK && model.id==17);
+    CHECK(NativeModelLibrary_Get(&restored.library,17,&model)==NATIVE_ASSET_OK);
+    CHECK(!NativeSceneAssets_RestoreCheckpoint(&restored,checkpoint,checkpointSize-1,RebaseOwner,&rebase));
+    u32 savedSlot=CTR_ReadU32LE(checkpoint+checkpointSize-4); CTR_WriteU32LE(checkpoint+checkpointSize-4,0xb00);
+    CHECK(!NativeSceneAssets_RestoreCheckpoint(&restored,checkpoint,checkpointSize,RebaseOwner,&rebase));
+    CHECK(NativeModelLibrary_Get(&restored.library,17,&model)==NATIVE_ASSET_OK);
+    CTR_WriteU32LE(checkpoint+checkpointSize-4,savedSlot);
+    NativeSceneAssets_Reset(&restored); free(checkpoint);
     CTR_WriteU32LE(asset+0x914,0x12345678); // Legacy relocation must not affect the snapshot.
     CHECK(NativeSceneAssets_GetModel(&owners,asset+0x900,&model)==NATIVE_ASSET_OK && model.headersOffset==0x940);
     CHECK(NativeSceneAssets_Capture(&owners,asset,0xb00,ptr,3)!=NATIVE_PTRMAP_OK);

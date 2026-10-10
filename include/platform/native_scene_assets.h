@@ -14,6 +14,13 @@ enum NativePtrMapResult NativeSceneAssets_CompletePtr(struct NativeSceneAssets *
 void NativeSceneAssets_ForgetRange(struct NativeSceneAssets *assets,const void *begin,const void *end);
 enum NativeAssetResult NativeSceneAssets_GetLevel(const struct NativeSceneAssets *assets,const void *source,struct NativeLevelView *out);
 enum NativeAssetResult NativeSceneAssets_GetModel(const struct NativeSceneAssets *assets,const void *sourceModel,struct NativeModelView *out);
+// Versioned snapshot of immutable owners, pending maps and library references.
+// Source identities are rebased by the caller; restore replaces state only after
+// every owner/map/model has validated. No serialized host view is dereferenced.
+typedef int (*NativeSceneSourceRebase)(void *user,u64 source,u32 bytes,uintptr_t *live);
+size_t NativeSceneAssets_CheckpointSize(const struct NativeSceneAssets *assets);
+int NativeSceneAssets_CaptureCheckpoint(const struct NativeSceneAssets *assets,void *dst,size_t bytes);
+int NativeSceneAssets_RestoreCheckpoint(struct NativeSceneAssets *assets,const void *src,size_t bytes,NativeSceneSourceRebase rebase,void *user);
 // Game-owned context; portable tests use explicit independent contexts above.
 extern struct NativeSceneAssets gNativeSceneAssets;
 #endif

@@ -74,7 +74,9 @@ terrain geometry shaded with vertex colors or decoded face textures. Runtime sce
 modules add camera/frustum/BSP selection, animated textures, model poses and
 triangle sinks for the software rasterizer and native GPU token bridge. Loader
 snapshots and selected library/animation consumers are connected to these readers;
-the optional game terrain adapter remains experimental. Builds use Xcode
+the optional game terrain adapter remains experimental. Host-width callback/global
+migrations and checkpoint relocation modules are tested on ARM64; complete-game
+checkpoint and replay validation still awaits the remaining layout migration. Builds use Xcode
 Command Line Tools, CMake, Ninja and Python 3. The complete game still requires
 32-bit host pointers while its asset layouts are being ported.
 
