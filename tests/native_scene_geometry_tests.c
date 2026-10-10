@@ -5,7 +5,7 @@
 static int CheckOutput(const struct NativeDrawTriangle *tri,size_t n,const struct NativeSceneCamera *c)
 {
     for(size_t i=0;i<n;i++) {
-        if(tri[i].signedArea<=0 || !tri[i].source.textured || tri[i].source.texture.tpage!=23 || tri[i].source.texture.clut!=47 || tri[i].orderingBias!=-7) return 0;
+        if(tri[i].signedArea<=0 || !tri[i].source.textured || tri[i].source.texture.tpage!=23 || tri[i].source.texture.clut!=47 || tri[i].orderingBias!=-7 || tri[i].source.textureBlend!=NATIVE_TEXTURE_BLEND_SEMI) return 0;
         for(unsigned k=0;k<3;k++) {
             if(tri[i].depth[k]<c->nearDepth || tri[i].depth[k]>c->farDepth ||
                tri[i].screen[k][0]<0 || tri[i].screen[k][0]>=(s32)c->width ||
@@ -18,7 +18,7 @@ struct SubdivisionStats { size_t count; s64 area; };
 static enum NativeAssetResult SubdivisionSink(void *user,const struct NativeDrawTriangle *t)
 {
     struct SubdivisionStats *stats=user;
-    if(t->signedArea<=0) return NATIVE_ASSET_INVALID_DATA;
+    if(t->signedArea<=0 || t->source.textureBlend!=NATIVE_TEXTURE_BLEND_SEMI) return NATIVE_ASSET_INVALID_DATA;
     stats->count++; stats->area+=t->signedArea; return NATIVE_ASSET_OK;
 }
 static enum NativeAssetResult FailSink(void *user,const struct NativeDrawTriangle *t)
@@ -27,7 +27,7 @@ int main(void)
 {
     struct NativeSceneCamera c; const s32 pos[3]={0}; const s16 rot[3]={0};
     CHECK(NativeSceneCamera_Init(pos,rot,512,512,128,128,1024,&c)==NATIVE_ASSET_OK);
-    struct NativeModelTriangle m={.textured=1,.colors={0xff000000,0xff000080,0xff000000},.texture={.u={0,64,128},.v={0,64,128},.tpage=23,.clut=47}};
+    struct NativeModelTriangle m={.textured=1,.textureBlend=NATIVE_TEXTURE_BLEND_SEMI,.colors={0xff000000,0xff000080,0xff000000},.texture={.u={0,64,128},.v={0,64,128},.tpage=23,.clut=47}};
     struct NativeSceneClipVertex v[3]={{{-32,-32,64},{0},{0}},{{32,-32,192},{0},{0}},{{0,32,192},{0},{0}}};
     for(unsigned k=0;k<3;k++) NativeSceneGeometry_Attributes(&m,k,&v[k]);
     struct NativeSceneClipVertex saved[3]; memcpy(saved,v,sizeof(v));

@@ -139,7 +139,13 @@ longer overlay pointer and scalar data, and scrub history belongs to each contex
 Camera height/probe consumers use typed fields rather than retail prefix casts.
 Native BSP searches have bounded per-call stacks so nested callbacks cannot reuse
 the outer pending-child list. Host workspace bytes and typed pointer traversal
-participate in version-6 checkpoints. Other pointer-bearing overlays still need
+participate in version-7 checkpoints. ARM64 Torch has a scalar host workspace;
+skid work contains an aligned PushBuffer pointer and loads its actual origin
+field. Shadow scalar bytes retain their retail offsets, while nine driver/instance
+pointer slots (including the sentinel) live in separate typed arrays. Checkpoint
+visitors rebase those object pointers without interpreting scalar bytes as
+addresses. Torch particle reads use resident fields rather than retail offsets.
+Other pointer-bearing overlays still need
 migration; widening the retail byte buffer is not a substitute for that work.
 
 Scratchpad-heavy areas include:

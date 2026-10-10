@@ -6,12 +6,12 @@ struct ValidatorSceneItem {
     struct NativeInstanceDefView instance;
     u32 header,animation,vertices;
 };
-struct ValidatorRuntimeRaster { const struct NativeRasterView *target; const struct NativeVramView *vram; size_t writes; };
+struct ValidatorRuntimeRaster { const struct NativeRasterView *target; const struct NativeVramView *vram; size_t writes,blended; };
 static enum NativeAssetResult Validator_RuntimeSink(void *user,const struct NativeDrawTriangle *triangle)
 {
     struct ValidatorRuntimeRaster *context=user; struct NativeRasterStats stats;
     enum NativeAssetResult status=NativeRaster_Draw(context->target,triangle,context->vram,&stats);
-    if(status==NATIVE_ASSET_OK) context->writes+=stats.written;
+    if(status==NATIVE_ASSET_OK) { context->writes+=stats.written; context->blended+=stats.blended; }
     return status;
 }
 static int Validator_RuntimeSequence(const struct NativeLevelView *level,const struct NativeMeshView *mesh,
@@ -41,7 +41,7 @@ static int Validator_RuntimeSequence(const struct NativeLevelView *level,const s
         struct NativeSceneCamera camera={.transform=*initial,.width=512,.height=512,.nearDepth=128,.farDepth=65535,.subdivisionDepth=subdivisionDepth};
         camera.transform.position[0]+=(s32)(tick*32); // Explicit inspection pan, not a gameplay tick rate.
         const u8 background[3]={24,28,36}; NativeRaster_Clear(target,background);
-        struct ValidatorRuntimeRaster raster={target,vram,0}; struct NativeSceneRenderStats terrainStats,modelStats;
+        struct ValidatorRuntimeRaster raster={.target=target,.vram=vram}; struct NativeSceneRenderStats terrainStats,modelStats;
         enum NativeAssetResult status=NativeSceneRender_Terrain(level,mesh,&camera,NULL,0,faces,faceBytes,tick,UINT32_MAX,&visibility,Validator_RuntimeSink,&raster,&terrainStats);
         if(status!=NATIVE_ASSET_OK) { fprintf(stderr,"Runtime terrain error %d at tick %u\n",status,tick); goto done; }
         size_t modelTriangles=0;
@@ -62,10 +62,10 @@ static int Validator_RuntimeSequence(const struct NativeLevelView *level,const s
         FILE *file=fopen(path,"wbx"); if(file==NULL) goto done;
         int written=fprintf(file,"P6\n512 512\n255\n")>0 && fwrite(target->rgb,1,512*512*3,file)==512*512*3;
         int closed=fclose(file)==0; if(!written || !closed) goto done;
-        printf("Runtime frame OK: tick %u, camera %d %d %d, %u visible BSP nodes, %u eligible quads, %zu terrain / %zu model triangles, %zu fragment writes, %zu terrain sources clipped, subdivision %u -> %s\n",
-            tick,camera.transform.position[0],camera.transform.position[1],camera.transform.position[2],terrainStats.visibleNodes,terrainStats.visibleQuads,terrainStats.triangles,modelTriangles,raster.writes,terrainStats.clipped,subdivisionDepth,path);
+        printf("Runtime frame OK: tick %u, camera %d %d %d, %u visible BSP nodes, %u eligible quads, %zu terrain / %zu model triangles, %zu fragment writes (%zu blended), %zu terrain sources clipped, subdivision %u -> %s\n",
+            tick,camera.transform.position[0],camera.transform.position[1],camera.transform.position[2],terrainStats.visibleNodes,terrainStats.visibleQuads,terrainStats.triangles,modelTriangles,raster.writes,raster.blended,terrainStats.clipped,subdivisionDepth,path);
     }
-    printf("Runtime sequence OK: %u ticks, authored model frames, texture animation, BSP/frustum and face masks; synthetic pan, opaque affine diagnostic rendering\n",ticks);
+    printf("Runtime sequence OK: %u ticks, authored model frames, texture animation, BSP/frustum and face masks; synthetic pan, affine diagnostic rendering with STP material blending\n",ticks);
     success=1;
 done:
     if(!success) fprintf(stderr,"Runtime sequence failed; existing frames are never overwritten.\n");

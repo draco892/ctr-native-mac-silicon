@@ -2,8 +2,9 @@
 
 Use this for bug reports in internal builds.
 
-Current checkpoints use payload version 6 and replay headers use version 2.
-Version 6 adds distinct collision/camera workspaces and their pointer traversal.
+Current checkpoints use payload version 7 and replay headers use version 2.
+Version 7 adds Torch/skid/shadow workspaces and typed effect-pointer traversal
+to the collision/camera workspaces introduced in version 6.
 Previous versions are rejected. Pointer width, endian marker and platform/CPU
 identity are checked; bypassing build identity does not bypass format/ABI checks.
 The outer CTST container remains version 1. Checkpoints now include immutable

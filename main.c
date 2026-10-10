@@ -40,6 +40,7 @@
 #include "platform/native_audio.c"
 #include "platform/native_host_scratch.c"
 #include "platform/native_collision_work.c"
+#include "platform/native_effect_work.c"
 #include "platform/native_memory.c"
 #include "platform/native_mempack_arena.c"
 #include "platform/native_checkpoint_relocation.c"

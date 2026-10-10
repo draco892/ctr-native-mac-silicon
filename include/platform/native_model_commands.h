@@ -2,6 +2,7 @@
 #define PLATFORM_NATIVE_MODEL_COMMANDS_H
 
 #include <platform/native_asset_readers.h>
+#include <platform/native_material.h>
 
 struct NativeModelTexture
 {
@@ -14,6 +15,9 @@ struct NativeModelTriangle
 	u32 vertices[3], colors[3], command;
 	struct NativeModelTexture texture;
 	int textured;
+	// AUTO retains the retail ordinary-texture page policy. Explicit overrides
+	// belong to special material consumers; clipping/subdivision preserve them.
+	enum NativeTextureBlendPolicy textureBlend;
 };
 struct NativeModelCommands
 {

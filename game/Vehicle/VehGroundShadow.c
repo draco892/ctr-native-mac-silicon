@@ -35,7 +35,7 @@ typedef s16 VehGroundShadowSignedHalfword CTR_MAY_ALIAS;
 #define VehGroundShadow_SetGeomOffset(x, y)              gte_SetGeomOffset(x, y)
 #define VehGroundShadow_AddPointer(result, base, offset) ((result) = (base) + (offset))
 #define VehGroundShadow_SetCounterZero(counter)          ((counter) = 0)
-#define VehGroundShadow_SetFirstTexture(texture)         ((texture) = (size_t)CTR_SCRATCHPAD_PTR(struct TextureLayout, 0x224))
+#define VehGroundShadow_SetFirstTexture(texture)         ((texture) = (size_t)(scratch + 0x224))
 #define VehGroundShadow_SetIconIndex(index)              ((index) = NULL)
 #else
 // NOTE(aalhendi): These matching-only loads intentionally expose only their
@@ -54,6 +54,14 @@ typedef s16 VehGroundShadowSignedHalfword CTR_MAY_ALIAS;
 #define VehGroundShadow_SetCounterZero(counter)          __asm__ volatile("move %0,$0" : "=r"(counter))
 #define VehGroundShadow_SetFirstTexture(texture)         __asm__("lui %0,0x1f80\n\tori %0,%0,0x224" : "=r"(texture))
 #define VehGroundShadow_SetIconIndex(index)              __asm__("move %0,$0" : "=r"(index))
+#endif
+
+#if defined(CTR_NATIVE_HOST64)
+#define VEH_SHADOW_DRIVER_SLOT(address) (*NativeShadowWork_DriverSlot(NativeShadowWork_Get(), (address)))
+#define VEH_SHADOW_INSTANCE_SLOT(address) (*NativeShadowWork_InstanceSlot(NativeShadowWork_Get(), (address)))
+#else
+#define VEH_SHADOW_DRIVER_SLOT(address) (*(struct Driver **)(address))
+#define VEH_SHADOW_INSTANCE_SLOT(address) (*(struct Instance **)(address))
 #endif
 
 /// @brief Copies texture layout data from icon to arbitrary mem address. Particularly used to copy kart shadow textures to scratchpad.
@@ -137,9 +145,19 @@ void VehGroundShadow_Main(void)
 	s32 geomY;
 	u32 retailCallState[3];
 
-	VehGroundShadow_SetFirstTexture(z);
-	VehGroundShadow_SetIconIndex(localOutput);
-	scratch = CTR_SCRATCHPAD_PTR(u8, 0);
+#if defined(CTR_NATIVE_HOST64)
+    scratch = NativeShadowWork_Get()->payload.bytes;
+#elif defined(CTR_NATIVE)
+    scratch = CTR_SCRATCHPAD_PTR(u8, 0);
+#else
+    VehGroundShadow_SetFirstTexture(z);
+    VehGroundShadow_SetIconIndex(localOutput);
+    scratch = CTR_SCRATCHPAD_PTR(u8, 0);
+#endif
+#ifdef CTR_NATIVE
+    VehGroundShadow_SetFirstTexture(z);
+    VehGroundShadow_SetIconIndex(localOutput);
+#endif
 	if (!VehGroundShadow_Subset1((struct TextureLayout *)z, (int)(size_t)localOutput))
 		return;
 	CTR_PSX_MEMORY_BARRIER();
@@ -171,9 +189,9 @@ void VehGroundShadow_Main(void)
 		driver = tracker->drivers[playerIndex];
 		if (driver != NULL)
 		{
-			*(struct Driver **)((u8 *)y + 2) = driver;
+			VEH_SHADOW_DRIVER_SLOT((u8 *)y + 2) = driver;
 			x = (size_t)driver->instSelf;
-			*(struct Instance **)((u8 *)y + 6) = (struct Instance *)x;
+			VEH_SHADOW_INSTANCE_SLOT((u8 *)y + 6) = (struct Instance *)x;
 			VEH_GROUND_SHADOW_HALF((u8 *)y, 0x14) = (u16)((struct Instance *)x)->flags;
 			v0Value = tracker->numPlyrCurrGame;
 			entryPlayerIndex = (s32)v0Value - 1;
@@ -202,7 +220,7 @@ void VehGroundShadow_Main(void)
 		}
 		else
 		{
-			*(struct Driver **)((u8 *)y + 2) = NULL;
+			VEH_SHADOW_DRIVER_SLOT((u8 *)y + 2) = NULL;
 		}
 		VEH_GROUND_SHADOW_BYTE((u8 *)y, 0) = 0;
 		playerIndex++;
@@ -213,7 +231,7 @@ void VehGroundShadow_Main(void)
 	{
 		struct GameTracker *tracker = GAME_TRACKER;
 
-		*(struct Driver **)(entryBase + 0x14) = NULL;
+		VEH_SHADOW_DRIVER_SLOT(entryBase + 0x14) = NULL;
 		v0Value = tracker->numPlyrCurrGame;
 		playerIndex = (s32)v0Value - 1;
 		v0Value = playerIndex << 4;
@@ -250,7 +268,7 @@ void VehGroundShadow_Main(void)
 		VehGroundShadow_LoadRotMatrix((MATRIX *)(scratch + 0x50));
 
 		VehGroundShadow_AddPointer(entryBase, scratch, 0xa4);
-		driver = *(struct Driver **)(entryBase + 0x14);
+		driver = VEH_SHADOW_DRIVER_SLOT(entryBase + 0x14);
 		if (driver == NULL)
 			goto drivers_done;
 		CTR_PSX_MEMORY_BARRIER();
@@ -573,7 +591,7 @@ void VehGroundShadow_Main(void)
 
 		next_driver:
 			entryCursor += 0x28;
-			driver = *(struct Driver **)entryCursor;
+			driver = VEH_SHADOW_DRIVER_SLOT(entryCursor);
 			entryBase += 0x28;
 		} while (driver != NULL);
 

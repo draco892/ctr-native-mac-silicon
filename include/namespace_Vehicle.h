@@ -2,6 +2,7 @@
 #define CTR_NATIVE_NAMESPACE_VEHICLE_H
 
 #include <ctr_math.h>
+#include <ctr_effect_work.h>
 
 struct Thread;
 struct Driver;
@@ -181,28 +182,6 @@ union VehEmitterWallScratch
 {
 	s32 word[6];
 	s16 half[12];
-};
-
-struct VehGroundSkidsScratch
-{
-	SVECTOR projected[3];
-	struct PushBuffer *pushBuffer;
-	u32 colorNear;
-	u32 colorFar;
-	union
-	{
-		u32 segmentFlags;
-		struct
-		{
-			u8 segmentFlagsLow;
-			u8 segmentFlagsPadding[3];
-		} bytes;
-	} segment;
-	u32 currXY[9];
-	u32 prevXY[9];
-	s32 currDepth[9];
-	s32 prevDepth[9];
-	Vec3 origin;
 };
 
 // NOTE(aalhendi): Retail VehPhysCrash_AI uses globals 0x8009ae28
@@ -2024,17 +2003,6 @@ CTR_STATIC_ASSERT(offsetof(union VehEmitterSkidmark, fields.color) == 0x6);
 CTR_STATIC_ASSERT(offsetof(union VehEmitterSkidmark, fields.flags) == 0x7);
 CTR_STATIC_ASSERT(offsetof(union VehEmitterSkidmark, fields.edge1) == 0x8);
 CTR_STATIC_ASSERT(sizeof(union VehEmitterWallScratch) == 0x18);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, projected) == 0x0);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, pushBuffer) == 0x18);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, colorNear) == 0x1c);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, colorFar) == 0x20);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, segment.segmentFlags) == 0x24);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, currXY) == 0x28);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, prevXY) == 0x4c);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, currDepth) == 0x70);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, prevDepth) == 0x94);
-CTR_STATIC_ASSERT(offsetof(struct VehGroundSkidsScratch, origin) == 0xb8);
-CTR_STATIC_ASSERT(sizeof(struct VehGroundSkidsScratch) == 0xc4);
 CTR_STATIC_ASSERT(offsetof(struct VehPhysCrashAiScratch, forward) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct VehPhysCrashAiScratch, matrix) == 0x10);
 CTR_STATIC_ASSERT(sizeof(struct VehPhysCrashAiScratch) == 0x30);

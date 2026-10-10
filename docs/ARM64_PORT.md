@@ -1411,7 +1411,7 @@ The syntax command uses the local Homebrew SDL include directory; adjust that
 include path if SDL is installed elsewhere. The audit tool reads diagnostics and
 inventories source call sites; it does not disable assertions or certify a build.
 
-## Collision/camera workspaces and native geometry (current milestone)
+## Collision/camera workspaces and native geometry (previous milestone)
 
 The ARM64 C17 suite now has **26 tests with the disc, 25 without it**. Normal
 and ASan/UBSan builds pass. This advances the host-contract and renderer areas;
@@ -1518,12 +1518,94 @@ build-macos-arm64-memory/ctr_native_asset_validate disc-scene-runtime assets 25 
 python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage12-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
 ```
 
-Remaining in the first two requested areas: other pointer-bearing scratch overlays
-(Torch, skid/shadow and recursive rendering), resident camera/vehicle/level
+Remaining in the first two requested areas: other scratch overlays and recursive rendering, resident camera/vehicle/level
 contracts, direct legacy asset consumers, complete model/gameplay integration,
 retail subdivision, environment/reflection/special materials, multiplayer/cutscene
 camera paths and complete-game behavioral/visual validation. Passing module tests
 does not close these remaining parts.
+
+## Effect workspaces and material blending (current milestone)
+
+The C17 ARM64 suite has **27 tests with the disc, 26 without it**, passing both
+normal and ASan/UBSan builds. CMake now uses the correct `CTR_ENABLE_SANITIZERS`
+option for collision, scene geometry, vertex animation and effect workspace
+executables. The first three targets in the previous milestone had accidentally
+used an undefined option, so that milestone's sanitized preset did not instrument
+those three targets. Compile-command inspection now confirms instrumentation,
+and all 27 checks pass after rebuilding.
+
+On ARM64, Torch, skid and shadow work use separate aligned host slots. Torch's
+retail saved-particle address slot is unused on native; particle positions,
+radii, colors and OT bias come from typed resident fields. Scalar Torch layout
+assertions remain active. Skid origin loads address `scratch->origin`, whose
+location changes after the full-width PushBuffer pointer. The fourth skid segment
+passes its actual coordinate pointer instead of round-tripping it through s32.
+The production skid projection helper is compiled independently for wraparound
+regression checks. Native 32-bit and PS1 retain retail workspace layouts.
+
+Shadow keeps its scalar 1 KiB payload but moves object addresses to nine typed
+driver and instance slots, including the sentinel entry. Checked helpers map each
+retail slot address to its typed index; no host pointer is written into four-byte
+scalar gaps. Tests cover all nine entries, scalar isolation, the original retail
+scratchpad remaining untouched, storage capture/reset/restore and pointer rebasing.
+They do not execute the complete Torch or vehicle-shadow render loops. Their
+resident PushBuffer/Driver/Instance contracts still require the remaining migration.
+
+Checkpoint payloads advance to **version 7** for the expanded host storage.
+The effect visitor traverses the skid PushBuffer and both shadow pointer arrays;
+Torch contains no saved native pointer. Version-6 payloads are rejected. Replay
+headers remain version 2 and CTST containers remain version 1. Complete-game
+checkpoint execution is still blocked by the resident-layout guard.
+
+`native_material.h` shares the ordinary GT3 material policy between GPU packets
+and the software rasterizer: page blend bits 3 mean opaque by default, matching
+the existing RenderBucket writers. `NativeModelTriangle.textureBlend` can explicitly
+force opaque or semi-transparent behavior, including quarter-source blending.
+Clipping and subdivision retain the policy. The rasterizer blends sampled STP
+texels only, keeps non-STP texels opaque, and discards word-zero texels. Average,
+add, subtract and quarter-source factors use RGB8 integer truncation/saturation.
+Blended fragments test against opaque depth but do not replace it; primitive
+submission order matters. This diagnostic path does not implement RGB5 GPU
+quantization, mask bits, dithering, texture windows, OT sorting or reflections.
+
+Tests exercise all four factors, overrides and GPU codes, mixed STP/non-STP
+samples in one primitive, repeated blends, foreground occlusion, saturation,
+transparent zero and transactional texture errors after an early blend candidate.
+The CLI reports blended fragment counts. An eight-frame Dingo sequence with
+`subdiv=1` remains valid, but the selected inspection region produces **zero
+blended fragments**; real translucent material parity is not established by it.
+
+The current syntax inventory is **602 layout assertions, 544 pointer/integer-cast
+warnings and 86 scratchpad call sites**, with no other syntax errors. The scratch
+count includes PS1/native32 fallback branches. These are diagnostic counts, not
+a completion percentage; the full-game build remains guarded.
+
+Run from the repository root:
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R 'effect_work|raster|scene_geometry|scene_runtime|checkpoint_relocation' -V
+
+# Use a fresh prefix; existing frames are rejected.
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-runtime assets 1 258,0 0 6 8 build-macos-arm64-memory/effects-materials-check iso subdiv=1
+python3 tools/preview_sequence_html.py build-macos-arm64-memory/effects-materials-check build-macos-arm64-memory/effects-materials-check.html --fps 15
+sips -s format png build-macos-arm64-memory/effects-materials-check-000000.ppm --out build-macos-arm64-memory/effects-materials-check-000000.png
+
+# Expected layout-guard failure; this is an inventory, not a successful game build.
+/usr/bin/clang -fsyntax-only -ferror-limit=0 -std=c17 -DCTR_NATIVE -DCTR_INTERNAL -DCTR_NATIVE_GAME_SCENE -DCTR_NATIVE_DECODED_TERRAIN -DCTR_NATIVE_BUILD_ID='"port-check"' -DCTR_NATIVE_VERSION='"port-check"' -Iinclude -I/opt/homebrew/include main.c > build-macos-arm64-memory/stage13-syntax.log 2>&1
+python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage13-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
+```
+
+Still open in the first two areas: resident Camera/Vehicle/Level and direct asset
+consumers, recursive rendering workspaces, retail subdivision dispatch,
+reflection/environment passes, special model consumers, multiplayer/cutscene
+cameras and complete-game behavioral/visual checks. The two areas are not closed
+by this milestone.
 
 ## Remaining game work
 
@@ -1562,7 +1644,7 @@ The PS1 allocator path retains its original four-byte alignment and pointer
 arithmetic. The existing native 32-bit game remains the baseline for behavior;
 this milestone does not establish full game or PS1 binary parity.
 
-The current full-game ARM64 syntax audit encounters **611 active binary-layout
+The current full-game ARM64 syntax audit encounters **602 active binary-layout
 assertions and no other syntax errors**; the voice-set initializer is fixed.
 This is not a successful full-game build. The CMake pointer-width guard and
 remaining retail layout assertions stay enabled.

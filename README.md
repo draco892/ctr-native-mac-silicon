@@ -74,9 +74,10 @@ terrain geometry shaded with vertex colors or decoded face textures. Runtime sce
 modules add camera/frustum/BSP selection, animated textures, model poses and
 triangle sinks for the software rasterizer and native GPU token bridge. The scene
 path includes native near/far/viewport clipping, optional midpoint subdivision,
-and immutable water/scenery vertex animation. Collision and camera workspaces
-retain full-width pointers in separate storage; the ARM64 suite has 26 tests with
-the supplied disc (25 without it). Loader
+immutable water/scenery vertex animation and diagnostic STP material blending.
+Collision, camera, Torch, skid and shadow workspaces keep scalar temporaries
+separate from full-width object pointers; the ARM64 suite has 27 tests with
+the supplied disc (26 without it). Loader
 snapshots and selected library/animation consumers are connected to these readers;
 the optional game terrain adapter remains experimental. Host-width callback/global
 migrations and checkpoint relocation modules are tested on ARM64; complete-game

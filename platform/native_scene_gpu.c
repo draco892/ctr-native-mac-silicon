@@ -14,6 +14,7 @@ enum NativeAssetResult NativeSceneGpu_Emit(void *user,const struct NativeDrawTri
 {
     struct NativeSceneGpuSink *sink=user;
     if(sink==NULL || triangle==NULL || sink->packets==NULL || sink->ot==NULL || sink->otCount==0) return NATIVE_ASSET_INVALID_ARGUMENT;
+    if((unsigned)triangle->source.textureBlend>NATIVE_TEXTURE_BLEND_SEMI) return NATIVE_ASSET_INVALID_ARGUMENT;
     if(sink->count>=sink->capacity) return NATIVE_ASSET_OUTPUT_TOO_SMALL;
     if(sink->otCount>65536 || sink->capacity>SIZE_MAX/sizeof(*sink->packets) ||
        !NativeGpuLinks_IsRegisteredHostRange(sink->packets,sink->capacity*sizeof(*sink->packets)) ||
@@ -22,7 +23,7 @@ enum NativeAssetResult NativeSceneGpu_Emit(void *user,const struct NativeDrawTri
     s32 at=(s32)(depth>>6)+triangle->orderingBias;
     if(at<0) at=0; if((size_t)at>=sink->otCount) at=(s32)sink->otCount-1;
     struct NativeSceneGpuPacket packet={0};
-    u32 code=triangle->source.textured ? ((triangle->source.texture.tpage&0x60u)!=0x60u ? 0x36u : 0x34u) : 0x30u;
+    u32 code=NativeMaterial_TriangleCode(triangle->source.textured,triangle->source.texture.tpage,triangle->source.textureBlend);
     for(unsigned k=0;k<3;k++) {
         unsigned colorWord=triangle->source.textured ? 1+k*3 : 1+k*2;
         packet.words[colorWord]=(triangle->source.colors[k]&0xffffffu)|(k==0 ? code<<24 : 0);

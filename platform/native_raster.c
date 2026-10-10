@@ -67,6 +67,7 @@ static enum NativeAssetResult NativeRaster_Pass(const struct NativeRasterView *t
 			for(unsigned i=0;i<3;i++) values[i]=(triangle->source.colors[p[i].index]>>(channel*8))&255;
 			rgb[channel]=(u8)NativeRaster_Interpolate(weights,area,values);
 		}
+		int blend=0;
 		if(triangle->source.textured)
 		{
 			for(unsigned i=0;i<3;i++) values[i]=triangle->source.texture.u[p[i].index];
@@ -77,12 +78,18 @@ static enum NativeAssetResult NativeRaster_Pass(const struct NativeRasterView *t
 			enum NativeAssetResult status=NativeVram_Sample(vram,triangle->source.texture.tpage,triangle->source.texture.clut,u,v,&texel);
 			if(status!=NATIVE_ASSET_OK) return status;
 			if(texel.a==0) { stats->transparent++; continue; }
+			blend=texel.stp && NativeMaterial_IsSemiTransparent(triangle->source.texture.tpage,triangle->source.textureBlend);
 			u8 channels[3]={texel.r,texel.g,texel.b};
 			for(unsigned channel=0;channel<3;channel++)
 			{ u32 modulated=(u32)rgb[channel]*channels[channel]/128; rgb[channel]=(u8)(modulated>255 ? 255 : modulated); }
 		}
+		if(blend) {
+			for(unsigned channel=0;channel<3;channel++) rgb[channel]=NativeMaterial_BlendChannel(
+			    target->rgb[pixel*3+channel],rgb[channel],triangle->source.texture.tpage);
+			stats->blended++;
+		}
 		stats->written++;
-		if(write) { memcpy(target->rgb+pixel*3,rgb,3); target->depth[pixel]=depth; }
+		if(write) { memcpy(target->rgb+pixel*3,rgb,3); if(!blend) target->depth[pixel]=depth; }
 	}
 	return NATIVE_ASSET_OK;
 }
@@ -94,6 +101,7 @@ enum NativeAssetResult NativeRaster_Draw(const struct NativeRasterView *target,
 	memset(out,0,sizeof(*out));
 	if(target==NULL || target->rgb==NULL || target->depth==NULL || triangle==NULL ||
 	    (triangle->source.textured && (vram==NULL || vram->bytes==NULL))) return NATIVE_ASSET_INVALID_ARGUMENT;
+	if((unsigned)triangle->source.textureBlend>NATIVE_TEXTURE_BLEND_SEMI) return NATIVE_ASSET_INVALID_ARGUMENT;
 	struct NativeRasterStats checked={0},written={0};
 	enum NativeAssetResult status=NativeRaster_Pass(target,triangle,vram,0,&checked);
 	if(status!=NATIVE_ASSET_OK) return status;

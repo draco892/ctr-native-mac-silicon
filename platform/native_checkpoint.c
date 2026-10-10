@@ -1,3 +1,4 @@
+#include <ctr_effect_work.h>
 #include "platform/native_checkpoint.h"
 
 #include <common.h>
@@ -21,10 +22,11 @@
 // and retail globals are defined, so they can snapshot the same process-local
 // regions the game mutates.
 #define NATIVE_CHECKPOINT_MAGIC              NATIVE_CHECKPOINT_FOURCC('C', 'T', 'R', 'C')
+// Version 7 adds Torch/skid/shadow host storage and typed effect-pointer traversal.
 // Version 6 includes separate collision/camera host workspaces and pointer traversal.
 // Version 5 introduced 64-bit addresses and explicit slot/host widths.
 // Payload regions remain ABI-specific; older versions are rejected.
-#define NATIVE_CHECKPOINT_VERSION            6u
+#define NATIVE_CHECKPOINT_VERSION            7u
 #define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  20u
 #define NATIVE_CHECKPOINT_POINTER_SLOT_CAP   65536u
 #define NATIVE_CHECKPOINT_CREDITS_STRING_CAP 4096u
@@ -1831,6 +1833,7 @@ internal void NativeCheckpoint_RelocateRuntimePointers(const struct NativeCheckp
 	NativeCheckpoint_RelocateGameTrackerPointers(oldHeader, liveHeader);
     struct NativeCheckpointCollisionRebase collision={oldHeader,liveHeader};
     NativeCollisionWork_VisitHostPointers(NativeCheckpoint_RelocateCollisionSlot,&collision);
+    NativeEffectWork_VisitHostPointers(NativeCheckpoint_RelocateCollisionSlot,&collision);
     NativeCollisionWork_VisitPointers(&sdata_static.scratchpadStruct,NativeCheckpoint_RelocateCollisionSlot,&collision);
 }
 

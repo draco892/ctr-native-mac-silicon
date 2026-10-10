@@ -182,6 +182,14 @@ int main(void)
     CHECK(NativeGpuLinks_ToHostPointer(packets[1].words[0])==&packets[0]);
     triangle.source.texture.tpage=0;
     CHECK(NativeSceneGpu_Emit(&gpu,&triangle)==NATIVE_ASSET_OK && packets[2].words[1]==0x36112233);
+    triangle.source.textureBlend=NATIVE_TEXTURE_BLEND_OPAQUE;
+    CHECK(NativeSceneGpu_Emit(&gpu,&triangle)==NATIVE_ASSET_OK && packets[3].words[1]==0x34112233);
+    triangle.source.textureBlend=NATIVE_TEXTURE_BLEND_SEMI; triangle.source.texture.tpage=0x60;
+    CHECK(NativeSceneGpu_Emit(&gpu,&triangle)==NATIVE_ASSET_OK && packets[4].words[1]==0x36112233);
+    triangle.source.textureBlend=(enum NativeTextureBlendPolicy)3;
+    u32 oldLink=ot[2]; size_t oldCount=gpu.count;
+    CHECK(NativeSceneGpu_Emit(&gpu,&triangle)==NATIVE_ASSET_INVALID_ARGUMENT && gpu.count==oldCount && ot[2]==oldLink);
+    triangle.source.textureBlend=NATIVE_TEXTURE_BLEND_AUTO;
     gpu.count=gpu.capacity; u32 preserved=ot[2];
     CHECK(NativeSceneGpu_Emit(&gpu,&triangle)==NATIVE_ASSET_OUTPUT_TOO_SMALL && ot[2]==preserved);
     for(unsigned k=0;k<0x400;k++) ot[k]=NATIVE_GPU_LINK_TERMINATOR;

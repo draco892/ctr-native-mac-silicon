@@ -616,13 +616,13 @@ static int Validator_Preview(const struct NativeMpkView *mpk,const struct Native
 		status=NativeModelDraw_Open(&model,headerIndex,animationIndex,frameIndex+f,&projection,&workspace,vram,&draw);
 		if(status!=NATIVE_ASSET_OK) goto done;
 		const u8 background[3]={24,28,36}; NativeRaster_Clear(&target,background);
-		size_t triangles=0,writes=0;
+		size_t triangles=0,writes=0,blended=0;
 		while((status=NativeModelDraw_Next(&draw,&triangle))==NATIVE_ASSET_OK)
 		{
 			struct NativeRasterStats stats;
 			status=NativeRaster_Draw(&target,&triangle,vram,&stats);
 			if(status!=NATIVE_ASSET_OK) goto done;
-			triangles++; writes+=stats.written;
+			triangles++; writes+=stats.written; blended+=stats.blended;
 		}
 		if(status!=NATIVE_ASSET_NOT_FOUND || writes==0) goto done;
 		const char *output=path;
@@ -630,10 +630,10 @@ static int Validator_Preview(const struct NativeMpkView *mpk,const struct Native
 		file=fopen(output,sequence ? "wbx" : "wb"); if(file==NULL) goto done;
 		if(fprintf(file,"P6\n512 512\n255\n")<0 || fwrite(rgb,1,512*512*3,file)!=512*512*3) goto done;
 		if(fclose(file)!=0) { file=NULL; goto done; } file=NULL;
-		printf("Preview OK: model %s (index %u), header %u, animation %s, frame request %u, view %s, %zu triangles, %zu opaque fragment writes -> %s\n",
-		    model.name,modelIndex,headerIndex,animationText,frameIndex+f,viewName,triangles,writes,output);
+		printf("Preview OK: model %s (index %u), header %u, animation %s, frame request %u, view %s, %zu triangles, %zu fragment writes (%zu blended) -> %s\n",
+		    model.name,modelIndex,headerIndex,animationText,frameIndex+f,viewName,triangles,writes,blended,output);
 	}
-	printf("Diagnostic opaque software preview, synthetic fitted camera, affine sampling/depth; full game/render parity remains unverified.\n");
+	printf("Diagnostic software preview with STP material blending, synthetic fitted camera, affine sampling/depth; full game/render parity remains unverified.\n");
 	success=1;
 done:
 	if(!success) fprintf(stderr,"Preview failed (model index %u, status %d).\n",modelIndex,status);
