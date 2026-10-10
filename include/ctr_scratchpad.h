@@ -27,4 +27,13 @@ extern u8 *gCTRNativeScratchpadBase;
 #define CTR_SCRATCHPAD_END(type) CTR_SCRATCHPAD_PTR(type,CTR_SCRATCHPAD_SIZE)
 #endif
 
+// Collision/camera host workspaces preserve full-width pointers.
+#if defined(CTR_NATIVE)
+#include <platform/native_collision_work.h>
+#define CTR_COLLISION_WORK() NativeCollisionWork_Get()
+#define CTR_CAMERA_WORK() NativeCameraWork_Get()
+#else
+#define CTR_COLLISION_WORK() CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108)
+#define CTR_CAMERA_WORK() CTR_SCRATCHPAD_PTR(struct CameraScratchWork, 0x108)
+#endif
 #endif

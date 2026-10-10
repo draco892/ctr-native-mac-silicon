@@ -1,6 +1,9 @@
 #ifndef CTR_NATIVE_NAMESPACE_COLL_H
 #define CTR_NATIVE_NAMESPACE_COLL_H
 
+#include <ctr_math.h>
+#include <psx/libgte.h>
+
 struct BoundingBox
 {
 	SVec3 min;
@@ -215,8 +218,14 @@ struct ScratchpadStruct
 		s16 scrubDepth;
 	} Input1;
 
+	// Native searches retain both sets of fields; no pointer overlays scalar data.
+	// Retail keeps the original union and ABI.
 	// 0x10
+#if defined(CTR_NATIVE_HOST64)
+	struct
+#else
 	union
+#endif
 	{
 		// This is why pointer 1f800118 gets passed
 		struct
@@ -338,7 +347,12 @@ struct ScratchpadStruct
 	// 0x1a4
 	struct CollScratchWork collision;
 
-	// 0x20C -- size of struct
+#if defined(CTR_NATIVE_HOST64)
+	// Every native collision context owns its history, including stack probes.
+	struct BspSearchTriangle scrubHistory[15];
+	s32 scrubCount;
+#endif
+	// 0x20C -- retail size of struct
 };
 
 // only stored in scratchpad by COLL_MOVED_FindScrub
@@ -387,12 +401,6 @@ CTR_STATIC_ASSERT(sizeof(SVec3) == 0x6);
 CTR_STATIC_ASSERT(sizeof(Vec3) == 0xC);
 CTR_STATIC_ASSERT(sizeof(CollNormalAxis) == 0x2);
 CTR_STATIC_ASSERT(sizeof(CollTriangleClipResult) == 0x1);
-CTR_STATIC_ASSERT(sizeof(struct BspSearchVertex) == 0x14);
-CTR_STATIC_ASSERT(sizeof(struct BspSearchTriangle) == 0xC);
-CTR_STATIC_ASSERT(offsetof(struct BspSearchTriangle, quadblock) == 0x0);
-CTR_STATIC_ASSERT(offsetof(struct BspSearchTriangle, triangleID) == 0x4);
-CTR_STATIC_ASSERT(offsetof(struct BspSearchTriangle, scrubDepth) == 0x8);
-CTR_STATIC_ASSERT(sizeof(struct BspSearchResult) == 0x1C);
 CTR_STATIC_ASSERT(sizeof(struct CollInstanceHitboxScratch) == 0x60);
 CTR_STATIC_ASSERT(offsetof(struct CollInstanceHitboxScratch, segmentDelta) == 0x18);
 CTR_STATIC_ASSERT(offsetof(struct CollInstanceHitboxScratch, centerDelta) == 0x24);
@@ -402,6 +410,19 @@ CTR_STATIC_ASSERT(offsetof(struct CollInstanceHitboxScratch, normal) == 0x48);
 CTR_STATIC_ASSERT(offsetof(struct CollInstanceHitboxScratch, scaledNormal) == 0x54);
 CTR_STATIC_ASSERT(sizeof(struct CollScratchWork) == 0x68);
 CTR_STATIC_ASSERT(sizeof(struct CollTriangleBarycentrics) == 0x4);
+CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.pos) == 0x00);
+CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.hitRadius) == 0x06);
+CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.modelID) == 0x0C);
+CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.scrubDepth) == 0x0E);
+
+// These describe retail/32-bit runtime storage, not ARM64 host objects.
+#if !defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(sizeof(struct BspSearchVertex) == 0x14);
+CTR_STATIC_ASSERT(sizeof(struct BspSearchTriangle) == 0xC);
+CTR_STATIC_ASSERT(offsetof(struct BspSearchTriangle, quadblock) == 0x0);
+CTR_STATIC_ASSERT(offsetof(struct BspSearchTriangle, triangleID) == 0x4);
+CTR_STATIC_ASSERT(offsetof(struct BspSearchTriangle, scrubDepth) == 0x8);
+CTR_STATIC_ASSERT(sizeof(struct BspSearchResult) == 0x1C);
 CTR_STATIC_ASSERT(sizeof(struct CollLevelTriangle) == 0xC);
 CTR_STATIC_ASSERT(sizeof(struct CollBspSearchTriangle) == 0xC);
 CTR_STATIC_ASSERT(offsetof(struct BspSearchVertex, pos) == 0x0);
@@ -415,10 +436,6 @@ CTR_STATIC_ASSERT(offsetof(struct BspSearchResult, reorderResult) == 0x16);
 CTR_STATIC_ASSERT(offsetof(struct BspSearchResult, triangleID) == 0x17);
 CTR_STATIC_ASSERT(offsetof(struct BspSearchResult, ptrQuadblock) == 0x18);
 CTR_STATIC_ASSERT(sizeof(struct ScratchpadStruct) == 0x20C);
-CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.pos) == 0x00);
-CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.hitRadius) == 0x06);
-CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.modelID) == 0x0C);
-CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Input1.scrubDepth) == 0x0E);
 CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Union.QuadBlockColl.pos) == 0x10);
 CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Union.QuadBlockColl.hitRadius) == 0x16);
 CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, Union.QuadBlockColl.searchFlags) == 0x22);
@@ -476,5 +493,11 @@ CTR_STATIC_ASSERT(offsetof(struct ScratchpadStructExtended, cameraMatrix) == 0x2
 CTR_STATIC_ASSERT(offsetof(struct ScratchpadStructExtended, cameraRot) == 0x2EC);
 CTR_STATIC_ASSERT(offsetof(struct ScratchpadStructExtended, pad2F2) == 0x2F2);
 CTR_STATIC_ASSERT(offsetof(struct ScratchpadStructExtended, pad2F4) == 0x2F4);
+#else
+CTR_STATIC_ASSERT(sizeof(((struct BspSearchVertex *)0)->pLevelVertex) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, ptr_mesh_info) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(offsetof(struct ScratchpadStruct, scrubHistory) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(sizeof(struct ScratchpadStruct) <= 2048);
+#endif
 
 #endif

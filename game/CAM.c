@@ -1047,7 +1047,7 @@ void CAM_SetDesiredPosRot(struct CameraDC *cDC, const SVec3 *pos, const SVec3 *r
 void CAM_FollowDriver_Normal(struct CameraDC *cDC, struct Driver *d, SVec3 *pushBufferPos, struct CameraScratchWork *scratchWork, struct ZoomData *zoom)
 {
 	struct PushBuffer *pb = (struct PushBuffer *)pushBufferPos;
-	struct ScratchpadStruct *sps = (struct ScratchpadStruct *)scratchWork;
+	struct ScratchpadStruct *sps = CameraScratchWork_Collision(scratchWork);
 	struct CameraScratch *cam = &scratchWork->camera;
 	struct GameTracker *gGT = sdata->gGT;
 	struct GamepadBuffer *pad = &sdata->gGamepads->gamepad[d->driverID];
@@ -1416,10 +1416,10 @@ void CAM_FollowDriver_Normal(struct CameraDC *cDC, struct Driver *d, SVec3 *push
 		// Mud, Water, or FastWater
 		if (((state == 0xe) || (state == 4)) || (state == 0xd))
 		{
-			scratchWork->collision.terrainHeightFloor = 0;
+			(*CameraScratchWork_TerrainHeight(scratchWork)) = 0;
 		}
 
-		x = (s32)scratchWork->collision.terrainHeightFloor + (s32)zoom->vertDistance;
+		x = (s32)(*CameraScratchWork_TerrainHeight(scratchWork)) + (s32)zoom->vertDistance;
 		if (cam->pos.y < x)
 		{
 			cam->pos.y = x;
@@ -1650,7 +1650,7 @@ LAB_8001ab04:
 	cam->pos.y = (s32)pb->pos.y;
 	cam->pos.z = (s32)pb->pos.z;
 
-	CAM_FindClosestQuadblock((struct ScratchpadStruct *)scratchWork, cDC, d, &cam->pos);
+	CAM_FindClosestQuadblock(CameraScratchWork_Collision(scratchWork), cDC, d, &cam->pos);
 
 	x = cDC->transitionFrameCount;
 	iVar14 = cDC->transitionFrameCount;
@@ -1799,7 +1799,7 @@ void CAM_ThTick(struct Thread *t)
 	s32 iVar25;
 
 	struct GameTracker *gGT = sdata->gGT;
-	struct CameraScratchWork *scratchWork = CTR_SCRATCHPAD_PTR(struct CameraScratchWork, 0x108);
+	struct CameraScratchWork *scratchWork = CTR_CAMERA_WORK();
 	scratchpad = (s16 *)scratchWork;
 	struct CameraScratch *camThTick = &scratchWork->camera;
 	cDC = (struct CameraDC *)t->inst;
@@ -2287,7 +2287,7 @@ SkipNewCameraEOR:
 			cameraProbePos.y = (s32)pb->pos.y;
 			cameraProbePos.z = (s32)pb->pos.z;
 
-			CAM_FindClosestQuadblock((struct ScratchpadStruct *)scratchWork, cDC, d, &cameraProbePos);
+			CAM_FindClosestQuadblock(CameraScratchWork_Collision(scratchWork), cDC, d, &cameraProbePos);
 			goto LAB_8001c150;
 		}
 	}

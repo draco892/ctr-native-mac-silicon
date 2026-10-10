@@ -14,6 +14,7 @@
 #include <platform/native_mesh_geometry.h>
 #include <platform/native_terrain_material.h>
 #include <platform/native_scene_render.h>
+#include <platform/native_vertex_animation.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -334,6 +335,25 @@ done:
 	return success;
 }
 
+static int Validator_VertexAnimation(const struct NativeLevelView *level,const struct NativeMeshView *mesh)
+{
+    struct NativeVertexAnimationView animation;
+    enum NativeAssetResult status=NativeVertexAnimation_Open(level,mesh,&animation);
+    if(status!=NATIVE_ASSET_OK) { fprintf(stderr,"Invalid water/scenery animation metadata: %d\n",status); return 0; }
+    if(!animation.count) { printf("Vertex animation OK: empty list\n"); return 1; }
+    size_t bytes=(size_t)mesh->vertexCount*NATIVE_VERTEX_BYTES;
+    u8 *buffer=malloc(bytes); if(buffer==NULL) return 0;
+    const u32 ticks[]={0,7,8,223}; struct NativeMeshView animated;
+    for(unsigned i=0;i<sizeof(ticks)/sizeof(*ticks);i++) {
+        status=NativeVertexAnimation_Apply(&animation,ticks[i],NULL,NULL,0,buffer,bytes,&animated);
+        if(status!=NATIVE_ASSET_OK) break;
+    }
+    free(buffer);
+    if(status!=NATIVE_ASSET_OK) { fprintf(stderr,"Invalid water/scenery animation at runtime: %d\n",status); return 0; }
+    printf("Vertex animation OK: %u %s records, 4 sample ticks, immutable source\n",animation.count,animation.scenery ? "SCVert" : "WaterVert");
+    return 1;
+}
+
 static int Validator_Models(const struct NativeMpkView *mpk, const struct NativeLevelView *level, const struct NativeVramView *vram)
 {
 	struct NativeModelLibrary library;
@@ -633,11 +653,16 @@ int main(int argc, char **argv)
 	size_t count = 0;
 	u32 vramIndices[16]; size_t vramCount=0;
 	const char *previewView="front";
+	u32 subdivisionDepth=0;
 	u32 assetIndex = 0, ptrIndex = 0, previewModel = 0, previewHeader = 0, previewFrame = 0, previewFrames = 1, sceneTicks = 1;
 	int indexed = 0, disc = 0, separate = 0, externalDram = 0, mpk = 0, result = 1, withVram = 0, onlyVram = 0, preview = 0, listModels = 0, sequence = 0, listAnimations = 0, scene = 0, sceneNearby = 0, sceneTerrain = 0;
 	enum NativePtrMapResult status;
 	if (argc < 3)
 		goto usage;
+    if(argc>3 && strncmp(argv[argc-1],"subdiv=",7)==0) {
+        if(strstr(argv[1],"runtime")==NULL || !Validator_Index(argv[argc-1]+7,&subdivisionDepth) || subdivisionDepth>3) goto usage;
+        argc--;
+    }
 	if ((strcmp(argv[1],"disc-preview")==0 && argc==11) || (strcmp(argv[1],"preview")==0 && argc==10) ||
 	    (strcmp(argv[1],"disc-sequence")==0 && argc==12) || (strcmp(argv[1],"sequence")==0 && argc==11) ||
 	    (strcmp(argv[1],"disc-scene")==0 && argc==9) || (strcmp(argv[1],"disc-scene-ptr")==0 && argc==10) ||
@@ -816,11 +841,11 @@ int main(int argc, char **argv)
 		struct NativeMeshView mesh;
 		if(scene) {
 			if(NativeLevel_Open(&load.pointers,&view)!=NATIVE_ASSET_OK) goto invalid;
-			result=Validator_Scene(&view,&vram,previewFrame,previewFrames,sceneNearby,sceneTerrain,sceneTicks,argv[argc-1],previewView) ? 0 : 1;
+			result=Validator_Scene(&view,&vram,previewFrame,previewFrames,sceneNearby,sceneTerrain,sceneTicks,argv[argc-1],previewView,subdivisionDepth) ? 0 : 1;
 			goto done;
 		}
 		if (NativeLevel_Open(&load.pointers, &view) != NATIVE_ASSET_OK || !Validator_Models(NULL, &view, withVram ? &vram : NULL) ||
-		    NativeLevel_GetMesh(&view, &mesh) != NATIVE_ASSET_OK)
+		    NativeLevel_GetMesh(&view, &mesh) != NATIVE_ASSET_OK || !Validator_VertexAnimation(&view,&mesh))
 			goto invalid;
 		printf("LEV OK: %u models, %u instances, %u quads, %u vertices, %u BSP nodes, %zu payload bytes, %zu relocations, %zu-bit pointers\n",
 		    view.modelCount, view.instanceCount, mesh.quadCount, mesh.vertexCount, mesh.bspCount,
@@ -852,7 +877,7 @@ usage:
 	fprintf(stderr,"  disc-scene-near / disc-scene-ptr-near: same arguments, FIRST is anchor; choose COUNT nearest authored positions\n");
 	fprintf(stderr,"  disc-scene-terrain / disc-scene-ptr-terrain / scene-terrain / scene-dram-terrain: same scene arguments; FIRST is anchor, nearest instances plus coarse terrain within 2048 units\n");
 	fprintf(stderr,"  disc-scene-textured / disc-scene-ptr-textured / scene-textured / scene-dram-textured: same terrain arguments, face selectors and near textures at tick 0\n");
-	fprintf(stderr,"  disc-scene-runtime / disc-scene-ptr-runtime / scene-runtime / scene-dram-runtime: same textured arguments, add TICKS (1..256) before OUTPUT_PREFIX; files PREFIX-000000.ppm etc\n");
+	fprintf(stderr,"  disc-scene-runtime / disc-scene-ptr-runtime / scene-runtime / scene-dram-runtime: same textured arguments, add TICKS (1..256) before OUTPUT_PREFIX; optional VIEW then subdiv=0..3; files PREFIX-000000.ppm etc\n");
 	result = 2;
 done:
 	NativeAssetLoad_Reset(&load);

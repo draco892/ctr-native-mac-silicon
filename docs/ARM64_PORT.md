@@ -1316,7 +1316,7 @@ advancing frames and refusal to overwrite. Material tests cover all selector
 modes, UVs, tagged animation and malformed data; runtime tests cover camera,
 PVS/blockID masks, disabled children, cycles, packet links and MEMPACK ownership.
 
-## Host-width audit and checkpoint migration (current milestone)
+## Host-width audit and checkpoint migration (previous milestone)
 
 The suite now contains **23 tests with the disc, 22 without it**. Normal ARM64
 and AddressSanitizer/UndefinedBehaviorSanitizer runs pass, including the new
@@ -1411,6 +1411,120 @@ The syntax command uses the local Homebrew SDL include directory; adjust that
 include path if SDL is installed elsewhere. The audit tool reads diagnostics and
 inventories source call sites; it does not disable assertions or certify a build.
 
+## Collision/camera workspaces and native geometry (current milestone)
+
+The ARM64 C17 suite now has **26 tests with the disc, 25 without it**. Normal
+and ASan/UBSan builds pass. This advances the host-contract and renderer areas;
+**neither area is complete for a playable ARM64 game**. The full-game pointer-width
+guard stays enabled.
+
+On 64-bit native hosts, collision contexts retain full-width object pointers and
+callbacks. Quad and thread search fields have distinct storage, so scalar quad
+coordinates cannot alias a callback address. Every context owns its 15-entry scrub
+history; `COLL_MOVED_FindScrub` no longer assumes that any collision pointer can be
+cast to a larger retail scratchpad overlay. History capacity is checked.
+
+The collision and camera workspaces have separate keys in the aligned host
+storage. Camera collision work contains a real typed collision context, followed
+by camera fields. Terrain height refers explicitly to the collision hit-position
+Y field; follow-camera consumers use typed accessors rather than a cast of the
+retail 0x20c-byte prefix. Angle-axis access uses union members with an identical
+common initial sequence. Default-instance and adventure-sign probes use their
+own stack contexts. Bot, vehicle, weapon and garage callers use the new collision
+workspace. PS1 and native 32-bit layouts retain their original union, offsets and
+retail assertions; the ARM64 runtime types use alignment and capacity assertions.
+
+The actual BSP search implementation now uses per-call bounded traversal storage
+on native hosts. It retains child-1-before-child-0 traversal, validates child IDs
+against the mesh node count, rejects cycles/shared-node trees, and supports nested
+search callbacks without sharing the retail pending-child stack. It requires a
+valid tree rooted at the context's mesh BSP; invalid runtime contracts trap.
+This path allocates traversal storage per search; reuse/performance work remains.
+
+Checkpoint payloads advance to **version 6** because host workspace and resident
+collision layouts changed. Collision pointer visitors cover the two host contexts
+and the resident collision context, rebasing object slots separately from image
+callbacks. Replay headers remain version 2 and CTST containers remain version 1.
+Version-5 payloads are rejected. This does not certify full game replay traversal.
+
+The native scene renderer now clips triangles **before perspective division** at
+near/far depth and all four viewport boundaries. Generated vertices interpolate
+UV and RGB in Q16 and retain texture page, CLUT and ordering bias. A triangle can
+produce at most seven triangles. Fully inside triangles retain their existing GTE
+projection when subdivision is disabled. Model view coordinates are normalized
+for the near path's factor of four before clipping. Front-face tests run on the
+generated terrain triangles; preflight and GPU/raster publication share this path.
+
+`NativeSceneCamera.subdivisionDepth` accepts **0..3**. Zero keeps direct geometry;
+1..3 perform bounded uniform view-space midpoint subdivision, then clipping, up
+to 64 leaves per source triangle. This is an explicit diagnostic option, **not the
+retail subdivision dispatch/threshold implementation**. The CLI accepts a trailing
+`subdiv=0..3` for runtime scene modes. The experimental game adapter defaults to zero.
+
+`native_vertex_animation.c` decodes SCVert/WaterVert records through bounded PTR
+resolution. It validates vertex membership, full 28-sample water tables, default
+visibility masks and the environment layout. Water color interpolation and
+scenery position/color animation run on a separate vertex copy, without writing
+to immutable assets or global GTE state. Up to four LSB-first masks can be ORed;
+scene rendering currently uses the level default. Scenery uses game timer<<7;
+water uses timer/8 modulo 28 with interpolation within each eight-tick interval.
+The scene terrain wrapper allocates a temporary vertex buffer only when an active
+animation list exists. Water environment/reflection rendering remains separate.
+
+Validation includes:
+
+- Production BSP traversal with nested callbacks and original leaf order;
+  collision/camera isolation, full-width fields, scrub-history saturation and
+  checkpoint pointer rebasing, including camera state preservation.
+- Near/far/viewport intersections, winding, UV/RGB interpolation, material metadata,
+  outside/degenerate triangles, scaled model transforms and invalid bounds.
+- Subdivision depths 0..3, conserved projected area on a planar fixture, preflight
+  agreement, failed sinks and invalid depth rejection.
+- Differential comparison against the existing `AnimateWater.c` and production
+  GTE core: 224 water ticks and 4096 scenery ticks, with immutable source/GTE
+  checks, output bounds and visibility mask union.
+- Retail validation of Dingo Canyon's **165 water records** and Crash Cove's
+  **3291 water records**, runtime images of both tracks and the adventure hub,
+  plus subdivided Dingo sequences and overwrite rejection.
+
+The complete-game syntax audit reports **611 remaining layout assertions, 545
+pointer/integer-cast warnings, 86 scratchpad call sites, and no other syntax errors**.
+The change from 667 assertions reflects explicit migration of collision/camera
+runtime storage; binary asset layouts elsewhere remain guarded. These counts are
+an inventory, not a percentage or a count of independent defects.
+
+Reproduce the checks from the repository root:
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized -R 'collision_work|scene_geometry|vertex_animation|scene_runtime|asset_retail' -V
+
+# Use a fresh prefix: existing sequence frames are rejected.
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-runtime assets 1 258,0 0 6 8 build-macos-arm64-memory/dingo-subdivision-check iso subdiv=1
+python3 tools/preview_sequence_html.py build-macos-arm64-memory/dingo-subdivision-check build-macos-arm64-memory/dingo-subdivision-check.html --fps 15
+sips -s format png build-macos-arm64-memory/dingo-subdivision-check-000000.ppm --out build-macos-arm64-memory/dingo-subdivision-check-000000.png
+
+# Crash Cove has a larger animated water list; this is a diagnostic scene.
+build-macos-arm64-memory/ctr_native_asset_validate disc-lev assets 25
+build-macos-arm64-memory/ctr_native_asset_validate disc-scene-runtime assets 25 258,24 0 6 8 build-macos-arm64-memory/cove-water-check iso
+
+# Expected to fail on the remaining layout guards, not a full-game build.
+/usr/bin/clang -fsyntax-only -ferror-limit=0 -std=c17 -DCTR_NATIVE -DCTR_INTERNAL -DCTR_NATIVE_GAME_SCENE -DCTR_NATIVE_DECODED_TERRAIN -DCTR_NATIVE_BUILD_ID='"port-check"' -DCTR_NATIVE_VERSION='"port-check"' -Iinclude -I/opt/homebrew/include main.c > build-macos-arm64-memory/stage12-syntax.log 2>&1
+python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage12-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
+```
+
+Remaining in the first two requested areas: other pointer-bearing scratch overlays
+(Torch, skid/shadow and recursive rendering), resident camera/vehicle/level
+contracts, direct legacy asset consumers, complete model/gameplay integration,
+retail subdivision, environment/reflection/special materials, multiplayer/cutscene
+camera paths and complete-game behavioral/visual validation. Passing module tests
+does not close these remaining parts.
+
 ## Remaining game work
 
 The complete game still has a CMake pointer-width guard and a corresponding
@@ -1421,8 +1535,10 @@ unsafe 64-bit game build.
 The requested terrain/material and reader-to-consumer areas now have an executable
 ARM64 path, but are **not fully closed for the game**. Remaining in these areas:
 
-- Native subdivision, near clipping, deforming water, reflection/environment
-  materials and special model paths; verify visibility and visual parity.
+- Retail subdivision dispatch/threshold parity, reflection/environment materials,
+  special model paths and complete-game vertex animation/visibility parity.
+  Native clipping, diagnostic midpoint subdivision and water/scenery animation
+  now execute through the scene renderer.
 - Replace the remaining legacy model RenderBucket/gameplay consumers and add
   multiplayer/cutscene camera paths, then validate in the complete game.
 
@@ -1434,8 +1550,9 @@ and offsets) from runtime objects (host pointers). In particular:
    coexist until their callers are migrated.
 2. Validate material/visibility and camera/renderer parity in the complete game,
    including remaining model and gameplay consumers and the LNG integration.
-3. Resolve the remaining pointer/integer audit findings and migrate collision,
-   camera and other scratch overlays to explicit host workspaces.
+3. Resolve the remaining pointer/integer audit findings and migrate other scratch
+   overlays. Collision/camera workspaces are migrated, but their resident game
+   and legacy asset contracts still need integration and behavioral validation.
 4. Verify the migrated checkpoint traversal against all remaining host objects
    and scratch overlays before enabling full ARM64 replay/savestate support.
 5. Enable the full macOS ARM64 target only after those contracts are satisfied,
@@ -1445,7 +1562,7 @@ The PS1 allocator path retains its original four-byte alignment and pointer
 arithmetic. The existing native 32-bit game remains the baseline for behavior;
 this milestone does not establish full game or PS1 binary parity.
 
-The current full-game ARM64 syntax audit encounters **667 active binary-layout
+The current full-game ARM64 syntax audit encounters **611 active binary-layout
 assertions and no other syntax errors**; the voice-set initializer is fixed.
 This is not a successful full-game build. The CMake pointer-width guard and
 remaining retail layout assertions stay enabled.

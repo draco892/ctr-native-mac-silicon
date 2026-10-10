@@ -133,8 +133,13 @@ Native uses a process-local scratchpad buffer and routes `CTR_SCRATCHPAD_PTR`
 through that runtime base. Retail absolute scratchpad addresses are translated
 back to offsets from this buffer. Native typed access checks bounds and alignment;
 the buffer has max_align_t alignment. RenderBucket temporary host pointers and
-particle render state use separate host workspaces, whose pointer slots and bytes
-participate in version-5 checkpoints. Other pointer-bearing overlays still need
+particle render state use separate host workspaces. ARM64 collision contexts and
+camera workspaces also have separate storage: collision quad/thread fields no
+longer overlay pointer and scalar data, and scrub history belongs to each context.
+Camera height/probe consumers use typed fields rather than retail prefix casts.
+Native BSP searches have bounded per-call stacks so nested callbacks cannot reuse
+the outer pending-child list. Host workspace bytes and typed pointer traversal
+participate in version-6 checkpoints. Other pointer-bearing overlays still need
 migration; widening the retail byte buffer is not a substitute for that work.
 
 Scratchpad-heavy areas include:

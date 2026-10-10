@@ -26,6 +26,10 @@ typedef unsigned int size_t;
 #define CTR_STATIC_ASSERT(expr) extern char CTR_JOIN(ctr_static_assert_, __LINE__)[(expr) ? 1 : -1]
 #endif
 
+#if defined(CTR_NATIVE) && UINTPTR_MAX > UINT32_MAX
+#define CTR_NATIVE_HOST64 1
+#endif
+
 // Runtime callback transport retains host width; PS1 ABI stays one word.
 #if defined(CTR_NATIVE)
 typedef intptr_t CtrCallbackArg;

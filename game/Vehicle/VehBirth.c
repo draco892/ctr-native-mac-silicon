@@ -50,7 +50,7 @@ void VehBirth_TeleportSelf(struct Driver *d, u32 spawnFlag, int spawnPosY)
 		return;
 	}
 
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 	sps->Union.QuadBlockColl.quadFlagsWanted = QUADBLOCK_FLAG_GROUND | QUADBLOCK_FLAG_COLLISION_SURFACE;
 	sps->Union.QuadBlockColl.quadFlagsIgnored = 0;
 	sps->Union.QuadBlockColl.searchFlags = 0;

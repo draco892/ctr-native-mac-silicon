@@ -111,6 +111,13 @@ int main(void)
     CHECK(NativeLevel_GetInstance(&level,0,&definition)==NATIVE_ASSET_OK && NativeRuntimeInstance_Init(&definition,&instance)==NATIVE_ASSET_OK);
     struct NativeModelVertex current[3],next[3]; struct NativePackedModelVertex packed[3]; struct NativeModelDrawWorkspace modelWork={current,next,packed,3}; triangles=0;
     CHECK(NativeSceneRender_Model(&instance,&camera,&modelWork,NULL,Count,&triangles,&stats)==NATIVE_ASSET_OK && triangles==1);
+    instance.position[2]=124; triangles=0;
+    CHECK(NativeSceneRender_Model(&instance,&camera,&modelWork,NULL,Count,&triangles,&stats)==NATIVE_ASSET_OK && triangles==1 && stats.clipped==1);
+    CHECK(NativeSceneRender_Model(&instance,&camera,&modelWork,NULL,NULL,NULL,&stats)==NATIVE_ASSET_OK && stats.triangles==1);
+    instance.position[2]=300;
+    camera.subdivisionDepth=1; triangles=0;
+    CHECK(NativeSceneRender_Model(&instance,&camera,&modelWork,NULL,Count,&triangles,&stats)==NATIVE_ASSET_OK && triangles==4 && stats.subdivided==1);
+    camera.subdivisionDepth=0;
     instance.position[0]=1000;
     CHECK(NativeSceneRender_Model(&instance,&camera,&modelWork,NULL,Count,&triangles,&stats)==NATIVE_ASSET_OK && stats.triangles==0);
     instance.flags=0x800; CHECK(NativeSceneRender_Model(&instance,&camera,&modelWork,NULL,Count,&triangles,&stats)==NATIVE_ASSET_NOT_FOUND);

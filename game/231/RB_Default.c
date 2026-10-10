@@ -14,7 +14,12 @@ CTR_STATIC_ASSERT(offsetof(struct RBDefaultScratch, sps) == 0x10);
 
 void RB_Default_LInB(struct Instance *inst)
 {
+#if defined(CTR_NATIVE)
+	struct RBDefaultScratch storage = {0};
+	struct RBDefaultScratch *scratch = &storage;
+#else
 	struct RBDefaultScratch *scratch = CTR_SCRATCHPAD_PTR(struct RBDefaultScratch, 0x108);
+#endif
 	s16 x;
 	s16 y;
 	s16 z;

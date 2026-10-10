@@ -547,7 +547,7 @@ void BOTS_SetRotation(struct Driver *bot, int useSpawnYaw)
 void BOTS_LevInstColl(struct Thread *botThread)
 {
 	struct Driver *driver = (struct Driver *)botThread->object;
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 
 	sps->ptr_mesh_info = sdata->gGT->level1->ptr_mesh_info;
 	sps->Union.QuadBlockColl.searchFlags = COLL_SEARCH_TEST_INSTANCES;
@@ -816,7 +816,7 @@ void BOTS_Killplane(struct Thread *botThread)
 
 void BOTS_ThTick_Drive(struct Thread *botThread)
 {
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 	struct Driver *botDriver = (struct Driver *)botThread->object;     // iVar17
 	struct Instance *botInstance = (struct Instance *)botThread->inst; // iVar22
 	struct GameTracker *gGT = sdata->gGT;

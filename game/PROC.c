@@ -473,6 +473,9 @@ void PROC_StartSearch_Self(struct ScratchpadStruct *sps)
 
 	gGT = sdata->gGT;
 
+	#if defined(CTR_NATIVE)
+	sps->ptr_mesh_info = gGT->level1->ptr_mesh_info;
+#endif
 	COLL_SearchBSP_CallbackPARAM(gGT->level1->ptr_mesh_info->bspRoot, &sps->Union.ThBuckColl.bbox, PROC_PerBspLeaf_CheckInstances, sps);
 }
 

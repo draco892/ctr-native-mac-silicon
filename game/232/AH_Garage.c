@@ -296,7 +296,7 @@ openGarage:
 {
 	Vec3 pos;
 
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 	sps->Input1.pos.x = inst->instDef->pos.x;
 	sps->Input1.pos.y = inst->instDef->pos.y;
 	sps->Input1.pos.z = inst->instDef->pos.z;

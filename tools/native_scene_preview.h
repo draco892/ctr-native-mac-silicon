@@ -17,7 +17,7 @@ static enum NativeAssetResult Validator_RuntimeSink(void *user,const struct Nati
 static int Validator_RuntimeSequence(const struct NativeLevelView *level,const struct NativeMeshView *mesh,
     const u32 *terrainQuads,size_t terrainCount,const struct ValidatorSceneItem *items,size_t selected,
     const struct NativeInstanceCamera *initial,const struct NativeModelDrawWorkspace *modelWork,
-    const struct NativeRasterView *target,const struct NativeVramView *vram,u32 ticks,const char *prefix)
+    const struct NativeRasterView *target,const struct NativeVramView *vram,u32 ticks,const char *prefix,u32 subdivisionDepth)
 {
     struct NativeVisibilityWorkspace visibility={.stackCapacity=(size_t)mesh->bspCount*2+1,.stateCapacity=mesh->bspCount,.quadCapacity=mesh->quadCount};
     if(visibility.stackCapacity>SIZE_MAX/sizeof(*visibility.stack)) return 0;
@@ -38,7 +38,7 @@ static int Validator_RuntimeSequence(const struct NativeLevelView *level,const s
         FILE *existing=fopen(path,"rb"); if(existing!=NULL) { fclose(existing); goto done; }
     }
     for(u32 tick=0;tick<ticks;tick++) {
-        struct NativeSceneCamera camera={.transform=*initial,.width=512,.height=512,.nearDepth=128,.farDepth=65535};
+        struct NativeSceneCamera camera={.transform=*initial,.width=512,.height=512,.nearDepth=128,.farDepth=65535,.subdivisionDepth=subdivisionDepth};
         camera.transform.position[0]+=(s32)(tick*32); // Explicit inspection pan, not a gameplay tick rate.
         const u8 background[3]={24,28,36}; NativeRaster_Clear(target,background);
         struct ValidatorRuntimeRaster raster={target,vram,0}; struct NativeSceneRenderStats terrainStats,modelStats;
@@ -62,8 +62,8 @@ static int Validator_RuntimeSequence(const struct NativeLevelView *level,const s
         FILE *file=fopen(path,"wbx"); if(file==NULL) goto done;
         int written=fprintf(file,"P6\n512 512\n255\n")>0 && fwrite(target->rgb,1,512*512*3,file)==512*512*3;
         int closed=fclose(file)==0; if(!written || !closed) goto done;
-        printf("Runtime frame OK: tick %u, camera %d %d %d, %u visible BSP nodes, %u eligible quads, %zu terrain / %zu model triangles, %zu fragment writes -> %s\n",
-            tick,camera.transform.position[0],camera.transform.position[1],camera.transform.position[2],terrainStats.visibleNodes,terrainStats.visibleQuads,terrainStats.triangles,modelTriangles,raster.writes,path);
+        printf("Runtime frame OK: tick %u, camera %d %d %d, %u visible BSP nodes, %u eligible quads, %zu terrain / %zu model triangles, %zu fragment writes, %zu terrain sources clipped, subdivision %u -> %s\n",
+            tick,camera.transform.position[0],camera.transform.position[1],camera.transform.position[2],terrainStats.visibleNodes,terrainStats.visibleQuads,terrainStats.triangles,modelTriangles,raster.writes,terrainStats.clipped,subdivisionDepth,path);
     }
     printf("Runtime sequence OK: %u ticks, authored model frames, texture animation, BSP/frustum and face masks; synthetic pan, opaque affine diagnostic rendering\n",ticks);
     success=1;
@@ -104,7 +104,7 @@ static enum NativeAssetResult Validator_TerrainTriangle(const struct NativeMeshT
     *out=triangle; return NATIVE_ASSET_OK;
 }
 static int Validator_Scene(const struct NativeLevelView *level,const struct NativeVramView *vram,
-    u32 first,u32 requested,int nearby,int terrain,u32 ticks,const char *path,const char *viewName)
+    u32 first,u32 requested,int nearby,int terrain,u32 ticks,const char *path,const char *viewName,u32 subdivisionDepth)
 {
     struct ValidatorSceneItem *items=NULL;
     struct NativeModelDrawWorkspace workspace={0}; struct NativeRasterView target;
@@ -242,7 +242,7 @@ static int Validator_Scene(const struct NativeLevelView *level,const struct Nati
     if(NativeRaster_Bind(rgb,512*512*3,depth,512*512,512,512,&target)!=NATIVE_ASSET_OK) goto done;
     const u8 background[3]={24,28,36}; NativeRaster_Clear(&target,background);
     if(terrain==3) {
-        success=Validator_RuntimeSequence(level,&mesh,terrainQuads,terrainCount,items,selected,&camera,&workspace,&target,vram,ticks,path);
+        success=Validator_RuntimeSequence(level,&mesh,terrainQuads,terrainCount,items,selected,&camera,&workspace,&target,vram,ticks,path,subdivisionDepth);
         goto done;
     }
     size_t triangles=0,writes=0,skipped=0;

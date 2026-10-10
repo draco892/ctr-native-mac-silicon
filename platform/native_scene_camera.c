@@ -2,7 +2,7 @@
 #include <string.h>
 static s64 Camera_Floor(s64 n,s64 d) { return n/d-(n%d<0); }
 int NativeSceneCamera_IsValid(const struct NativeSceneCamera *c)
-{ return c!=NULL && c->width>0 && c->width<=4096 && c->height>0 && c->height<=4096 && c->transform.h>0 && c->nearDepth>0 && c->farDepth>c->nearDepth && c->farDepth<=65535; }
+{ return c!=NULL && c->width>0 && c->width<=4096 && c->height>0 && c->height<=4096 && c->transform.h>0 && c->nearDepth>0 && c->farDepth>c->nearDepth && c->farDepth<=65535 && c->subdivisionDepth<=3; }
 enum NativeAssetResult NativeSceneCamera_Init(const s32 position[3],const s16 angles[3],u32 width,u32 height,u16 h,s32 nearDepth,s32 farDepth,struct NativeSceneCamera *out)
 {
     if(out==NULL) return NATIVE_ASSET_INVALID_ARGUMENT;

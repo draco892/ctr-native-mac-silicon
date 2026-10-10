@@ -13,6 +13,7 @@ for arguments, expected in [
     (['disc-mpk', assets, '259'], 'MPK OK'),
     (['disc-mpk', assets, '260'], 'MPK OK'),
     (['disc-lev', assets, '1'], 'LEV OK'),
+    (['disc-lev', assets, '25'], 'LEV OK'),
     (['disc-lev-ptr', assets, '201', '202'], 'LEV OK'),
     (['disc-mpk-vram', assets, '259', '258'], 'MPK OK'),
     (['disc-mpk-vram', assets, '260', '258'], 'MPK OK'),
@@ -133,9 +134,10 @@ with tempfile.TemporaryDirectory(prefix='ctr-runtime-') as directory:
         ('disc-scene-textured', ['1', '258,0', '0', '6']),
         ('disc-scene-ptr-textured', ['201', '202', '258,200', '12', '1']),
         ('disc-scene-runtime', ['1', '258,0', '0', '6', '3']),
+        ('disc-scene-runtime', ['25', '258,24', '0', '6', '3']),
         ('disc-scene-ptr-runtime', ['201', '202', '258,200', '12', '1', '3']),
     ]:
-        output = pathlib.Path(directory) / mode
+        output = pathlib.Path(directory) / f"{mode}-{indices[0]}"
         result = subprocess.run([validator, mode, assets, *indices, output, 'iso'], capture_output=True, text=True)
         if result.returncode or 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
             raise SystemExit(f'Retail material/runtime failure: {result.stdout}{result.stderr}')
@@ -148,3 +150,28 @@ with tempfile.TemporaryDirectory(prefix='ctr-runtime-') as directory:
         if mode.endswith('textured') and 'Terrain material OK:' not in result.stdout:
             raise SystemExit('Retail terrain did not reach material consumer.')
         print(result.stdout, end='')
+
+# Opt-in midpoint subdivision reaches the retail GPU/raster consumer, retains
+# bounded output, and cannot overwrite a previously published sequence.
+with tempfile.TemporaryDirectory(prefix='ctr-subdivision-') as directory:
+    prefix = pathlib.Path(directory) / 'dingo'
+    command = [validator, 'disc-scene-runtime', assets, '1', '258,0', '0', '6', '3', str(prefix), 'iso', 'subdiv=1']
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode or result.stdout.count('subdivision 1 ->') != 3:
+        raise SystemExit(f'Retail subdivision failed: {result.stdout}{result.stderr}')
+    paths = [pathlib.Path(f'{prefix}-{i:06d}.ppm') for i in range(3)]
+    images = [path.read_bytes() for path in paths]
+    if any(len(image) != 786447 or not image.startswith(b'P6\n512 512\n255\n') for image in images) or len(set(images)) < 2:
+        raise SystemExit('Malformed or motionless subdivision preview.')
+    if 'AddressSanitizer' in result.stderr or 'runtime error:' in result.stderr:
+        raise SystemExit(result.stderr)
+    retry = subprocess.run(command, capture_output=True, text=True)
+    if retry.returncode != 1 or [path.read_bytes() for path in paths] != images:
+        raise SystemExit('Subdivision sequence overwrote existing output.')
+    invalid = pathlib.Path(directory) / 'invalid'
+    command[-3] = str(invalid)
+    command[-1] = 'subdiv=4'
+    rejected = subprocess.run(command, capture_output=True, text=True)
+    if rejected.returncode != 2 or list(pathlib.Path(directory).glob('invalid-*')):
+        raise SystemExit('Invalid subdivision depth published an output.')
+    print(result.stdout, end='')

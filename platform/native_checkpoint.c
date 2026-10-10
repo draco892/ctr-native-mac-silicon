@@ -21,9 +21,10 @@
 // and retail globals are defined, so they can snapshot the same process-local
 // regions the game mutates.
 #define NATIVE_CHECKPOINT_MAGIC              NATIVE_CHECKPOINT_FOURCC('C', 'T', 'R', 'C')
-// Version 5 records 64-bit addresses and explicit slot/host widths.
+// Version 6 includes separate collision/camera host workspaces and pointer traversal.
+// Version 5 introduced 64-bit addresses and explicit slot/host widths.
 // Payload regions remain ABI-specific; older versions are rejected.
-#define NATIVE_CHECKPOINT_VERSION            5u
+#define NATIVE_CHECKPOINT_VERSION            6u
 #define NATIVE_CHECKPOINT_ADDRESS_RANGE_CAP  20u
 #define NATIVE_CHECKPOINT_POINTER_SLOT_CAP   65536u
 #define NATIVE_CHECKPOINT_CREDITS_STRING_CAP 4096u
@@ -1806,6 +1807,15 @@ internal void NativeCheckpoint_RelocateGameTrackerPointers(const struct NativeCh
 	}
 }
 
+struct NativeCheckpointCollisionRebase {
+    const struct NativeCheckpointHeader *oldHeader,*liveHeader;
+};
+internal void NativeCheckpoint_RelocateCollisionSlot(void *user,void *slot,u32 width,int image)
+{
+    struct NativeCheckpointCollisionRebase *ctx=user;
+    if(image) NativeCheckpoint_RelocateImagePointerSlotWidth(ctx->oldHeader,ctx->liveHeader,slot,width);
+    else NativeCheckpoint_RelocatePointerSlotWidth(ctx->oldHeader,ctx->liveHeader,slot,width);
+}
 internal void NativeCheckpoint_RelocateRuntimePointers(const struct NativeCheckpointHeader *oldHeader, const struct NativeCheckpointHeader *liveHeader)
 {
 	NativeCheckpoint_RelocateRDataPointers(oldHeader, liveHeader);
@@ -1819,6 +1829,9 @@ internal void NativeCheckpoint_RelocateRuntimePointers(const struct NativeCheckp
 	NativeCheckpoint_RelocateRectMenu(oldHeader, liveHeader, &gGarage.menuGarage);
 	NativeCheckpoint_RelocateCreditsPointers(oldHeader, liveHeader);
 	NativeCheckpoint_RelocateGameTrackerPointers(oldHeader, liveHeader);
+    struct NativeCheckpointCollisionRebase collision={oldHeader,liveHeader};
+    NativeCollisionWork_VisitHostPointers(NativeCheckpoint_RelocateCollisionSlot,&collision);
+    NativeCollisionWork_VisitPointers(&sdata_static.scratchpadStruct,NativeCheckpoint_RelocateCollisionSlot,&collision);
 }
 
 internal int NativeCheckpoint_CapturePointerSlotState(void *dst, int dstSize)

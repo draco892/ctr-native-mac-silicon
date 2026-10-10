@@ -137,7 +137,7 @@ void RB_Blowup_Init(struct Instance *weaponInst)
 #if defined(CTR_NATIVE)
 ApplyDamage:;
 #endif
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 
 	// put weapon position on scratchpad
 	sps->Input1.pos.x = weaponInst->matrix.t[0];

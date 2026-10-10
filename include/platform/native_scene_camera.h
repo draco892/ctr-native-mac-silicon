@@ -3,7 +3,9 @@
 #include <platform/native_instance_transform.h>
 #include <platform/native_terrain_material.h>
 #include <platform/native_model_draw.h>
-struct NativeSceneCamera { struct NativeInstanceCamera transform; u32 width,height; s32 nearDepth,farDepth; };
+struct NativeSceneCamera { struct NativeInstanceCamera transform; u32 width,height; s32 nearDepth,farDepth; u32 subdivisionDepth; };
+// subdivisionDepth=0 preserves direct projection; 1..3 splits each triangle
+// uniformly in view space before clipping (diagnostic, not retail dispatch).
 // Proper runtime camera orientation: Y*X*Z authored rotation, transposed view.
 // No fitting, heap or game-layout casts. Caller supplies world position/angles.
 enum NativeAssetResult NativeSceneCamera_Init(const s32 position[3],const s16 rotation[3],

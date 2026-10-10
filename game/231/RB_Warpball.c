@@ -410,7 +410,7 @@ void RB_Warpball_ThTick(struct Thread *t)
 
 	inst = t->inst;
 	tw = t->object;
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 
 	tw->savedPos.x = inst->matrix.t[0];
 	tw->savedPos.y = inst->matrix.t[1];
