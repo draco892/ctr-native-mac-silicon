@@ -99,7 +99,31 @@ audio, and windowing services.
 
 Use Xcode Command Line Tools, Apple Clang, CMake, Ninja, and Python 3. The macOS
 presets select `/usr/bin/clang`, C17, and the `arm64` architecture.
-Run these commands from the repository root:
+
+For a clean complete-game build, use the macOS script:
+
+```sh
+./build-macos.sh
+./build-macos-arm64-game/ctr_native
+```
+
+The script requires **CMake 3.24 or newer**. It resets the CMake cache with
+`--fresh`, cleans generated targets, rebuilds the game and bundled SDL3, runs
+CTest, and verifies the executable version and `config.json`. It stops on the
+first failure and preserves assets, configuration files, and saves. It can be
+invoked from any working directory using its full path.
+
+For a clean ASan/UBSan build, or to set build parallelism:
+
+```sh
+./build-macos.sh --sanitized
+./build-macos.sh --jobs 8
+```
+
+By default, parallelism uses `CMAKE_BUILD_PARALLEL_LEVEL` when set, otherwise
+the host CPU count. Use `./build-macos.sh --help` to list the options.
+
+For incremental builds, run these commands from the repository root:
 
 ```sh
 cmake --preset macos-arm64-game
@@ -499,6 +523,7 @@ config.json           External video settings and keyboard/controller bindings
 build-msvc.bat        Windows MSVC x86 build/test script
 build.bat             Windows MinGW i686 build/test script
 build.sh              Linux GCC i686 build/test script
+build-macos.sh        macOS Apple Silicon clean build/test script
 game/                 Decompiled game code and native adaptations
   game_unity.h        Ordered game unity include chain
 include/              Game declarations, PS1 facade, and native interfaces
