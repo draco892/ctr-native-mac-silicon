@@ -34,7 +34,7 @@ static int RenderLists_IsVisible(const int *visLeafList, BspChildId childID)
 		return 1;
 	}
 
-	return ((s32)visLeafList[(rawChildID >> 5) & 0x1ff] << (rawChildID & 0x1f)) < 0;
+	return CTR_MipsSll((s32)visLeafList[(rawChildID >> 5) & 0x1ff], rawChildID & 0x1f) < 0;
 }
 
 static int RenderLists_BoxOverlapsPushBuffer(const struct BoundingBox *box, const struct BoundingBox *pbBox)

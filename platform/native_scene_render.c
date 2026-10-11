@@ -123,7 +123,23 @@ static enum NativeAssetResult SceneRender_TerrainMesh(const struct NativeLevelVi
             struct NativeTerrainTriangle source; struct NativeDrawTriangle triangle; int frontFacing;
             status=NativeTerrain_GetTriangle(level,mesh,q,face,t,textureLod,tick,&source);
             if(status==NATIVE_ASSET_NOT_FOUND) { stats.degenerate++; continue; } if(status!=NATIVE_ASSET_OK) return status;
+            int water=(visible.quadMask[q]&NATIVE_WATER_QUAD)!=0;
+            if(water) {
+                // Water BSP leaves use the shared environment map, with animated
+                // UVs stored in colorLow. Ordinary face textures omit this pass.
+                void *environment=NULL;
+                if(NativePtrMap_Resolve(level->map,0x44,12,&environment)!=NATIVE_PTRMAP_OK) return NATIVE_ASSET_INVALID_DATA;
+                const u8 *layout=environment;
+                source.textured=1;
+                source.texture.clut=CTR_ReadU16LE(layout+2);
+                source.texture.tpage=CTR_ReadU16LE(layout+6);
+                for(unsigned k=0;k<3;k++) {
+                    source.texture.u[k]=(u8)source.geometry.vertices[k].colorLow;
+                    source.texture.v[k]=(u8)(source.geometry.vertices[k].colorLow>>8);
+                }
+            }
             status=NativeSceneCamera_ProjectTerrain(camera,&source,&triangle,&frontFacing); if(status!=NATIVE_ASSET_OK) return status;
+            if(water) triangle.source.textureBlend=NATIVE_TEXTURE_BLEND_SEMI;
             struct NativeProjectionConfig projection={.rotation=camera->transform.view,.h=camera->transform.h};
             for(unsigned row=0;row<3;row++) {
                 s64 dot=0;

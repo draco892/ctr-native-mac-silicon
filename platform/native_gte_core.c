@@ -84,7 +84,7 @@ internal inline s64 gte_shift(s64 a, int sf)
 	}
 	else if (sf < 0)
 	{
-		return a << 12;
+		return (s64)((u64)a << 12);
 	}
 
 	return a;

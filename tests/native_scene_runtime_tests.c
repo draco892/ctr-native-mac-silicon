@@ -24,10 +24,11 @@ struct PrimMem { void *cursor,*end; s32 primitiveCount; };
 static void Put16(u8 *p,u16 n) { p[0]=(u8)n; p[1]=(u8)(n>>8); }
 static void Box(u8 *p,s16 x0,s16 x1)
 { Put16(p,(u16)x0); Put16(p+2,0xff00); Put16(p+4,200); Put16(p+6,(u16)x1); Put16(p+8,256); Put16(p+10,600); }
-static const u32 slots[]={0,0x10,0x18,0x20c,0x210,0x218,0x25c,0x27c,0x850,0x870,0x914,0x960,0x964,0x96c};
+static const u32 slots[]={0,0x44,0x10,0x18,0x20c,0x210,0x218,0x25c,0x27c,0x850,0x870,0x914,0x960,0x964,0x96c};
 static void Fixture(u8 *a,u8 *ptr)
 {
     memset(a,0,0xb00); CTR_WriteU32LE(a,0x200);
+    CTR_WriteU32LE(a+0x44,0xad0); Put16(a+0xad2,0x123); Put16(a+0xad6,0xe0);
     CTR_WriteU32LE(a+0xc,1); CTR_WriteU32LE(a+0x10,0x860);
     CTR_WriteU32LE(a+0x14,1); CTR_WriteU32LE(a+0x18,0x850); CTR_WriteU32LE(a+0x850,0x900);
     CTR_WriteU32LE(a+0x200,2); CTR_WriteU32LE(a+0x204,18); CTR_WriteU32LE(a+0x20c,0x300);
@@ -62,6 +63,15 @@ static int RebaseOwner(void *user,u64 source,u32 bytes,uintptr_t *live)
 }
 static enum NativeAssetResult Count(void *user,const struct NativeDrawTriangle *triangle)
 { (*(size_t *)user)++; return triangle->depth[0] ? NATIVE_ASSET_OK : NATIVE_ASSET_INVALID_DATA; }
+static enum NativeAssetResult CheckWater(void *user,const struct NativeDrawTriangle *triangle)
+{
+    (*(size_t *)user)++;
+    if(!triangle->source.textured || triangle->source.textureBlend!=NATIVE_TEXTURE_BLEND_SEMI ||
+       triangle->source.texture.clut!=0x123 || triangle->source.texture.tpage!=0xe0) return NATIVE_ASSET_INVALID_DATA;
+    for(unsigned k=0;k<3;k++)
+        if(triangle->source.texture.u[k]!=10+triangle->source.vertices[k] || triangle->source.texture.v[k]!=40) return NATIVE_ASSET_INVALID_DATA;
+    return NATIVE_ASSET_OK;
+}
 static enum NativeAssetResult Reject(void *user,const struct NativeDrawTriangle *triangle)
 { (void)user; (void)triangle; return NATIVE_ASSET_OUTPUT_TOO_SMALL; }
 int main(void)
@@ -84,6 +94,18 @@ int main(void)
     CHECK(NativeSceneVisibility_Select(&level,&mesh,&camera,pvs,3,&w,&visible)==NATIVE_ASSET_INVALID_DATA && visible.quadMask==NULL);
     struct NativeSceneRenderStats stats; size_t triangles=0;
     CHECK(NativeSceneRender_Terrain(&level,&mesh,&camera,NULL,0,NULL,0,0,2,&w,Count,&triangles,&stats)==NATIVE_ASSET_OK && triangles==8 && stats.triangles==8);
+    // Water has no ordinary face texture: the BSP material supplies the env map
+    // and uses each animated vertex's packed UV rather than emitting black GT3s.
+    Put16(asset+0x240,3);
+    for(unsigned v=0;v<9;v++) Put16(asset+0x3b8+v*16+12,(u16)((40<<8)|(10+v)));
+    triangles=0;
+    CHECK(NativeSceneRender_Terrain(&level,&mesh,&camera,NULL,0,NULL,0,0,2,&w,CheckWater,&triangles,&stats)==NATIVE_ASSET_OK && triangles==8);
+    CHECK(quads[0]==(NATIVE_VISIBLE_QUAD|NATIVE_WATER_QUAD));
+    CTR_WriteU32LE(asset+0x44,0xaff);
+    CHECK(NativePtrMap_Decode(asset,0xb00,ptr,sizeof(ptr),entries,sizeof(entries)/sizeof(*entries),&map)==NATIVE_PTRMAP_OK);
+    CHECK(NativeSceneRender_Terrain(&level,&mesh,&camera,NULL,0,NULL,0,0,2,&w,NULL,NULL,&stats)==NATIVE_ASSET_INVALID_DATA);
+    CTR_WriteU32LE(asset+0x44,0xad0); Put16(asset+0x240,1);
+    CHECK(NativePtrMap_Decode(asset,0xb00,ptr,sizeof(ptr),entries,sizeof(entries)/sizeof(*entries),&map)==NATIVE_PTRMAP_OK);
     struct NativeSceneCamera badCamera=camera; badCamera.width=0;
     CHECK(NativeSceneRender_Terrain(&level,&mesh,&badCamera,NULL,0,NULL,0,0,2,&w,NULL,NULL,&stats)==NATIVE_ASSET_INVALID_ARGUMENT);
     Put16(asset+0x238,0xc001); // Signed-negative resident child IDs disable the branch.

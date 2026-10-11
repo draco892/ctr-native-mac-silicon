@@ -1,5 +1,7 @@
 #include <common.h>
 
+CTR_STATIC_ASSERT(offsetof(struct Driver, const_CollisionWeight) - offsetof(struct Driver, const_Gravity) == COLLISION_WEIGHT_OFFSET - GRAVITY_OFFSET);
+
 // this is only for LevInstances,
 // NonLev-related entries are empty
 
@@ -6968,7 +6970,11 @@ struct Data
                                           0x0100},
                 },
 
-#define PHYSWRAP(b, c, d, e, f, g) .unusedDebugStr = 0, .offset = b, .size = c, .value[0] = d, .value[1] = e, .value[2] = f, .value[3] = g
+// This table writes runtime Driver fields, so host64 needs resident offsets.
+// The scalar physics block retains its internal spacing; the final word has
+// its own alignment and is addressed explicitly.
+#define PHYS_RUNTIME_OFFSET(b) CTR_RUNTIME_ABI((b), ((b) == PROTOTYPE_KEY_OFFSET ? offsetof(struct Driver, const_prototypeKey) : offsetof(struct Driver, const_Gravity) + (b) - GRAVITY_OFFSET))
+#define PHYSWRAP(b, c, d, e, f, g) .unusedDebugStr = 0, .offset = PHYS_RUNTIME_OFFSET(b), .size = c, .value[0] = d, .value[1] = e, .value[2] = f, .value[3] = g
 
 
             // Each line is one stat with four engine-class values.

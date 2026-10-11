@@ -143,7 +143,7 @@ void MM_Characters_AnimateColors(u8 *colorData, s16 playerID, s16 flag)
 
 		if ((trigApproximationIndex & MM_CHARACTER_SELECT_COLOR_TRIG_HIGH_HALF_BIT) == 0)
 		{
-			trigApprox = trigApprox << 0x10;
+			trigApprox = CTR_MipsSll(trigApprox, 16);
 		}
 		trigApprox = trigApprox >> 0x10;
 

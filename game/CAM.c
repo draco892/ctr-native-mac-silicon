@@ -28,7 +28,7 @@ static u32 CAM_SkyboxGlow_LerpColor(u32 from, u32 to, s32 ratio)
 
 static s32 CAM_SkyboxGlow_FixedRatio(s32 numerator, s32 denominator)
 {
-	return (numerator << 12) / denominator;
+	return CTR_MipsSll(numerator, 12) / denominator;
 }
 
 static s32 CAM_SkyboxGlow_ScreenX(s32 screenWidth, s32 ratio)

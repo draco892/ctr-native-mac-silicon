@@ -7,11 +7,16 @@
 
 #include <string.h>
 
-// Keep the retail memory-pressure window; host pointers are never packed into
-// its contents here. Asset decoding has a separate 32-bit address contract.
+// Host64 resident graphs, intrusive pools and render queues contain expanded
+// pointers and records. They cannot share the retail 2 MiB memory budget.
+// Serialized asset addresses retain their separate 32-bit decoding contract.
+#if defined(CTR_NATIVE_HOST64)
+#define CTR_NATIVE_MEMPACK_BUFFER_SIZE  0x800000u
+#else
 #define CTR_NATIVE_MEMPACK_BUFFER_SIZE  0x200000u
+#endif
 #define CTR_NATIVE_MEMPACK_START_OFFSET 0xba9f0u
-#define CTR_NATIVE_MEMPACK_SIZE         0x144e10u
+#define CTR_NATIVE_MEMPACK_SIZE (CTR_NATIVE_MEMPACK_BUFFER_SIZE - CTR_NATIVE_MEMPACK_START_OFFSET - MEMPACK_PS1_END_GUARD_SIZE)
 
 CTR_STATIC_ASSERT(CTR_NATIVE_MEMPACK_START_OFFSET + CTR_NATIVE_MEMPACK_SIZE + MEMPACK_PS1_END_GUARD_SIZE == CTR_NATIVE_MEMPACK_BUFFER_SIZE);
 CTR_STATIC_ASSERT(CTR_NATIVE_MEMPACK_START_OFFSET % MEMPACK_ALIGNMENT == 0);

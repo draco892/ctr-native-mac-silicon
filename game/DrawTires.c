@@ -152,17 +152,17 @@ static void DrawTiresSolid_BuildWheelLocalPairs(struct DrawTiresScratch *scratch
 	scratch->otRangeSecondary = idpp->otRangeSecondary;
 	scratch->wheelSize.word = (s16)driver->wheelSize;
 
-	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(driver->wheelRotation << 2);
+	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(CTR_MipsSll(driver->wheelRotation, 2));
 	scratch->wheelLocal[0].rim.x = scratch->wheelLocal[0].center.x - steering.cos;
 	scratch->wheelLocal[0].rim.z.word = scratch->wheelLocal[0].center.z.word + steering.sin;
 	scratch->wheelLocal[1].rim.x = scratch->wheelLocal[1].center.x + steering.cos;
 	scratch->wheelLocal[1].rim.z.word = scratch->wheelLocal[1].center.z.word - steering.sin;
 
-	int hazardAngle = driver->hazardTimer << 5;
+	int hazardAngle = CTR_MipsSll(driver->hazardTimer, 5);
 	if ((driver->hazardTimer & 1) != 0)
 	{
 		hazardShift = 6;
-		hazardAngle <<= 1;
+		hazardAngle = CTR_MipsSll(hazardAngle, 1);
 	}
 
 	DrawTiresSolid_AddHazardOffset(&scratch->wheelLocal[0].rim, hazardAngle, hazardShift);
@@ -576,8 +576,8 @@ static int DrawTiresSolid_StagePlayer(struct DrawTiresScratch *scratch, struct D
 
 	scratch->playerCounter = scratch->numPlyr - playerIndex;
 	scratch->vertSplit = inst->vertSplit;
-	scratch->depthOffsetStartBytes = idpp->depthOffset[0] << 2;
-	scratch->depthOffsetEndBytes = idpp->depthOffset[1] << 2;
+	scratch->depthOffsetStartBytes = CTR_MipsSll(idpp->depthOffset[0], 2);
+	scratch->depthOffsetEndBytes = CTR_MipsSll(idpp->depthOffset[1], 2);
 	scratch->instFlags = flags;
 
 	if ((flags & DRAW_SUCCESSFUL) == 0)
@@ -748,17 +748,17 @@ static void DrawTiresReflection_BuildWheelLocalPairs(struct DrawTiresScratch *sc
 	scratch->otRangeSecondary = idpp->otRangeSecondary;
 	scratch->wheelSize.word = (s16)driver->wheelSize;
 
-	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(driver->wheelRotation << 2);
+	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(CTR_MipsSll(driver->wheelRotation, 2));
 	scratch->wheelLocal[0].rim.x = scratch->wheelLocal[0].center.x - steering.cos;
 	scratch->wheelLocal[0].rim.z.word = scratch->wheelLocal[0].center.z.word + steering.sin;
 	scratch->wheelLocal[1].rim.x = scratch->wheelLocal[1].center.x + steering.cos;
 	scratch->wheelLocal[1].rim.z.word = scratch->wheelLocal[1].center.z.word - steering.sin;
 
-	int hazardAngle = driver->hazardTimer << 5;
+	int hazardAngle = CTR_MipsSll(driver->hazardTimer, 5);
 	if ((driver->hazardTimer & 1) != 0)
 	{
 		hazardShift = 6;
-		hazardAngle <<= 1;
+		hazardAngle = CTR_MipsSll(hazardAngle, 1);
 	}
 
 	DrawTiresReflection_AddHazardOffset(&scratch->wheelLocal[0].rim, hazardAngle, hazardShift);
@@ -1145,8 +1145,8 @@ static int DrawTiresReflection_StagePlayer(struct DrawTiresScratch *scratch, str
 
 	scratch->playerCounter = scratch->numPlyr - playerIndex;
 	scratch->vertSplit = inst->vertSplit;
-	scratch->depthOffsetStartBytes = idpp->depthOffset[0] << 2;
-	scratch->depthOffsetEndBytes = idpp->depthOffset[1] << 2;
+	scratch->depthOffsetStartBytes = CTR_MipsSll(idpp->depthOffset[0], 2);
+	scratch->depthOffsetEndBytes = CTR_MipsSll(idpp->depthOffset[1], 2);
 	scratch->instFlags = flags;
 
 	if ((flags & DRAW_SUCCESSFUL) == 0)

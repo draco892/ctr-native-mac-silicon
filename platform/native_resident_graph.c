@@ -588,7 +588,16 @@ static enum NativeAssetResult RGDecode(struct NativeResidentGraph *g, struct RGO
 			}
 			for (unsigned j = 0; j < 4; j++)
 			{
-				RG_TRY(RGRef(g, at + 128 + j * 4, NR_BSPLINK, 1, (void **)&vis->bspList[j]));
+				// RenderLists indexes this workspace by BSP index, rather than
+				// treating its first record as an isolated linked-list node.
+				size_t nodes = 1;
+				if (g->rootKind == NR_LEVEL)
+				{
+					struct Level *level = g->root;
+					if (level->ptr_mesh_info && level->ptr_mesh_info->numBspNodes > 0)
+						nodes = (size_t)level->ptr_mesh_info->numBspNodes;
+				}
+				RG_TRY(RGRef(g, at + 128 + j * 4, NR_BSPLINK, nodes, (void **)&vis->bspList[j]));
 				RGSlot(g, &vis->bspList[j], sizeof(void *));
 			}
 			break;

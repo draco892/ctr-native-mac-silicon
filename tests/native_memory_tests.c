@@ -60,7 +60,18 @@ static int TestArenaAndAllocator(void)
 	CHECK(arena->base == Platform_GetMempackBacking());
 	CHECK(arena->backingSize == Platform_GetMempackBackingSize());
 	CHECK(start == (u8 *)arena->base + 0xba9f0);
+	CHECK(arena->size == arena->backingSize - 0xba9f0 - MEMPACK_PS1_END_GUARD_SIZE);
+#if defined(CTR_NATIVE_HOST64)
+	// Resident host records must have space beyond the retail RAM budget.
+	CHECK(arena->size > 0x200000);
+	low = MEMPACK_AllocMem(0x200000, "expanded resident data");
+	low[0] = 0x5a;
+	low[0x1fffff] = 0xa5;
+	CHECK(low == start && low[0] == 0x5a && low[0x1fffff] == 0xa5);
+	MEMPACK_ClearLowMem();
+#else
 	CHECK(arena->size == 0x144e10);
+#endif
 	CHECK(arena->endOfMemory == (u8 *)arena->base + arena->backingSize);
 	CHECK(activePack->endOfMemory == arena->endOfMemory);
 	CHECK(activePack->start == start);

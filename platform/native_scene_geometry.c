@@ -44,6 +44,16 @@ static s32 SceneGeometry_Lerp(s32 a,s32 b,s64 t) { return (s32)((s64)a+((s64)b-a
 static struct NativeSceneClipVertex SceneGeometry_Intersection(const struct NativeSceneCamera *c,
     const struct NativeSceneClipVertex *a,const struct NativeSceneClipVertex *b,s64 da,s64 db,unsigned plane)
 {
+    // Adjacent triangles traverse a shared edge in opposite directions.
+    // Choose one direction so fixed-point rounding produces the same vertex.
+    for(unsigned axis=0;axis<3;axis++) {
+        if(a->view[axis]==b->view[axis]) continue;
+        if(a->view[axis]>b->view[axis]) {
+            const struct NativeSceneClipVertex *swap=a; a=b; b=swap;
+            s64 distance=da; da=db; db=distance;
+        }
+        break;
+    }
     s64 t=da*65536/(da-db);
     struct NativeSceneClipVertex v;
     for(unsigned k=0;k<3;k++) { v.view[k]=SceneGeometry_Lerp(a->view[k],b->view[k],t); v.rgb[k]=SceneGeometry_Lerp(a->rgb[k],b->rgb[k],t); }
@@ -83,8 +93,18 @@ enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *
         const size_t indices[3]={0,i,i+1};
         for(unsigned k=0;k<3;k++) {
             const struct NativeSceneClipVertex *v=&polygon[buffer][indices[k]];
+            // Use the same GTE division and rounding as unclipped triangles.
+            // Exact division here leaves one-pixel cracks on shared edges.
+            struct NativeProjectionConfig projection={.h=c->transform.h};
+            memcpy(projection.translation,v->view,sizeof(projection.translation));
+            memcpy(projection.offset,c->transform.offset,sizeof(projection.offset));
+            struct NativePackedModelVertex origin={0};
+            struct NativeProjectionState state={0};
+            struct NativeProjectionResult result;
+            enum NativeAssetResult status=NativeModelProjection_Project(&projection,&origin,&state,&result);
+            if(status!=NATIVE_ASSET_OK) return status;
             for(unsigned axis=0;axis<2;axis++) {
-                s64 coordinate=SceneGeometry_Floor(c->transform.offset[axis],65536)+(s64)v->view[axis]*c->transform.h/v->view[2];
+                s64 coordinate=state.screen[2][axis];
                 s64 limit=axis==0 ? c->width-1 : c->height-1;
                 // Integer intersection rounding can move a boundary by one unit.
                 if(coordinate<0) coordinate=0; if(coordinate>limit) coordinate=limit;

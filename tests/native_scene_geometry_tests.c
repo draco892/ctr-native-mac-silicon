@@ -23,11 +23,31 @@ static enum NativeAssetResult SubdivisionSink(void *user,const struct NativeDraw
 }
 static enum NativeAssetResult FailSink(void *user,const struct NativeDrawTriangle *t)
 { (void)t; size_t *count=user; return ++*count==3 ? NATIVE_ASSET_OUTPUT_TOO_SMALL : NATIVE_ASSET_OK; }
+static int SharedProjection(const struct NativeSceneCamera *camera,const struct NativeModelTriangle *material)
+{
+    struct NativeSceneClipVertex vertices[3]={{{-32,-32,64},{0},{0}},{{-31,-27,193},{0},{0}},{{32,32,193},{0},{0}}};
+    for(unsigned k=0;k<3;k++) NativeSceneGeometry_Attributes(material,k,&vertices[k]);
+    struct NativeProjectionConfig projection={.h=camera->transform.h,.translation={-31,-27,193}};
+    memcpy(projection.offset,camera->transform.offset,sizeof(projection.offset));
+    struct NativePackedModelVertex origin={0}; struct NativeProjectionState state={0}; struct NativeProjectionResult result;
+    CHECK(NativeModelProjection_Project(&projection,&origin,&state,&result)==NATIVE_ASSET_OK);
+    struct NativeDrawTriangle triangles[NATIVE_SCENE_CLIP_MAX_TRIANGLES]; size_t count;
+    CHECK(NativeSceneGeometry_Clip(camera,material,vertices,-7,triangles,&count)==NATIVE_ASSET_OK);
+    int found=0;
+    for(size_t i=0;i<count;i++) for(unsigned k=0;k<3;k++)
+        if(triangles[i].source.texture.u[k]==material->texture.u[1] && triangles[i].depth[k]==193) {
+            CHECK(triangles[i].screen[k][0]==state.screen[2][0] && triangles[i].screen[k][1]==state.screen[2][1]);
+            found=1;
+        }
+    CHECK(found);
+    return 0;
+}
 int main(void)
 {
     struct NativeSceneCamera c; const s32 pos[3]={0}; const s16 rot[3]={0};
     CHECK(NativeSceneCamera_Init(pos,rot,512,512,128,128,1024,&c)==NATIVE_ASSET_OK);
     struct NativeModelTriangle m={.textured=1,.textureBlend=NATIVE_TEXTURE_BLEND_SEMI,.colors={0xff000000,0xff000080,0xff000000},.texture={.u={0,64,128},.v={0,64,128},.tpage=23,.clut=47}};
+    CHECK(SharedProjection(&c,&m)==0);
     struct NativeSceneClipVertex v[3]={{{-32,-32,64},{0},{0}},{{32,-32,192},{0},{0}},{{0,32,192},{0},{0}}};
     for(unsigned k=0;k<3;k++) NativeSceneGeometry_Attributes(&m,k,&v[k]);
     struct NativeSceneClipVertex saved[3]; memcpy(saved,v,sizeof(v));

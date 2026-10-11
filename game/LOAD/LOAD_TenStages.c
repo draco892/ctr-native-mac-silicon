@@ -101,6 +101,9 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 			sdata->levelID = newLevelID;
 			CTR_PSX_MEMORY_BARRIER();
 
+			// Camera weather probes must not retain quads from the unloaded level.
+			for (unsigned camera = 0; camera < 4; camera++)
+				GAME_TRACKER->cameraDC[camera].ptrQuadBlock = NULL;
 			MEMPACK_PopToState(bookmarkID);
 		}
 		// First boot: SCEA, copyright, and the Naughty Dog box.

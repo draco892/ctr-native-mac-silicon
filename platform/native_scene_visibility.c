@@ -70,7 +70,12 @@ enum NativeAssetResult NativeSceneVisibility_Select(const struct NativeLevelView
         result.visibleNodes++;
         if(node.flags&1) {
             w->states[index]=2;
-            for(u32 q=0;q<node.quadCount;q++) { u32 at=node.firstQuad+q; if(!w->quads[at]) { w->quads[at]=1; result.visibleQuads++; } }
+            for(u32 q=0;q<node.quadCount;q++) {
+                u32 at=node.firstQuad+q;
+                if(!w->quads[at]) result.visibleQuads++;
+                w->quads[at]|=NATIVE_VISIBLE_QUAD;
+                if(node.flags&2) w->quads[at]|=NATIVE_WATER_QUAD;
+            }
         } else {
             w->states[index]=1; w->stack[count++]=index|0x80000000u;
             for(unsigned k=0;k<2;k++) if(!(node.children[k]&0x8000)) w->stack[count++]=node.children[k]&0x3fff;

@@ -20,15 +20,58 @@ With the supplied retail disc, all **34 CTest tests** pass in each complete-game
 preset. The independent module presets contain **33 tests**. One retail test is
 registered only when `assets/ctr-u.bin` is present at configuration time.
 
-This verifies the tested startup path and module contracts. Menu interaction,
-visual parity, racing, other game modes, and whole-game checkpoint/replay behavior
-still require validation. The ARM64 game remains an explicit experimental opt-in;
-default complete-game builds retain the 32-bit pointer guard.
+Interactive ARM64 validation on October 11, 2026 exercised Arcade → Single →
+1P → Easy with Crash Bandicoot on Crash Cove and Roo’s Tubes, keyboard acceleration, steering,
+braking, item use, pause, restart, track changes, and quitting to the main menu. The loading
+and race crashes found during these checks were fixed: host64 MEMPACK capacity,
+BSP workspace allocation, runtime physics offsets, skidmark offsets, weapon
+collision work, and stale camera weather probes after level unload.
+
+Clipped terrain now uses the same GTE projection as adjacent triangles, avoiding
+rounding cracks visible on the rocks. Water BSP leaves now use the shared
+environment texture, animated vertex UVs, and explicit semi-transparency instead
+of the ordinary terrain material. A shoreline check in Crash Cove shows blue,
+textured water after this correction. Regression tests cover host arena capacity,
+BSP workspace bounds, shared clipped/unclipped vertex projection, and water
+material selection, UVs, blending, and invalid environment-map bounds.
+
+Frame pacing follows the original NTSC timing: roughly **29.9 FPS** with two
+VBlanks per game frame. Interactive sanitizer runs on the validation Mac reported
+approximately **29–31 FPS**; this is not a benchmark across all tracks or machines.
+The runtime prints an FPS average every 2,000 rendered frames.
+
+These checks are smoke tests, not a completed playthrough. All tracks and game
+modes, physical controllers, multiplayer, visual parity, and whole-game
+checkpoint/replay behavior still require validation. The ARM64 game remains an
+explicit experimental opt-in; default complete-game builds retain the 32-bit
+pointer guard.
 
 See [ARM64 port progress](docs/ARM64_PORT.md) for implementation details and
 validation limits, or [the Italian progress report](docs/ARM64_PROGRESS_IT.md).
 
-## Build Requirements
+## System Requirements
+
+### Running the Game
+
+| Component | Requirement |
+| --- | --- |
+| macOS CPU | Apple Silicon (`arm64`) for the experimental native game build |
+| Windows / Linux CPU | A system capable of running the current 32-bit (`x86`) executable, with matching runtime libraries |
+| Graphics | A working OpenGL 3.x core context or newer; the macOS validation machine uses OpenGL 4.1 |
+| Game data | Your own NTSC-U retail disc image at `assets/ctr-u.bin`; assets are not included |
+| Input | A keyboard, or a controller recognized by SDL3's Gamepad API |
+| Audio | An operating-system audio output device supported by SDL3 |
+| Storage | Space for the disc image, executable, and writable save files; source builds also need space for build artifacts |
+
+The ARM64 validation environment is **macOS 27.0.1** on a MacBook Pro with an
+**Apple M5 Pro**; see Current Status for the scope of gameplay validation.
+Minimum CPU performance, RAM, free disk space, and the oldest supported operating
+system release have not been established through compatibility testing. Other
+Apple Silicon models and Windows/Linux configurations need their own runtime
+validation. SDL3 is bundled with the executable; a separate SDL installation is
+not required.
+
+### Building from Source
 
 All default test-enabled builds require **CMake 3.20 or newer** and **Python 3**.
 SDL3 is compiled from vendored source and linked statically; no separate SDL
@@ -217,20 +260,66 @@ invalid XA manifest is a startup error.
 
 ### Default Keyboard Mapping
 
-| PS1 control | Keyboard |
-| --- | --- |
-| D-pad | Arrow keys |
-| Cross | `C` |
-| Square | `X` |
-| Circle | `V` |
-| Triangle | `Z` |
-| Start | `Enter` |
-| Select | `Space` |
-| L1 / R1 | Left / right `Shift` |
-| L2 / R2 | Left / right `Ctrl` |
+Click the game window to give it keyboard focus. In menus, use the arrow keys
+to select a row, **`C` to confirm**, and **`V` to go back**. Enter is the PS1
+Start button, rather than the menu confirmation button.
 
-SDL gamepad input is also implemented. Control behavior on ARM64 still needs
-in-game validation beyond the startup probes.
+| PS1 control | Keyboard | Default use |
+| --- | --- | --- |
+| D-pad | Arrow keys | Menu navigation / steering |
+| Cross | `C` | Confirm / accelerate |
+| Square | `X` | Brake |
+| Circle | `V` | Back / use item |
+| Triangle | `Z` | Triangle action |
+| Start | `Enter` | Start / pause |
+| Select | `Space` | Select action |
+| L1 / R1 | Left / right `Shift` | Jump / power slide |
+| L2 / R2 | Left / right `Ctrl` | L2 / R2 actions |
+| L3 / R3 | `[` / `]` | Analog stick clicks |
+
+### Controllers
+
+The native input layer accepts devices recognized by **SDL3's Gamepad API**.
+This includes Xbox-style, PlayStation DualShock/DualSense, and Nintendo
+Switch-style controllers when the operating system and SDL mapping recognize
+the device. USB and Bluetooth availability depends on the device and host.
+These families are supported through SDL; physical hardware compatibility has
+not been certified for every model on this ARM64 build.
+
+| PS1 control | SDL gamepad position | Xbox-style label |
+| --- | --- | --- |
+| Cross | South face button | A |
+| Circle | East face button | B |
+| Square | West face button | X |
+| Triangle | North face button | Y |
+| D-pad | D-pad | D-pad |
+| L1 / R1 | Left / right shoulder | LB / RB |
+| L2 / R2 | Left / right trigger | LT / RT |
+| L3 / R3 | Left / right stick click | LS / RS |
+| Start | Start | Menu |
+| Select | Back | View |
+
+Both analog sticks, hot-plugging, and rumble are implemented. Up to four
+controller slots are available; the pad bus uses the game's multitap interface
+for more than two players. Multiplayer gameplay still requires validation.
+The keyboard uses a free slot and moves away from a slot occupied by a gamepad.
+
+For devices that SDL does not recognize automatically, the input layer loads
+an optional `gamecontrollerdb.txt` from the selected base directory. Unmapped
+generic joysticks are not opened as gamepads. Menu labels use the game's PS1
+button names; Nintendo labels may differ from the physical-position mapping above.
+
+### Window Size and Fullscreen
+
+Drag the window borders to resize it. Press **F11** or **Alt + Enter** to toggle
+fullscreen; on macOS, Alt is the Option key. Depending on macOS keyboard
+settings, F11 may require the Fn key. Release Option/Alt before using game
+controls, since holding it suppresses keyboard gamepad input.
+
+The default window is 800×600 (4:3). To change its initial size, edit the 4:3
+`Platform_Init` call in `main.c`, for example to `1600, 1200`, then rebuild.
+Window sizing scales presentation; it does not change the game-controlled
+internal render-target resolution.
 
 ## Tests and Diagnostics
 

@@ -4,6 +4,7 @@
 struct NativeSceneBsp { u16 flags; s16 id,minimum[3],maximum[3]; u16 children[2]; u32 firstQuad,quadCount; };
 struct NativeVisibilityWorkspace { u32 *stack; u8 *states,*quads; size_t stackCapacity,stateCapacity,quadCapacity; };
 struct NativeVisibilityResult { const u8 *quadMask; u32 visibleNodes,visibleQuads; };
+enum { NATIVE_VISIBLE_QUAD = 1, NATIVE_WATER_QUAD = 2 };
 enum NativeAssetResult NativeSceneBsp_Get(const struct NativeLevelView *level,const struct NativeMeshView *mesh,u32 index,struct NativeSceneBsp *out);
 // Walk root 0, branch child-ID mask 0x3fff, signed-negative IDs skipped, MSB-first native PVS
 // words. NULL PVS means all nodes eligible. A frustum rejects whole node boxes.

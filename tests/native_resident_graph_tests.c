@@ -86,6 +86,36 @@ static int EmptyAnimatedTextures(void)
     return 0;
 }
 
+static int BspWorkspace(void)
+{
+    u8 wire[800] = {0}, ptr[20];
+    CTR_WriteU32LE(wire, 512);
+    CTR_WriteU32LE(wire + 512 + 24, 544);
+    CTR_WriteU32LE(wire + 512 + 28, 2);
+    CTR_WriteU32LE(wire + 0x190, 640);
+    CTR_WriteU32LE(wire + 640 + 128, 784);
+    const u32 slots[] = {0, 536, 0x190, 768};
+    CTR_WriteU32LE(ptr, 16);
+    for (size_t i = 0; i < 4; i++)
+        CTR_WriteU32LE(ptr + 4 + i * 4, slots[i]);
+    struct NativePtrMapEntry entries[4];
+    struct NativePtrMapView map;
+    CHECK(NativePtrMap_Decode(wire, sizeof(wire), ptr, sizeof(ptr), entries, 4, &map) == NATIVE_PTRMAP_OK);
+    struct NativeResidentGraph *g = NULL;
+    CHECK(NativeResidentGraph_Build(&map, NR_LEVEL, 0, &g, NULL) == NATIVE_ASSET_OK);
+    struct Level *level = NativeResidentGraph_Root(g);
+    struct VisMemBspListNode *nodes = level->visMem->bspList[0];
+    CHECK(nodes != NULL);
+    for (int i = 0; i < 2; i++)
+    {
+        nodes[i].next = NULL;
+        nodes[i].bsp = &level->ptr_mesh_info->bspRoot[i];
+    }
+    CHECK(nodes[1].bsp == &level->ptr_mesh_info->bspRoot[1]);
+    NativeResidentGraph_Free(g);
+    return 0;
+}
+
 static int EmptyHitboxes(void)
 {
 	// Retail termination occupies four bytes, not another whole BSP record.
@@ -310,7 +340,7 @@ int main(void)
 	NativeSceneAssets_Reset(&owners);
 	NativeSceneAssets_Reset(&restored);
 	free(blob);
-	if (EmptyAnimatedTextures() || EmptyHitboxes() || LoaderCallbacks())
+	if (EmptyAnimatedTextures() || BspWorkspace() || EmptyHitboxes() || LoaderCallbacks())
 		return 1;
 	puts("Owned resident graphs: sharing, immutable sources, pending PTR, cross-owner checkpoints and rejection OK");
 	return 0;

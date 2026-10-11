@@ -1138,7 +1138,7 @@ void VehPickupItem_ShootNow(struct Driver *d, s32 weaponID, s32 flags)
 		register s16 *rotationNormal CTR_PSX_REGISTER("$5");
 		register s32 rotationAngle CTR_PSX_REGISTER("$6");
 
-		sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, MINE_COLL_SCRATCH_OFFSET);
+		sps = CTR_COLLISION_WORK();
 
 		if (d->numWumpas >= DRIVER_WUMPA_JUICED_COUNT)
 		{
@@ -1307,7 +1307,7 @@ void VehPickupItem_ShootNow(struct Driver *d, s32 weaponID, s32 flags)
 		u16 modelHeaderFlags;
 		s32 potionFlags;
 
-		sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, MINE_COLL_SCRATCH_OFFSET);
+		sps = CTR_COLLISION_WORK();
 
 		if (d->numWumpas >= DRIVER_WUMPA_JUICED_COUNT)
 		{
