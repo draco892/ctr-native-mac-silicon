@@ -1,146 +1,13 @@
 #include <common.h>
 
-enum
-{
-	TORCH_RING0_SCRATCH_OFFSET = 0x68,
-	TORCH_RING1_SCRATCH_OFFSET = 0x8c,
-	TORCH_RING2_SCRATCH_OFFSET = 0xb0,
-};
-
-struct TorchCardRegs
-{
-	u32 left;
-	u32 right;
-	u32 top;
-	u32 bottom;
-};
-
-struct TorchRingScratch
-{
-	u32 center;
-	u32 top;
-	u32 topRight;
-	u32 right;
-	u32 bottomRight;
-	u32 bottom;
-	u32 bottomLeft;
-	u32 left;
-	u32 topLeft;
-};
-
-enum TorchRingIndex
-{
-	TORCH_RING_0,
-	TORCH_RING_1,
-	TORCH_RING_2,
-};
-
-enum TorchRingPoint
-{
-	TORCH_POINT_CENTER = offsetof(struct TorchRingScratch, center),
-	TORCH_POINT_TOP = offsetof(struct TorchRingScratch, top),
-	TORCH_POINT_TOP_RIGHT = offsetof(struct TorchRingScratch, topRight),
-	TORCH_POINT_RIGHT = offsetof(struct TorchRingScratch, right),
-	TORCH_POINT_BOTTOM_RIGHT = offsetof(struct TorchRingScratch, bottomRight),
-	TORCH_POINT_BOTTOM = offsetof(struct TorchRingScratch, bottom),
-	TORCH_POINT_BOTTOM_LEFT = offsetof(struct TorchRingScratch, bottomLeft),
-	TORCH_POINT_LEFT = offsetof(struct TorchRingScratch, left),
-	TORCH_POINT_TOP_LEFT = offsetof(struct TorchRingScratch, topLeft),
-};
-
-enum TorchUvSlot
-{
-	TORCH_UV_SLOT_0,
-	TORCH_UV_SLOT_1,
-	TORCH_UV_SLOT_2,
-	TORCH_UV_SLOT_3,
-};
-
-struct TorchPointSource
-{
-	enum TorchRingIndex ring;
-	enum TorchRingPoint point;
-};
-
-union TorchUvClutScratch
-{
-	struct
-	{
-		u8 u;
-		u8 v;
-		u16 clut;
-	};
-	u32 word;
-};
-
-union TorchUvTpageScratch
-{
-	struct
-	{
-		u8 u;
-		u8 v;
-		u16 tpage;
-	};
-	u32 word;
-};
-
-union TorchUvPairScratch
-{
-	struct
-	{
-		u8 u0;
-		u8 v0;
-		u8 u1;
-		u8 v1;
-	};
-	u32 word;
-};
-
-struct TorchScratch
-{
-	u8 pad_000[0x30];
-	u32 firstParticlePtr32;
-	u32 pad_034;
-	u32 swapchainIndex;
-	u8 pad_03c[0x08];
-	u32 color;
-	u32 screenWFP;
-	u32 screenHFP;
-	s16 rectX;
-	s16 rectYWithSwapchain;
-	u16 maxX;
-	u16 maxY;
-	u16 tileUBase;
-	u16 pad_05a;
-	union TorchUvClutScratch uv0;
-	union TorchUvTpageScratch uv1;
-	union TorchUvPairScratch uv23;
-	struct TorchRingScratch rings[3];
-};
-
-CTR_STATIC_ASSERT(sizeof(struct TorchRingScratch) == 0x24);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, firstParticlePtr32) == 0x30);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, swapchainIndex) == 0x38);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, color) == 0x44);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, screenWFP) == 0x48);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, screenHFP) == 0x4c);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, rectX) == 0x50);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, rectYWithSwapchain) == 0x52);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, maxX) == 0x54);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, maxY) == 0x56);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, tileUBase) == 0x58);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, uv0) == 0x5c);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, uv1) == 0x60);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, uv23) == 0x64);
-CTR_STATIC_ASSERT(offsetof(struct TorchScratch, rings) == TORCH_RING0_SCRATCH_OFFSET);
-CTR_STATIC_ASSERT(CTR_OFFSET_OF_ARRAY(struct TorchScratch, rings, 1) == TORCH_RING1_SCRATCH_OFFSET);
-CTR_STATIC_ASSERT(CTR_OFFSET_OF_ARRAY(struct TorchScratch, rings, 2) == TORCH_RING2_SCRATCH_OFFSET);
+#include <ctr_effect_work.h>
 
 static u32 Torch_ReadWord(const void *base, int offset)
 {
 	return *(const u32 *)(const void *)((const char *)base + offset);
 }
 
+#ifndef CTR_NATIVE
 static s32 Torch_ReadS32(const void *base, int offset)
 {
 	return *(const s32 *)(const void *)((const char *)base + offset);
@@ -156,9 +23,15 @@ static u8 Torch_ReadU8(const void *base, int offset)
 	return *(const u8 *)(const void *)((const char *)base + offset);
 }
 
+#endif
+
 static struct TorchScratch *Torch_Scratch(void)
 {
+#if defined(CTR_NATIVE_HOST64)
+	return NativeTorchWork_Get();
+#else
 	return CTR_SCRATCHPAD_PTR(struct TorchScratch, 0);
+#endif
 }
 
 static struct TorchPointSource Torch_Point(enum TorchRingIndex ring, enum TorchRingPoint point)
@@ -296,7 +169,7 @@ static void Torch_LinkPrimitive(u32 *tagWord, const void *packet, u32 *ot, u32 t
 }
 
 static u32 *Torch_EmitFT3(u32 *prim, u32 *ot, struct TorchPointSource uv0, struct TorchPointSource uv1, struct TorchPointSource uv2,
-                          struct TorchPointSource xy0, struct TorchPointSource xy1, struct TorchPointSource xy2)
+				          struct TorchPointSource xy0, struct TorchPointSource xy1, struct TorchPointSource xy2)
 {
 	POLY_FT3 *poly = (POLY_FT3 *)prim;
 	struct TorchScratch *scratch = Torch_Scratch();
@@ -318,8 +191,8 @@ static u32 *Torch_EmitFT3(u32 *prim, u32 *ot, struct TorchPointSource uv0, struc
 }
 
 static u32 *Torch_EmitFT4(u32 *prim, u32 *ot, struct TorchPointSource uv0, struct TorchPointSource uv1, struct TorchPointSource uv2,
-                          struct TorchPointSource uv3, struct TorchPointSource xy0, struct TorchPointSource xy1, struct TorchPointSource xy2,
-                          struct TorchPointSource xy3)
+				          struct TorchPointSource uv3, struct TorchPointSource xy0, struct TorchPointSource xy1, struct TorchPointSource xy2,
+				          struct TorchPointSource xy3)
 {
 	POLY_FT4 *poly = (POLY_FT4 *)prim;
 	struct TorchScratch *scratch = Torch_Scratch();
@@ -503,7 +376,10 @@ void Torch_Main(void *particleList_heatWarp, struct PushBuffer *pb, struct PrimM
 		int playerPassesLeft = (s32)(s8)numPlyr - 1;
 		int particlesLeft = 12;
 
+		// Native particle cursors remain typed locals; this retail slot is unused.
+#ifndef CTR_NATIVE
 		scratch->firstParticlePtr32 = (u32)(u32)firstParticle;
+#endif
 		scratch->swapchainIndex = (u32)swapchainIndex;
 		scratch->uv0.clut = 0;
 
@@ -526,7 +402,11 @@ void Torch_Main(void *particleList_heatWarp, struct PushBuffer *pb, struct PrimM
 			scratch->maxX = (u16)(pb->rect.w - 1);
 			scratch->maxY = (u16)(pb->rect.h - 1);
 
+#ifdef CTR_NATIVE
+			screenSize = (u16)pb->rect.w | ((u32)(u16)pb->rect.h << 16);
+#else
 			screenSize = Torch_ReadWord(pb, 0x20);
+#endif
 			otBase = pb->ptrOT;
 			particle = firstParticle;
 
@@ -543,6 +423,17 @@ void Torch_Main(void *particleList_heatWarp, struct PushBuffer *pb, struct PrimM
 				s32 centerY;
 				struct TorchCardRegs card;
 
+#ifdef CTR_NATIVE
+				MTC2(Torch_PackXY(particle->axis[PARTICLE_AXIS_POS_X].startVal >> 8, particle->axis[PARTICLE_AXIS_POS_Y].startVal >> 8), 0);
+				MTC2((u32)(particle->axis[PARTICLE_AXIS_POS_Z].startVal >> 8), 1);
+				radius0 = (u8)((u32)particle->axis[3].startVal >> 8);
+				radius1 = (u8)((u32)particle->axis[4].startVal >> 8);
+				radius2 = (u8)((u32)particle->axis[5].startVal >> 8);
+				gte_llv0bk_b();
+				color = (u8)((u32)particle->axis[PARTICLE_AXIS_COLOR_R].startVal >> 8) |
+				    ((u32)(u8)((u32)particle->axis[PARTICLE_AXIS_COLOR_G].startVal >> 8) << 8) |
+				    ((u32)(u8)((u32)particle->axis[PARTICLE_AXIS_COLOR_B].startVal >> 8) << 16);
+#else
 				MTC2(Torch_PackXY(Torch_ReadS32(particle, 0x24) >> 8, Torch_ReadS32(particle, 0x2c) >> 8), 0);
 				MTC2((u32)(Torch_ReadS32(particle, 0x34) >> 8), 1);
 
@@ -552,6 +443,7 @@ void Torch_Main(void *particleList_heatWarp, struct PushBuffer *pb, struct PrimM
 
 				gte_llv0bk_b();
 				color = (u32)Torch_ReadU8(particle, 0x5d) | ((u32)Torch_ReadU8(particle, 0x65) << 8) | ((u32)Torch_ReadU8(particle, 0x6d) << 16);
+#endif
 				scratch->color = color;
 
 				viewZ = (s32)MFC2(27);
@@ -605,7 +497,11 @@ void Torch_Main(void *particleList_heatWarp, struct PushBuffer *pb, struct PrimM
 							Torch_Subset2_StoreCard(&card, centerX, centerY, TORCH_RING_1);
 							gte_rtpt_b();
 
+#ifdef CTR_NATIVE
+							otIndex = (viewZ >> 6) + particle->otIndexOffset;
+#else
 							otIndex = (viewZ >> 6) + Torch_ReadS8(particle, 0x18);
+#endif
 							if (otIndex < 0)
 							{
 								otIndex = 0;

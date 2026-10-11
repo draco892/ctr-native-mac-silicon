@@ -1,4 +1,7 @@
 #include <common.h>
+#if defined(CTR_NATIVE_HOST64)
+#include <platform/native_credits.h>
+#endif
 
 enum CreditsRuntimeConstants
 {
@@ -165,6 +168,22 @@ void CS_Credits_Init(void)
 	// the string offsets. Byte access keeps the shared path alias-safe.
 	creditsData = (u8 *)(ST1_GETPOINTERS(GAME_TRACKER->level1->ptrSpawnType1))[ST1_CREDITS];
 	CS_CREDITS_DANCER = NULL;
+#if defined(CTR_NATIVE_HOST64)
+	const u32 fileBytes = CTR_ReadU32LE(creditsData);
+	const s16 numStrings = (s16)CTR_ReadU16LE(creditsData + 4);
+	if (fileBytes < 8 || numStrings <= CS_CREDITS_TEXT_START_STRING_INDEX || numStrings > 4096 ||
+	    fileBytes > INT32_MAX - 8 - (u32)numStrings * sizeof(char *))
+		CTR_TRAP();
+	const size_t tableOffset = (fileBytes + sizeof(char *) - 1u) & ~(sizeof(char *) - 1u);
+	creditsDst = MEMPACK_AllocHighMem((int)(tableOffset + (size_t)numStrings * sizeof(char *)), csCreditsNames.creditStrings);
+	memcpy(creditsDst, creditsData, fileBytes);
+	char **strings = (char **)((u8 *)creditsDst + tableOffset);
+	u32 count;
+	if (!NativeCredits_Decode(creditsDst, fileBytes, strings, (size_t)numStrings, &count))
+		CTR_TRAP();
+	CS_CREDITS_STRINGS = strings;
+	CS_CREDITS_STRING_COUNT = (s16)count;
+#else
 	creditsDst = MEMPACK_AllocHighMem(CTR_ReadU32AlignedLE(creditsData), csCreditsNames.creditStrings);
 	memcpy(creditsDst, creditsData, ((struct CreditsLevHeader *)creditsData)->size);
 	creditsData = (u8 *)creditsDst;
@@ -177,6 +196,7 @@ void CS_Credits_Init(void)
 		CTR_WriteU32AlignedLE(creditsData, (u32)creditsDst + CTR_ReadU32AlignedLE(creditsData));
 		creditsData += sizeof(u32);
 	}
+#endif
 	creditsObj->creditsPosY = CS_CREDITS_NAME_START_Y;
 	creditsObj->creditsTopString = CS_CREDITS_STRINGS[CS_CREDITS_TEXT_START_STRING_INDEX];
 }
@@ -443,7 +463,7 @@ void CS_Credits_DrawEpilogue(struct CreditsObj *co)
 		if (co->epilogueNextString == NULL)
 			strLen = -1;
 		else
-			strLen = (s16)((s16)(u32)co->epilogueNextString - (s16)(u32)co->epilogueTopString - 1);
+			strLen = (s16)((s16)(co->epilogueNextString - co->epilogueTopString) - 1);
 		DecalFont_DrawMultiLineStrlen(co->epilogueTopString, strLen, CS_CREDITS_EPILOGUE_CENTER_X, CS_CREDITS_EPILOGUE_Y, CS_CREDITS_EPILOGUE_WIDTH, FONT_SMALL,
 		                              colorSlot | JUSTIFY_CENTER);
 	}

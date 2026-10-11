@@ -16,8 +16,10 @@ structs over fixed address ranges.
 | `.sdata` | `0x8008cf6c`-`0x8008d667` | `sdata_static` | Small data globals addressed through `$gp` |
 | `.bss` | `0x8008d668`-`0x8009f6fc` | `bss` | Zero-initialized runtime storage |
 
-The named structs are layout maps. Field offsets matter because code often
-depends on retail addresses, not just on C names.
+On PS1 the named structs are layout maps. Native resident aggregates use host
+pointer width and alignment; their offsets are separate runtime ABI contracts
+selected by `CTR_RUNTIME_ABI`. Retail virtual-address and `$gp` assertions apply
+only to the PS1-shaped ABI. Wire readers retain fixed four-byte serialized slots.
 
 ## `.rdata`
 

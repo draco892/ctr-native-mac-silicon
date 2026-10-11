@@ -307,6 +307,12 @@ struct LoadQueueSlot
 
 #define LOAD_QUEUE_CALLBACK_SET_POINTER ((void (*)(struct LoadQueueSlot *)) - 2)
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct LoadQueueSlot) == 0x18);
+#else
+CTR_STATIC_ASSERT(sizeof(((struct LoadQueueSlot *)0)->callbackFuncPtr) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct LoadQueueSlot, callbackFuncPtr) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(offsetof(struct LoadQueueSlot, ptrDestination) % _Alignof(void *) == 0);
+#endif
 
 #endif

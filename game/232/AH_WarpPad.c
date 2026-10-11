@@ -82,10 +82,10 @@ s16 *AH_WarpPad_GetSpawnPosRot(s16 *posData)
 	return NULL;
 }
 
-CTR_STATIC_ASSERT(sizeof(struct WarpPad) == 0x78);
-CTR_STATIC_ASSERT(offsetof(struct WarpPad, lightDirGem) == 0x50);
-CTR_STATIC_ASSERT(offsetof(struct WarpPad, digit10s) == 0x68);
-CTR_STATIC_ASSERT(offsetof(struct WarpPad, levelID) == 0x6c);
+CTR_STATIC_ASSERT(sizeof(struct WarpPad) == CTR_RUNTIME_ABI(0x78, 0xa0));
+CTR_STATIC_ASSERT(offsetof(struct WarpPad, lightDirGem) == CTR_RUNTIME_ABI(0x50, 0x78));
+CTR_STATIC_ASSERT(offsetof(struct WarpPad, digit10s) == CTR_RUNTIME_ABI(0x68, 0x90));
+CTR_STATIC_ASSERT(offsetof(struct WarpPad, levelID) == CTR_RUNTIME_ABI(0x6c, 0x94));
 
 void AH_WarpPad_AllWarppadNum()
 {
@@ -101,7 +101,7 @@ void AH_WarpPad_AllWarppadNum()
 		if ((wp->slots.inst[2] != 0) && (wp->digit1s != 0) && (wp->digit1s != 9))
 		{
 			INST_GETIDPP(wp->slots.inst[2])->ptrCommandList = wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrCommandList;
-			INST_GETIDPP(wp->slots.inst[2])->ptrColorLayout = (u32)wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrColors;
+			INST_GETIDPP(wp->slots.inst[2])->ptrColorLayout = (CtrRuntimeAddress)wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrColors;
 			INST_GETIDPP(wp->slots.inst[2])->ptrTexLayout = wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrTexLayout;
 			INST_GETIDPP(wp->slots.inst[2])->ptrCurrFrame = wp->slots.inst[2]->model->headers[wp->digit1s - 1].ptrFrameData;
 		}
@@ -109,7 +109,7 @@ void AH_WarpPad_AllWarppadNum()
 		if ((wp->slots.inst[3] != 0) && (wp->digit10s != 0))
 		{
 			INST_GETIDPP(wp->slots.inst[3])->ptrCommandList = wp->slots.inst[3]->model->headers[0].ptrCommandList;
-			INST_GETIDPP(wp->slots.inst[3])->ptrColorLayout = (u32)wp->slots.inst[3]->model->headers[0].ptrColors;
+			INST_GETIDPP(wp->slots.inst[3])->ptrColorLayout = (CtrRuntimeAddress)wp->slots.inst[3]->model->headers[0].ptrColors;
 			INST_GETIDPP(wp->slots.inst[3])->ptrTexLayout = wp->slots.inst[3]->model->headers[0].ptrTexLayout;
 			INST_GETIDPP(wp->slots.inst[3])->ptrCurrFrame = wp->slots.inst[3]->model->headers[0].ptrFrameData;
 		}
@@ -553,7 +553,7 @@ void AH_WarpPad_ThTick(struct Thread *t)
 				for (i = 7; i >= 0; i--)
 					cupGT->cup.points[i] = 0;
 				{
-					u32 trackOffset;
+					CtrRuntimeAddress trackOffset;
 					s32 cupOffset;
 					register const u8 *cupTracks CTR_PSX_REGISTER("$4");
 					trackOffset = GAME_TRACKER->cup.trackIndex;
@@ -565,7 +565,7 @@ void AH_WarpPad_ThTick(struct Thread *t)
 					trackOffset *= 4;
 					cupOffset *= 16;
 					trackOffset += cupOffset;
-					trackOffset = (u32)trackOffset + (u32)cupTracks;
+					trackOffset = (u32)trackOffset + (CtrRuntimeAddress)cupTracks;
 					MainRaceTrack_RequestLoad((s16)CTR_ReadU16AlignedLE((const void *)trackOffset));
 				}
 			}
@@ -758,7 +758,7 @@ WarpPad_AnimateOpen:
 			warppadObj->spinRot_Wisp[i].y += AH_WP_SPIN_WISP_STEP;
 
 			ConvertRotToMatrix(&warppadObj->slots.visuals.rings[i]->matrix,
-			                   (SVec3 *)((u32)warppadObj + offsetof(struct WarpPad, spinRot_Wisp) + i * sizeof(SVec3Slot)));
+			                   (SVec3 *)((CtrRuntimeAddress)warppadObj + offsetof(struct WarpPad, spinRot_Wisp) + i * sizeof(SVec3Slot)));
 
 			// if height hasn't reached max height
 			if (warppadObj->slots.visuals.rings[i]->matrix.t[1] < (warppadInst->matrix.t[1] + wispMaxHeight))

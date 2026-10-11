@@ -12,89 +12,7 @@ enum CameraPathFlags
 };
 
 
-// Camera scratchpad overlay rooted at retail scratchpad 0x1f800108.
-// Camera-owned fields begin at work+0x20c, absolute scratchpad 0x1f800314.
-struct CameraCollisionScratch
-{
-	u8 pad_000[0x1e];
-	s16 terrainHeightFloor;
-	u8 pad_020[0x20c - 0x20];
-};
-
-CTR_STATIC_ASSERT(offsetof(struct CameraCollisionScratch, terrainHeightFloor) == 0x01e);
-CTR_STATIC_ASSERT(sizeof(struct CameraCollisionScratch) == 0x20c);
-
-struct CameraAngleAxisScratchCamera
-{
-	SVec3 rot;     // +0x00 (abs 0x314)
-	s16 _pad0;     // +0x06
-	Vec3 posCopy;  // +0x08 (abs 0x31C) s32 copies of pos below
-	MATRIX matrix; // +0x14 (abs 0x328)
-	Vec3 pos;      // +0x34 (abs 0x348)
-	Vec3 dir;      // +0x40 (abs 0x354) written by CAM_LookAtPosition
-};
-
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratchCamera, rot) == 0x00);
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratchCamera, posCopy) == 0x08);
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratchCamera, matrix) == 0x14);
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratchCamera, pos) == 0x34);
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratchCamera, dir) == 0x40);
-CTR_STATIC_ASSERT(sizeof(struct CameraAngleAxisScratchCamera) == 0x4c);
-
-struct CameraScratch
-{
-	SVec3 rot;
-	s16 _pad0;
-	Vec3 posCopy;
-	MATRIX matrix;
-	Vec3 pos;
-	Vec3 dir;
-
-	Vec3 delta; // +0x4C (abs 0x360)
-};
-
-CTR_STATIC_ASSERT(offsetof(struct CameraScratch, rot) == 0x00);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratch, posCopy) == 0x08);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratch, matrix) == 0x14);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratch, pos) == 0x34);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratch, dir) == 0x40);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratch, delta) == 0x4C);
-CTR_STATIC_ASSERT(sizeof(struct CameraScratch) == 0x58);
-
-struct CameraAngleAxisScratch
-{
-	struct CameraCollisionScratch collision;
-	struct CameraAngleAxisScratchCamera camera;
-};
-
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratch, collision) == 0x0);
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratch, collision.terrainHeightFloor) == 0x01e);
-CTR_STATIC_ASSERT(offsetof(struct CameraAngleAxisScratch, camera) == 0x20c);
-CTR_STATIC_ASSERT(sizeof(struct CameraAngleAxisScratch) == 0x258);
-
-struct CameraScratchWork
-{
-	struct CameraCollisionScratch collision;
-	struct CameraScratch camera;
-
-	u8 pad_264[0x18];
-	Vec3 sideOffset;
-	SVec3 trackPathPos;
-	s16 pad_28e;
-	SVec3 trackPathLookaheadPos;
-};
-
-CTR_STATIC_ASSERT(offsetof(struct CameraScratchWork, collision) == 0x0);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratchWork, collision.terrainHeightFloor) == 0x01e);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratchWork, camera) == 0x20c);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratchWork, sideOffset) == 0x27c);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratchWork, trackPathPos) == 0x288);
-CTR_STATIC_ASSERT(offsetof(struct CameraScratchWork, trackPathLookaheadPos) == 0x290);
-
-static inline struct CameraAngleAxisScratch *CameraScratchWork_AsAngleAxis(struct CameraScratchWork *work)
-{
-	return (struct CameraAngleAxisScratch *)work;
-}
+#include <ctr_camera_work.h>
 
 struct ZoomData
 {
@@ -366,12 +284,15 @@ CTR_STATIC_ASSERT(offsetof(struct CameraHeightSmoothing, startOffset) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct CameraHeightSmoothing, framesRemaining) == 0x2);
 CTR_STATIC_ASSERT(offsetof(struct CameraHeightSmoothing, currentOffset) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, damagePitchOffset) == 0x1a);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, quadBlockSearchHit) == 0x3c);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, pushBufferPosCorrection) == 0x4c);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, cameraPos) == 0x58);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, lookAtPos) == 0x64);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, flags) == 0x70);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->flags) == 0x4);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, driverOffset_CamEyePos) == 0x74);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, angleAxisLerpRatio) == 0x7a);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, driverOffset_CamLookAtPos) == 0x7c);
@@ -389,9 +310,17 @@ CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData) == 0xb0);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData.trackPathSpeed) == 0xb0);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData.pointPath.endPos) == 0xb0);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, eorModeData.pointPath.speed) == 0xb6);
+#endif
 CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->eorModeData) == 0x8);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, fireSpeedZoom) == 0xb8);
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, heightSmoothing) == 0xc0);
 CTR_STATIC_ASSERT(sizeof(struct CameraDC) == 0xDC);
+#endif
 
+#if defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->pushBuffer) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct CameraDC, pushBuffer) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(sizeof(((struct CameraDC *)0)->BlastedLerp.unkOffset[0]) == 2);
+#endif
 #endif

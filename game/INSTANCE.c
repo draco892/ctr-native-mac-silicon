@@ -1,4 +1,8 @@
 #include <common.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#include <platform/native_model_animation.h>
+#endif
 
 void INSTANCE_Birth(struct Instance *inst, struct Model *model, const char *name, struct Thread *th, u32 flags)
 {
@@ -35,7 +39,7 @@ void INSTANCE_Birth(struct Instance *inst, struct Model *model, const char *name
 	inst->flags = flags;
 	inst->alphaScale = 0;
 	inst->colorRGBA = 0;
-	inst->instDef = 0;
+	INST_LinkDefinition(inst, NULL);
 
 	inst->animFrame = 0;
 	inst->vertSplit = 0;
@@ -232,7 +236,16 @@ void INSTANCE_LevInitAll(struct InstDef *definitions, s32 count)
 
 		// NOTE(aalhendi): Retail copies the 44-byte serialized prefix past the
 		// pool links. Its final two words are replaced by instDef and matrix.
+#if defined(CTR_NATIVE_HOST64)
+		memcpy(inst->name, levInstDef->name, sizeof(inst->name));
+		inst->model = levInstDef->model;
+		inst->scale = levInstDef->scale;
+		inst->alphaScale = levInstDef->_pad_scale;
+		inst->colorRGBA = levInstDef->colorRGBA;
+		inst->flags = levInstDef->flags;
+#else
 		memcpy((u8 *)inst + offsetof(struct Instance, name), levInstDef, offsetof(struct InstDef, ptrInstance));
+#endif
 
 		inst->depthBiasNormal = levInstDef->unk24 - 2;
 		inst->depthBiasSecondary = levInstDef->unk24 + 12;
@@ -242,7 +255,7 @@ void INSTANCE_LevInitAll(struct InstDef *definitions, s32 count)
 		inst->animIndex = 0;
 		inst->animFrame = 0;
 
-		inst->instDef = levInstDef;
+		INST_LinkDefinition(inst, levInstDef);
 
 		inst->vertSplit = 0;
 		inst->specLightX = 1;
@@ -354,6 +367,11 @@ void INSTANCE_LevDelayedLInBs(struct InstDef *instDef, s32 numInstances)
 
 s32 INSTANCE_GetNumAnimFrames(struct Instance *pInstance, s32 animIndex)
 {
+#ifdef CTR_NATIVE_GAME_SCENE
+    struct NativeModelView nativeModel; struct NativeAnimationView nativeAnimation;
+    if (pInstance != NULL && NativeSceneAssets_GetModel(&gNativeSceneAssets, pInstance->model, &nativeModel) == NATIVE_ASSET_OK)
+        return animIndex >= 0 && NativeModel_GetAnimation(&nativeModel, 0, (u32)animIndex, &nativeAnimation) == NATIVE_ASSET_OK ? nativeAnimation.logicalFrameCount : 0;
+#endif
 	struct Model *pModel;
 	struct ModelHeader *pHeader;
 	struct ModelAnim **animations;

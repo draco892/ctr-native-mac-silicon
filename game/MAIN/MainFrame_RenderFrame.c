@@ -1,3 +1,6 @@
+#ifdef CTR_NATIVE_DECODED_TERRAIN
+#include <platform/native_scene_game.h>
+#endif
 #include <common.h>
 
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
@@ -424,7 +427,7 @@ void MenuHighlight()
 	fc = sdata->frameCounter << 7;
 	trig = MATH_Sin(fc);
 
-	trig = (trig << 6) >> 0xc;
+	trig = CTR_MipsSll(trig, 6) >> 0xc;
 
 	// sine curve of green, plus base color
 	ColorCode_SetPacked(&sdata->menuRowHighlight_Normal, ((trig + 0x40) * 0x100) | 0x80);
@@ -697,7 +700,11 @@ void RenderBucket_QueueAllInstances(struct GameTracker *gGT)
 	                                        gGT->gameMode1 & PAUSE_ALL);
 
 	// null terminator at end of list
+#ifdef CTR_NATIVE
+	memset(RBI, 0, sizeof(void *));
+#else
 	*RBI = 0;
+#endif
 }
 
 void RenderAllNormalParticles(struct GameTracker *gGT)
@@ -895,7 +902,7 @@ void RenderAllLevelGeometry(struct GameTracker *gGT, struct Level *level1, struc
 
 		// camera of player 1
 		pushBuffer = &gGT->pushBuffer[0];
-		scratch = CTR_SCRATCHPAD_PTR(struct MainRenderLevelGeometryScratch, 0);
+		scratch = CTR_TERRAIN_WORK_PTR(struct MainRenderLevelGeometryScratch, 0);
 
 		if (
 		    // adv character selection screen
@@ -935,10 +942,17 @@ void RenderAllLevelGeometry(struct GameTracker *gGT, struct Level *level1, struc
 		RenderLists_PreInit();
 		gGT->bspLeafsDrawn = 0;
 
-		gGT->bspLeafsDrawn += RenderLists_Init1P2P(ptr_mesh_info->bspRoot, gGT->visMem1->visLeafList[0], pushBuffer, (u32)&gGT->LevRenderLists[0],
+		gGT->bspLeafsDrawn += RenderLists_Init1P2P(ptr_mesh_info->bspRoot, gGT->visMem1->visLeafList[0], pushBuffer, (CtrRuntimeAddress)&gGT->LevRenderLists[0],
 		                                           gGT->visMem1->bspList[0], numPlyrCurrGame);
 
 		// 226-229
+#ifdef CTR_NATIVE_DECODED_TERRAIN
+		u32 decodedVisibleNodes;
+		if (NativeSceneConsumer_Terrain(level1, pushBuffer, &gGT->backBuffer->primMem,
+		    gGT->visMem1->visLeafList[0], gGT->visMem1->visFaceList[0], (u32)gGT->timer, &decodedVisibleNodes))
+			gGT->bspLeafsDrawn = (s32)decodedVisibleNodes;
+		else
+#endif
 		DrawLevelOvr1P(&gGT->LevRenderLists[0], pushBuffer, (struct BSP *)ptr_mesh_info, &gGT->backBuffer->primMem, gGT->visMem1->visFaceList[0],
 		               level1->ptr_tex_waterEnvMap); // waterEnvMap?
 
@@ -970,7 +984,7 @@ void RenderAllLevelGeometry(struct GameTracker *gGT, struct Level *level1, struc
 
 		for (i = 0; i < numPlyrCurrGame; i++)
 		{
-			gGT->bspLeafsDrawn += RenderLists_Init1P2P(ptr_mesh_info->bspRoot, gGT->visMem1->visLeafList[i], &gGT->pushBuffer[i], (u32)&gGT->LevRenderLists[i],
+			gGT->bspLeafsDrawn += RenderLists_Init1P2P(ptr_mesh_info->bspRoot, gGT->visMem1->visLeafList[i], &gGT->pushBuffer[i], (CtrRuntimeAddress)&gGT->LevRenderLists[i],
 			                                           gGT->visMem1->bspList[i], numPlyrCurrGame);
 		}
 
@@ -1008,7 +1022,7 @@ void RenderAllLevelGeometry(struct GameTracker *gGT, struct Level *level1, struc
 
 	for (i = 0; i < numPlyrCurrGame; i++)
 	{
-		gGT->bspLeafsDrawn += RenderLists_Init3P4P(ptr_mesh_info->bspRoot, gGT->visMem1->visLeafList[i], &gGT->pushBuffer[i], (u32)&gGT->LevRenderLists[i],
+		gGT->bspLeafsDrawn += RenderLists_Init3P4P(ptr_mesh_info->bspRoot, gGT->visMem1->visLeafList[i], &gGT->pushBuffer[i], (CtrRuntimeAddress)&gGT->LevRenderLists[i],
 		                                           gGT->visMem1->bspList[i]);
 	}
 

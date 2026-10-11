@@ -709,6 +709,8 @@ static inline void VehEmitter_StoreMAC(s32 *out)
 	out[2] = z;
 }
 
+// Skidmark records keep their 16-byte layout; their base within Driver moves
+// on host64. Rebase the cursor before applying the retail wheel offsets.
 static inline void VehEmitter_Skidmarks(struct Instance *instanceArg, struct Driver *driverArg, TerrainFlags terrainFlags, u8 flagsArg)
 {
 	register struct Driver *d CTR_PSX_REGISTER("$19") = driverArg;
@@ -828,7 +830,7 @@ skidColorDone:
 		z = posZ - skidOffset;
 		skidOffset = (u32)frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		currentMarkBase = (u8 *)d + skidOffset;
+		currentMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(currentMarkBase);
 		skidOffset = x + widthX;
 		((union VehEmitterSkidmark *)(currentMarkBase + 0xc4))->fields.edge0.x = (s16)skidOffset;
@@ -856,7 +858,7 @@ skidColorDone:
 		frame = skidOffset & DRIVER_SKIDMARK_FRAME_INDEX_MASK;
 		skidOffset = (u32)frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		previousMarkBase = (u8 *)d + skidOffset;
+		previousMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(previousMarkBase);
 		((union VehEmitterSkidmark *)(previousMarkBase + 0xc4))->fields.edge0.x = (s16)(x + (widthX >> VEH_EMITTER_SKID_PREVIOUS_WIDTH_SHIFT));
 		((union VehEmitterSkidmark *)(previousMarkBase + 0xc4))->fields.edge0.y = (s16)posY;
@@ -895,7 +897,7 @@ skidColorDone:
 		z = posZ - skidOffset;
 		skidOffset = frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		currentMarkBase = (u8 *)d + skidOffset;
+		currentMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(currentMarkBase);
 		skidOffset = x + widthX;
 		((union VehEmitterSkidmark *)(currentMarkBase + 0xd4))->fields.edge0.x = (s16)skidOffset;
@@ -923,7 +925,7 @@ skidColorDone:
 		frame = skidOffset & DRIVER_SKIDMARK_FRAME_INDEX_MASK;
 		skidOffset = frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		previousMarkBase = (u8 *)d + skidOffset;
+		previousMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(previousMarkBase);
 		((union VehEmitterSkidmark *)(previousMarkBase + 0xd4))->fields.edge0.x = (s16)(x + (widthX >> VEH_EMITTER_SKID_PREVIOUS_WIDTH_SHIFT));
 		((union VehEmitterSkidmark *)(previousMarkBase + 0xd4))->fields.edge0.y = (s16)posY;
@@ -964,7 +966,7 @@ skidColorDone:
 		z = posZ - skidOffset;
 		skidOffset = frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		currentMarkBase = (u8 *)d + skidOffset;
+		currentMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(currentMarkBase);
 		skidOffset = x + widthX;
 		((union VehEmitterSkidmark *)(currentMarkBase + 0xe4))->fields.edge0.x = (s16)skidOffset;
@@ -992,7 +994,7 @@ skidColorDone:
 		frame = skidOffset & DRIVER_SKIDMARK_FRAME_INDEX_MASK;
 		skidOffset = frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		previousMarkBase = (u8 *)d + skidOffset;
+		previousMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(previousMarkBase);
 		((union VehEmitterSkidmark *)(previousMarkBase + 0xe4))->fields.edge0.x = (s16)(x + (widthX >> VEH_EMITTER_SKID_PREVIOUS_WIDTH_SHIFT));
 		((union VehEmitterSkidmark *)(previousMarkBase + 0xe4))->fields.edge0.y = (s16)posY;
@@ -1031,7 +1033,7 @@ skidColorDone:
 		z = posZ - skidOffset;
 		skidOffset = frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		currentMarkBase = (u8 *)d + skidOffset;
+		currentMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(currentMarkBase);
 		skidOffset = x + widthX;
 		((union VehEmitterSkidmark *)(currentMarkBase + 0xf4))->fields.edge0.x = (s16)skidOffset;
@@ -1059,7 +1061,7 @@ skidColorDone:
 		frame = skidOffset & DRIVER_SKIDMARK_FRAME_INDEX_MASK;
 		skidOffset = frame << 6;
 		CTR_PSX_KEEP_VALUE(skidOffset);
-		previousMarkBase = (u8 *)d + skidOffset;
+		previousMarkBase = (u8 *)d + offsetof(struct Driver, skidmarks) - 0xc4 + skidOffset;
 		CTR_PSX_KEEP_VALUE(previousMarkBase);
 		halfWidthX = widthX >> VEH_EMITTER_SKID_PREVIOUS_WIDTH_SHIFT;
 		skidOffset = x + halfWidthX;

@@ -13,10 +13,18 @@ enum STACK_POOL
 // Pool record capacities, including the intrusive list header.
 enum ThreadStackSize
 {
-	THREAD_SMALL_STACK_SIZE = 0x48,
-	THREAD_MEDIUM_STACK_SIZE = 0x88,
+	// Host records can double their pointer-bearing payload. Include the
+	// enlarged Item prefix; JitPool_Init aligns the resulting slot stride.
+	THREAD_SMALL_STACK_SIZE = CTR_RUNTIME_ABI(0x48, 0x90),
+	THREAD_MEDIUM_STACK_SIZE = CTR_RUNTIME_ABI(0x88, 0x110),
+#if !defined(CTR_NATIVE_HOST64)
 	THREAD_LARGE_STACK_SIZE = 0x670,
+#endif
 };
+
+#if defined(CTR_NATIVE_HOST64)
+#define THREAD_LARGE_STACK_SIZE DRIVER_RUNTIME_POOL_BYTES
+#endif
 
 enum THREAD_RELATIVE
 {
@@ -199,6 +207,7 @@ struct DriverCollisionSearch
 
 CTR_STATIC_ASSERT(offsetof(struct DriverCollisionSearch, bucket) == 0);
 CTR_STATIC_ASSERT(offsetof(struct DriverCollisionSearch, hitDir) == sizeof(struct BucketSearchParams));
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Thread, driverHitRadiusSquared) == 0x38);
 CTR_STATIC_ASSERT(offsetof(struct Thread, driverCollisionReserved_0x3c) == 0x3c);
 CTR_STATIC_ASSERT(offsetof(struct Thread, driverCollisionReserved_0x3e) == 0x3e);
@@ -211,6 +220,12 @@ CTR_STATIC_ASSERT(offsetof(struct BucketSearchParams, bestDistSq) == 0xc);
 CTR_STATIC_ASSERT(offsetof(struct BucketSearchParams, dist) == 0x10);
 CTR_STATIC_ASSERT(sizeof(struct BucketSearchParams) == 0x18);
 CTR_STATIC_ASSERT(sizeof(struct DriverCollisionSearch) == 0x20);
+#else
+CTR_STATIC_ASSERT(offsetof(struct Thread, prev) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct Thread, object) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(sizeof(((struct Thread *)0)->funcThTick) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct BucketSearchParams, th) % _Alignof(void *) == 0);
+#endif
 
 // These are used to recursively
 // search threads with unidirectional
@@ -243,6 +258,10 @@ struct ThreadBucket
 	// size is 0x14
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct ThreadBucket) == 0x14);
+#else
+CTR_STATIC_ASSERT(_Alignof(struct ThreadBucket) >= _Alignof(void *));
+#endif
 
 #endif

@@ -122,7 +122,7 @@ static u32 DrawLevelOvr3P_TranslateClipRecordLabel(u32 address)
 static void DrawLevelOvr3P_CopyScratchWords(const struct DrawLevelOvrBucketSetupRecord *setup, int setupIndex, const struct DrawLevelOvrBucketSetupCopy *copy)
 {
 	const u32 *source = DrawLevelOvr3P_GetBucketSetupCopySource(setup, setupIndex, copy);
-	u32 *scratch = CTR_SCRATCHPAD_PTR(u32, copy->scratchOffset);
+	u32 *scratch = CTR_TERRAIN_WORK_PTR(u32, copy->scratchOffset);
 
 	if (source == NULL)
 	{
@@ -160,7 +160,7 @@ static void DrawLevelOvr3P_ApplyBucketSetup(u32 setupAddress, u32 handlerAddress
 
 static void DrawLevelOvr3P_CopyScratchInitTable(void)
 {
-	u32 *scratch = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET);
+	u32 *scratch = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET);
 
 	for (s32 scratchWordIndex = 0; scratchWordIndex < OVR228_SCRATCH_INIT_WORD_COUNT; scratchWordIndex++)
 	{
@@ -170,7 +170,7 @@ static void DrawLevelOvr3P_CopyScratchInitTable(void)
 
 static void DrawLevelOvr3P_CopyClipRecordJumpTable(void)
 {
-	u32 *clipRecordJumpTable = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET);
+	u32 *clipRecordJumpTable = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET);
 
 	for (s32 jumpWordIndex = 0; jumpWordIndex < OVR228_CLIP_RECORD_JUMP_WORD_COUNT; jumpWordIndex++)
 	{
@@ -182,7 +182,7 @@ static int DrawLevelOvr3P_DrawViewportBucket(struct DrawLevelOvr1PRenderList *re
                                              struct PrimMem *primMem, const int *visFaceList, u8 **clipCursor, int playerIndex, int applySetup,
                                              int *didDispatch)
 {
-	u32 bucketIndex = (u32)renderListOffset / sizeof(u32);
+	u32 bucketIndex = (u32)renderListOffset / sizeof(void *);
 	const struct DrawLevelOvr1PBucket *bucket = &sDrawLevelOvr1PBuckets[bucketIndex];
 	void *bucketValue = DrawLevelOvr1P_GetRenderListBucketValue(renderList, bucket);
 	u32 setupAddress = R228.bucketSetupAddresses[bucketIndex];
@@ -217,7 +217,7 @@ static int DrawLevelOvr3P_DispatchBucketTable(struct DrawLevelOvr1PRenderList *r
                                               struct PrimMem *primMem, const int *visFaceList0, const int *visFaceList1, const int *visFaceList2,
                                               u8 **clipCursors)
 {
-	for (s32 renderListOffset = DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_4X1_LIST; renderListOffset >= 0; renderListOffset -= (s32)sizeof(u32))
+	for (s32 renderListOffset = DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_4X1_LIST; renderListOffset >= 0; renderListOffset -= (s32)sizeof(void *))
 	{
 		int setupApplied = 0;
 		int didDispatch = 0;
@@ -336,29 +336,35 @@ void DrawLevelOvr3P(void *LevRenderList, struct PushBuffer *pb, struct BSP *bspL
 	struct DrawLevelOvr1PRenderList *renderLists = LevRenderList;
 	struct mesh_info *mesh = (struct mesh_info *)bspList;
 	u8 *clipCursors[3];
-	u32 hostStackAnchor;
+#ifndef CTR_NATIVE
+	int hostStackAnchor = 0;
+#endif
 
-	DrawLevelOvr1P_Scratch()->savedStackPtr32 = (u32)(u32)&hostStackAnchor;
-	DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[0] = (u32)(u32)visFaceList0;
+#ifdef CTR_NATIVE
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->savedStackPtr32, NULL);
+#else
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->savedStackPtr32, &hostStackAnchor);
+#endif
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[0], visFaceList0);
 	if (visFaceList0 == NULL)
 	{
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[1] = (u32)(u32)visFaceList1;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[1], visFaceList1);
 	if (visFaceList1 == NULL)
 	{
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[2] = (u32)(u32)visFaceList2;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[2], visFaceList2);
 	if (visFaceList2 == NULL)
 	{
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->waterEnvMapPtr32 = (u32)(u32)waterEnvMap;
-	DrawLevelOvr1P_Scratch()->primMemEndPtr32 = (u32)(u32)primMem->end;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->waterEnvMapPtr32, waterEnvMap);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->primMemEndPtr32, primMem->end);
 
 	if (mesh->ptrQuadBlockArray == NULL)
 	{
@@ -369,27 +375,27 @@ void DrawLevelOvr3P(void *LevRenderList, struct PushBuffer *pb, struct BSP *bspL
 	clipCursors[1] = data.PtrClipBuffer[1];
 	clipCursors[2] = data.PtrClipBuffer[2];
 
-	DrawLevelOvr1P_Scratch()->pushBufferPtr32[0] = (u32)(u32)&pb[0];
-	DrawLevelOvr1P_Scratch()->pushBufferPtr32[1] = (u32)(u32)&pb[1];
-	DrawLevelOvr1P_Scratch()->pushBufferPtr32[2] = (u32)(u32)&pb[2];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0] = (u32)(u32)clipCursors[0];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1] = (u32)(u32)clipCursors[1];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[2] = (u32)(u32)clipCursors[2];
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->pushBufferPtr32[0], &pb[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->pushBufferPtr32[1], &pb[1]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->pushBufferPtr32[2], &pb[2]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0], clipCursors[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1], clipCursors[1]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[2], clipCursors[2]);
 
 	DrawLevelOvr1P_SetPrimReserveBias(0);
 	DrawLevelOvr1P_SetListHandlersSeedRenderedCursor(0);
 	Ovr226_800a0dc4_ClearProjectedScratch();
 	DrawLevelOvr3P_CopyScratchInitTable();
-	DrawLevelOvr1P_Scratch()->renderListPtr32 = (u32)(u32)LevRenderList;
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->renderListPtr32, LevRenderList);
 
 	if (!DrawLevelOvr3P_DispatchBucketTable(renderLists, pb, mesh, primMem, visFaceList0, visFaceList1, visFaceList2, clipCursors))
 	{
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0] = (u32)(u32)clipCursors[0];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1] = (u32)(u32)clipCursors[1];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[2] = (u32)(u32)clipCursors[2];
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0], clipCursors[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1], clipCursors[1]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[2], clipCursors[2]);
 
 	DrawLevelOvr3P_CopyClipRecordJumpTable();
 	if (!DrawLevelOvr_ConsumeClipRecordsForViewport(&pb[0], primMem, clipCursors[0], 0, DrawLevelOvr3P_ConsumeClipRecords))

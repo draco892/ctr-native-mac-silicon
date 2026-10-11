@@ -64,8 +64,8 @@ int LOAD_HowlSectorChainStart(CdlFILE *cdlFileHWL, void *ptrDestination, int fir
 	}
 
 	// backup, so chain can use it later
-	sdata->howlChainParams[0] = (int)cdlFileHWL;
-	sdata->howlChainParams[1] = (int)ptrDestination;
+	sdata->howlChainParams[0] = (CtrCallbackArg)cdlFileHWL;
+	sdata->howlChainParams[1] = (CtrCallbackArg)ptrDestination;
 	sdata->howlChainParams[2] = (int)firstSector;
 	sdata->howlChainParams[3] = (int)numSector;
 	// NOTE(aalhendi): Retail does not move the final parameter store into the mode-setting call's delay slot.
@@ -92,13 +92,13 @@ int LOAD_HowlSectorChainStart(CdlFILE *cdlFileHWL, void *ptrDestination, int fir
 
 int LOAD_HowlSectorChainEnd()
 {
-	int *howlChainParams;
+	CtrCallbackArg *howlChainParams;
 	int howlChainState = sdata->howlChainState;
 	howlChainParams = sdata->howlChainParams;
 
 	if (howlChainState == -1)
 	{
-		LOAD_HowlSectorChainStart((CdlFILE *)howlChainParams[0], (void *)howlChainParams[1], howlChainParams[2], howlChainParams[3]);
+		LOAD_HowlSectorChainStart((CdlFILE *)howlChainParams[0], (void *)howlChainParams[1], (int)howlChainParams[2], (int)howlChainParams[3]);
 
 		return 0;
 	}

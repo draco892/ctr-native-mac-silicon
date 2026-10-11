@@ -1,4 +1,28 @@
 #include <common.h>
+#ifdef CTR_NATIVE
+#include <platform/native_host_scratch.h>
+#ifdef CTR_INTERNAL
+#include <platform/native_checkpoint.h>
+#endif
+struct RenderBucketNativePointers {
+    struct RenderBucketEntry *nextEntry;
+    struct PushBuffer *pushBuffer;
+    struct PrimMem *primMem;
+    struct Instance *inst;
+};
+static struct RenderBucketNativePointers *RenderBucket_HostPointers(void)
+{
+    struct RenderBucketNativePointers *p=NativeHostScratch_Get(NATIVE_HOST_SCRATCH_RENDER_BUCKET,sizeof(*p),_Alignof(struct RenderBucketNativePointers));
+    if(p==NULL) CTR_TRAP();
+#ifdef CTR_INTERNAL
+    NativeCheckpoint_RegisterPointerSlotSized(&p->nextEntry,sizeof(p->nextEntry));
+    NativeCheckpoint_RegisterPointerSlotSized(&p->pushBuffer,sizeof(p->pushBuffer));
+    NativeCheckpoint_RegisterPointerSlotSized(&p->primMem,sizeof(p->primMem));
+    NativeCheckpoint_RegisterPointerSlotSized(&p->inst,sizeof(p->inst));
+#endif
+    return p;
+}
+#endif
 
 
 struct RenderBucketEntry
@@ -14,14 +38,26 @@ struct RenderBucketQueueState
 	u32 *otCurr;
 	u32 *otEndMinusOne;
 };
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct RenderBucketEntry) == 0x8);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct RenderBucketEntry, inst) == 0x0);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct RenderBucketEntry, instPlayerBase) == 0x4);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct Item, next) == 0x0);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Item, prev) == 0x4);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct Item) == 0x8);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct CameraDC, visInstSrc) == 0x28);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct CameraDC) == 0xdc);
+#endif
 CTR_STATIC_ASSERT(CTR_OFFSET_OF_2D_ARRAY(MATRIX, m, 0, 0) == 0x0);
 CTR_STATIC_ASSERT(CTR_OFFSET_OF_2D_ARRAY(MATRIX, m, 0, 2) == 0x4);
 CTR_STATIC_ASSERT(CTR_OFFSET_OF_2D_ARRAY(MATRIX, m, 1, 1) == 0x8);
@@ -36,25 +72,51 @@ CTR_STATIC_ASSERT(offsetof(struct ModelFrame, pos.y) == 0x2);
 CTR_STATIC_ASSERT(offsetof(struct ModelFrame, pos.z) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct ModelFrame, vertexOffset) == 0x18);
 CTR_STATIC_ASSERT(sizeof(struct ModelFrame) == 0x1c);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Thread, object) == 0x30);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Driver, driverID) == 0x4a);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct Model, numHeaders) == 0x12);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct Model, headers) == 0x14);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, maxDistanceLOD) == 0x14);
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, flags) == 0x16);
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, scale) == 0x18);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, ptrCommandList) == 0x20);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, ptrFrameData) == 0x24);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, ptrTexLayout) == 0x28);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, ptrColors) == 0x2c);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, unk3) == 0x30);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, numAnimations) == 0x34);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelHeader, ptrAnimations) == 0x38);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct ModelHeader) == 0x40);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct ModelAnim, numFrames) == 0x10);
 CTR_STATIC_ASSERT(offsetof(struct ModelAnim, frameSize) == 0x12);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct ModelAnim, ptrDeltaArray) == 0x14);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct ModelAnim) == 0x18);
+#endif
 CTR_STATIC_ASSERT(sizeof(u32) == 0x4);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, pos.x) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, pos.y) == 0x2);
@@ -534,7 +596,7 @@ static inline void RenderBucket_WaterSplitInterpolateVertex(struct RenderBucketD
 {
 	int denom = (s16)(to->xy >> 16) - (s16)(from->xy >> 16);
 	int factor = RenderBucket_MipsSllSigned(from->splitDist, 16) / denom;
-	u32 colorHelper = (u32)(u32)ctx->inst->funcPtr[3];
+	u32 colorHelper = (u32)(CtrRuntimeAddress)ctx->inst->funcPtr[3];
 
 	// This split clips against model-space Y, not the depth plane used by 0x8006b4c8.
 	if (hasTexture != 0)
@@ -584,19 +646,43 @@ static u32 RenderBucket_PackXY(int x, int y)
 	return ((u32)(u16)x) | ((u32)(u16)y << 16);
 }
 
+#ifdef CTR_NATIVE
+static u8 *RenderBucket_HostPayload(size_t offset, size_t bytes)
+{
+	enum
+	{
+		PAYLOAD_BYTES = RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET + 256 * sizeof(struct RenderBucketPackedVertex)
+	};
+	u8 *payload = NativeHostScratch_Get(NATIVE_HOST_SCRATCH_RENDER_PAYLOAD, PAYLOAD_BYTES, _Alignof(max_align_t));
+	if (!payload || offset > PAYLOAD_BYTES || bytes > PAYLOAD_BYTES - offset)
+		CTR_TRAP();
+	return payload + offset;
+}
+#endif
 static struct RenderBucketExecuteScratch *RenderBucket_Scratch(void)
 {
+#ifdef CTR_NATIVE
+	return (struct RenderBucketExecuteScratch *)RenderBucket_HostPayload(0, sizeof(struct RenderBucketExecuteScratch));
+#else
 	return CTR_SCRATCHPAD_PTR(struct RenderBucketExecuteScratch, 0);
+#endif
 }
-
 static struct RenderBucketPackedVertex *RenderBucket_PackedVertexScratch(u16 stackIndex)
 {
-	return CTR_SCRATCHPAD_PTR(struct RenderBucketPackedVertex, RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET + (stackIndex * sizeof(struct RenderBucketPackedVertex)));
+#ifdef CTR_NATIVE
+	return (struct RenderBucketPackedVertex *)RenderBucket_HostPayload(
+	    RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET + stackIndex * sizeof(struct RenderBucketPackedVertex), sizeof(struct RenderBucketPackedVertex));
+#else
+	return CTR_SCRATCHPAD_PTR(struct RenderBucketPackedVertex, RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET + stackIndex * sizeof(struct RenderBucketPackedVertex));
+#endif
 }
-
 static u32 *RenderBucket_ColorCacheScratch(void)
 {
+#ifdef CTR_NATIVE
+	return (u32 *)RenderBucket_HostPayload(RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET, sizeof(u32));
+#else
 	return CTR_SCRATCHPAD_PTR(u32, RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET);
+#endif
 }
 
 static int RenderBucket_SignExtendByte(u8 value)
@@ -765,10 +851,10 @@ static void RenderBucket_WriteInstanceCallbackLabels(struct Instance *inst, u32 
 	// NOTE(aalhendi): Source-backs QueueDraw's retail Instance+0x5c/0x60 and
 	// Instance+0x64/0x68 label stores at 0x800714b0-0x800714f8. These are retail
 	// labels, not native host-callable pointers.
-	inst->funcPtr[2] = (void *)(u32)sRenderBucketInstanceFunc2Table8008a460[func23Index];
-	inst->funcPtr[3] = (void *)(u32)sRenderBucketInstanceFunc3Table8008a470[func23Index];
-	inst->funcPtr[0] = (void *)(u32)setupTable[func01Index];
-	inst->funcPtr[1] = (void *)(u32)primTable[func01Index];
+	inst->funcPtr[2] = (void *)(CtrRuntimeAddress)sRenderBucketInstanceFunc2Table8008a460[func23Index];
+	inst->funcPtr[3] = (void *)(CtrRuntimeAddress)sRenderBucketInstanceFunc3Table8008a470[func23Index];
+	inst->funcPtr[0] = (void *)(CtrRuntimeAddress)setupTable[func01Index];
+	inst->funcPtr[1] = (void *)(CtrRuntimeAddress)primTable[func01Index];
 }
 
 static struct RenderBucketSplitState RenderBucket_InitSplitState(const struct ModelFrame *nextFrame)
@@ -794,14 +880,22 @@ static s32 RenderBucket_MipsAdd(int lhs, int rhs)
 	return (s32)((u32)lhs + (u32)rhs);
 }
 
-static int RenderBucket_AddressSub(const void *lhs, const void *rhs)
+static CtrCallbackArg RenderBucket_AddressSub(const void *lhs, const void *rhs)
 {
-	return RenderBucket_MipsSub((int)(u32)(u32)lhs, (int)(u32)(u32)rhs);
+#ifdef CTR_NATIVE
+	return (intptr_t)((uintptr_t)lhs - (uintptr_t)rhs);
+#else
+	return RenderBucket_MipsSub((int)(u32)lhs, (int)(u32)rhs);
+#endif
 }
 
-static int RenderBucket_AddressSubOffset(const void *lhs, int rhs)
+static CtrRuntimeAddress RenderBucket_AddressSubOffset(const void *lhs, int rhs)
 {
+#if defined(CTR_NATIVE_HOST64)
+	return (CtrRuntimeAddress)lhs - (CtrRuntimeAddress)(intptr_t)rhs;
+#else
 	return RenderBucket_MipsSub((int)(u32)(u32)lhs, rhs);
+#endif
 }
 
 static int RenderBucket_HasSplitOutput(const struct RenderBucketSplitState *split)
@@ -1651,8 +1745,8 @@ static struct RenderBucketSplitState RenderBucket_BuildSplitState(struct Instanc
 	return split;
 }
 
-static int RenderBucket_AllocateOTRange(struct RenderBucketQueueState *queueState, struct PushBuffer *pb, int minDepth, int maxDepth, int viewDepth,
-                                        int depthBias, int usePushBuffer)
+static CtrRuntimeAddress RenderBucket_AllocateOTRange(struct RenderBucketQueueState *queueState, struct PushBuffer *pb, int minDepth, int maxDepth,
+                                                      int viewDepth, int depthBias, int usePushBuffer)
 {
 	u32 *rangeStart;
 	u32 *rangeEnd;
@@ -1791,8 +1885,8 @@ static int RenderBucket_BuildDepthRange(struct Instance *inst, struct ModelFrame
 {
 	(void)inst;
 	struct RenderBucketBounds bounds;
-	int primaryRange;
-	int secondaryRange;
+	CtrRuntimeAddress primaryRange;
+	CtrRuntimeAddress secondaryRange;
 	int geomScreenHalf;
 	int minDepth;
 	int maxDepth;
@@ -1925,8 +2019,8 @@ static void RenderBucket_AdvanceInstanceAnimWord(struct Instance *inst, int game
 	RenderBucket_StoreInstanceAnimWord(inst, frame);
 }
 
-static struct ModelFrame *RenderBucket_GetFrame(struct Instance *inst, struct ModelHeader *mh, struct ModelFrame **nextFrameOut, int *deltaArrayOut,
-                                                int *lastFrameAdvanceOut)
+static struct ModelFrame *RenderBucket_GetFrame(struct Instance *inst, struct ModelHeader *mh, struct ModelFrame **nextFrameOut,
+                                                CtrRuntimeAddress *deltaArrayOut, int *lastFrameAdvanceOut)
 {
 	struct ModelAnim *anim;
 	int frameIndex;
@@ -1964,7 +2058,7 @@ static struct ModelFrame *RenderBucket_GetFrame(struct Instance *inst, struct Mo
 	// NOTE(aalhendi): Retail 0x80070ca0-0x80070dfc checks ptrAnimations first,
 	// then carries current/next frame through s6/s1 plus ptrDeltaArray through
 	// IDPP 0xd4. Native keeps those values as explicit return values.
-	*deltaArrayOut = (int)anim->ptrDeltaArray;
+	*deltaArrayOut = (CtrRuntimeAddress)anim->ptrDeltaArray;
 	frameIndex = (u16)inst->animFrame;
 	lastFrame = (anim->numFrames & 0x7fff) - 1;
 	*lastFrameAdvanceOut = lastFrame;
@@ -2007,7 +2101,7 @@ static struct RenderBucketEntry *RenderBucket_QueueDraw(struct Instance *inst, s
 	struct RenderBucketSplitState split;
 	MATRIX projectionMvp;
 	u32 queuedFlags;
-	int deltaArray;
+	CtrRuntimeAddress deltaArray;
 	int lastFrameAdvance;
 	int lodIndex;
 	int lodExhausted;
@@ -2133,7 +2227,7 @@ static struct RenderBucketEntry *RenderBucket_QueueDraw(struct Instance *inst, s
 	RenderBucket_WriteInstanceCallbackLabels(inst, queuedFlags);
 	idpp->ptrCommandList = mh->ptrCommandList;
 	idpp->ptrTexLayout = mh->ptrTexLayout;
-	idpp->ptrColorLayout = (u32)mh->ptrColors;
+	idpp->ptrColorLayout = (CtrRuntimeAddress)mh->ptrColors;
 	idpp->instFlags = queuedFlags;
 	return rbi + 1;
 }
@@ -2290,6 +2384,9 @@ static void RenderBucket_CopyScratchColorCache(struct RenderBucketDrawContext *c
 	u32 *commandList = (u32 *)ctx->idpp->ptrCommandList;
 	u32 *colorLayout = (u32 *)ctx->idpp->ptrColorLayout;
 	u32 count = commandList[0];
+#ifdef CTR_NATIVE
+	RenderBucket_HostPayload(RENDER_BUCKET_PAYLOAD_SCRATCH_OFFSET, (size_t)count * sizeof(u32));
+#endif
 
 	// NOTE(aalhendi): Retail Execute copies ptrColorLayout to scratchpad 0x140
 	// before DrawFunc_Normal so UncompressAnimationFrame can service command
@@ -2385,7 +2482,7 @@ struct RenderBucketUncompressResult RenderBucket_UncompressAnimationFrame(struct
 		u8 xBits = (temporal >> 6) & 7;
 		u8 zBits = (temporal >> 3) & 7;
 		u8 yBits = temporal & 7;
-		int bx = RenderBucket_SignExtendBits(temporal >> 25, 7) << 1;
+		int bx = CTR_MipsSll(RenderBucket_SignExtendBits(temporal >> 25, 7), 1);
 		int bz = RenderBucket_SignExtendBits(temporal >> 17, 8);
 		int by = RenderBucket_SignExtendBits(temporal >> 9, 8);
 
@@ -2444,7 +2541,7 @@ static struct RenderBucketUncompressResult RenderBucket_UncompressAnimationFrame
 		u8 xBits = (temporal >> 6) & 7;
 		u8 zBits = (temporal >> 3) & 7;
 		u8 yBits = temporal & 7;
-		int bx = RenderBucket_SignExtendBits(temporal >> 25, 7) << 1;
+		int bx = CTR_MipsSll(RenderBucket_SignExtendBits(temporal >> 25, 7), 1);
 		int bz = RenderBucket_SignExtendBits(temporal >> 17, 8);
 		int by = RenderBucket_SignExtendBits(temporal >> 9, 8);
 
@@ -2532,7 +2629,7 @@ static struct RenderBucketUncompressResult RenderBucket_DispatchUncompressAnimat
 	}
 }
 
-static u32 *RenderBucket_GetNormalOTEntry(int activeRange, int depthMac0)
+static u32 *RenderBucket_GetNormalOTEntry(CtrRuntimeAddress activeRange, int depthMac0)
 {
 	int depthBin = (int)((u32)depthMac0 >> 17);
 
@@ -2548,7 +2645,7 @@ static u32 *RenderBucket_GetNormalOTEntry(int activeRange, int depthMac0)
 	return (u32 *)activeRange + depthBin;
 }
 
-static u32 *RenderBucket_GetClampedOTEntry(struct RenderBucketDrawContext *ctx, int activeRange, int depthMac0)
+static u32 *RenderBucket_GetClampedOTEntry(struct RenderBucketDrawContext *ctx, CtrRuntimeAddress activeRange, int depthMac0)
 {
 	int depthBin = (int)((u32)depthMac0 >> 17);
 
@@ -2872,14 +2969,15 @@ static int RenderBucket_DrawInstPrim_NormalAtOTEntry(struct RenderBucketDrawCont
 	return 0;
 }
 
-static int RenderBucket_DrawInstPrim_NormalAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange, int depthMac0)
+static int RenderBucket_DrawInstPrim_NormalAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, CtrRuntimeAddress activeRange,
+                                                   int depthMac0)
 {
 	// Native passes the retail scratch/register inputs as explicit context and depth state.
 	return RenderBucket_DrawInstPrim_NormalAtOTEntry(ctx, command, tex, RenderBucket_GetNormalOTEntry(activeRange, depthMac0));
 }
 
-static int RenderBucket_DrawInstPrim_KeyRelicTokenAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                          int depthMac0)
+static int RenderBucket_DrawInstPrim_KeyRelicTokenAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                          CtrRuntimeAddress activeRange, int depthMac0)
 {
 	u32 *otEntry;
 	int signedTest;
@@ -2997,7 +3095,7 @@ int RenderBucket_DrawInstPrim_Normal(struct RenderBucketDrawContext *ctx, u32 co
 
 static int RenderBucket_DrawInstPrim_SelectRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int depthMac0)
 {
-	int activeRange = ((s32)(command << 6) > 0) ? ctx->idpp->otRangeNormal : ctx->idpp->otRangeSecondary;
+	CtrRuntimeAddress activeRange = ((s32)(command << 6) > 0) ? ctx->idpp->otRangeNormal : ctx->idpp->otRangeSecondary;
 
 	return RenderBucket_DrawInstPrim_NormalAtRange(ctx, command, tex, activeRange, depthMac0);
 }
@@ -3025,8 +3123,8 @@ static u32 RenderBucket_DepthFadeColor(u32 color, int sz)
 	return (u32)MFC2(22);
 }
 
-static int RenderBucket_DrawInstPrim_DepthFadeAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                      int depthMac0)
+static int RenderBucket_DrawInstPrim_DepthFadeAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                      CtrRuntimeAddress activeRange, int depthMac0)
 {
 	(void)command;
 	u32 *otEntry;
@@ -3083,8 +3181,8 @@ static int RenderBucket_DrawInstPrim_DepthFade(struct RenderBucketDrawContext *c
 	return RenderBucket_DrawInstPrim_DepthFadeAtRange(ctx, command, tex, ctx->idpp->otRangeNormal, depthMac0);
 }
 
-static int RenderBucket_DrawInstPrim_ClampDepthAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                       int depthMac0)
+static int RenderBucket_DrawInstPrim_ClampDepthAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                       CtrRuntimeAddress activeRange, int depthMac0)
 {
 	// Native passes the scratch active range and MAC0-derived depth as explicit arguments.
 	return RenderBucket_DrawInstPrim_NormalAtOTEntry(ctx, command, tex, RenderBucket_GetClampedOTEntry(ctx, activeRange, depthMac0));
@@ -3095,8 +3193,8 @@ static int RenderBucket_DrawInstPrim_ClampDepth(struct RenderBucketDrawContext *
 	return RenderBucket_DrawInstPrim_ClampDepthAtRange(ctx, command, tex, ctx->idpp->otRangeNormal, depthMac0);
 }
 
-static int RenderBucket_DrawInstPrim_LitTextureAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                       int depthMac0)
+static int RenderBucket_DrawInstPrim_LitTextureAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                       CtrRuntimeAddress activeRange, int depthMac0)
 {
 	u32 *otEntry;
 	int signedTest;
@@ -3227,7 +3325,8 @@ static int RenderBucket_DrawInstPrim_LitTexture(struct RenderBucketDrawContext *
 	return RenderBucket_DrawInstPrim_LitTextureAtRange(ctx, command, tex, ctx->idpp->otRangeNormal, depthMac0);
 }
 
-static int RenderBucket_DrawInstPrim_GhostAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange, int depthMac0)
+static int RenderBucket_DrawInstPrim_GhostAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, CtrRuntimeAddress activeRange,
+                                                  int depthMac0)
 {
 	u32 *otEntry;
 	int alpha = ctx->idpp->alphaScale;
@@ -3309,9 +3408,10 @@ static int RenderBucket_DrawInstPrim_Ghost(struct RenderBucketDrawContext *ctx, 
 	return RenderBucket_DrawInstPrim_GhostAtRange(ctx, command, tex, ctx->idpp->otRangeNormal, depthMac0);
 }
 
-static int RenderBucket_DispatchDrawInstPrimAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange, int depthMac0)
+static int RenderBucket_DispatchDrawInstPrimAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, CtrRuntimeAddress activeRange,
+                                                    int depthMac0)
 {
-	switch ((u32)(u32)ctx->inst->funcPtr[1])
+	switch ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1])
 	{
 	case RB_RETAIL_INST_PRIM_SELECT_RANGE:
 		return RenderBucket_DrawInstPrim_SelectRange(ctx, command, tex, depthMac0);
@@ -3343,7 +3443,7 @@ static int RenderBucket_DispatchDrawInstPrimAtRange(struct RenderBucketDrawConte
 
 static int RenderBucket_DispatchDrawInstPrim(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int depthMac0)
 {
-	switch ((u32)(u32)ctx->inst->funcPtr[1])
+	switch ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1])
 	{
 	case RB_RETAIL_INST_PRIM_SELECT_RANGE:
 		return RenderBucket_DrawInstPrim_SelectRange(ctx, command, tex, depthMac0);
@@ -3373,9 +3473,9 @@ static int RenderBucket_DispatchDrawInstPrim(struct RenderBucketDrawContext *ctx
 	}
 }
 
-static int RenderBucket_SelectPrimitiveActiveRange(struct RenderBucketDrawContext *ctx, u32 command)
+static CtrRuntimeAddress RenderBucket_SelectPrimitiveActiveRange(struct RenderBucketDrawContext *ctx, u32 command)
 {
-	if ((u32)(u32)ctx->inst->funcPtr[1] == RB_RETAIL_INST_PRIM_SELECT_RANGE)
+	if ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1] == RB_RETAIL_INST_PRIM_SELECT_RANGE)
 	{
 		return ((s32)(command << 6) > 0) ? ctx->idpp->otRangeNormal : ctx->idpp->otRangeSecondary;
 	}
@@ -3412,7 +3512,7 @@ static void RenderBucket_LoadSplitPrimColors(struct RenderBucketDrawContext *ctx
 
 static int RenderBucket_SplitPrimitiveWriterSupported(struct RenderBucketDrawContext *ctx)
 {
-	u32 prim = (u32)(u32)ctx->inst->funcPtr[1];
+	u32 prim = (u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1];
 
 	return (prim == RB_RETAIL_INST_PRIM_NORMAL) || (prim == RB_RETAIL_INST_PRIM_SELECT_RANGE) || (prim == RB_RETAIL_INST_PRIM_DEPTH_FADE) ||
 	       (prim == RB_RETAIL_INST_PRIM_KEY_TOKEN) || (prim == RB_RETAIL_INST_PRIM_CLAMP_DEPTH) || (prim == RB_RETAIL_INST_PRIM_LIT_TEXTURE) ||
@@ -3567,9 +3667,9 @@ static void RenderBucket_WriteSplitFT3(POLY_FT3 *p, const struct RenderBucketSpl
 	CtrGpu_WritePackedUVWord(&p->u2, texWord2);
 }
 
-static int RenderBucket_DrawSplitPrimitiveDepthFadeAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                           int depthMac0, const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
-                                                           const struct RenderBucketSplitVertex *v2)
+static int RenderBucket_DrawSplitPrimitiveDepthFadeAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                           CtrRuntimeAddress activeRange, int depthMac0, const struct RenderBucketSplitVertex *v0,
+                                                           const struct RenderBucketSplitVertex *v1, const struct RenderBucketSplitVertex *v2)
 {
 	(void)command;
 	u32 *otEntry;
@@ -3627,9 +3727,9 @@ static int RenderBucket_DrawSplitPrimitiveDepthFadeAtRange(struct RenderBucketDr
 	return 0;
 }
 
-static int RenderBucket_DrawSplitPrimitiveGhostAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                       int depthMac0, const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
-                                                       const struct RenderBucketSplitVertex *v2)
+static int RenderBucket_DrawSplitPrimitiveGhostAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                       CtrRuntimeAddress activeRange, int depthMac0, const struct RenderBucketSplitVertex *v0,
+                                                       const struct RenderBucketSplitVertex *v1, const struct RenderBucketSplitVertex *v2)
 {
 	u32 *otEntry;
 	int alpha = ctx->idpp->alphaScale;
@@ -3709,8 +3809,8 @@ static int RenderBucket_DrawSplitPrimitiveGhostAtRange(struct RenderBucketDrawCo
 	return 0;
 }
 
-static int RenderBucket_DrawSplitPrimitiveKeyRelicTokenAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                               int depthMac0, const struct RenderBucketSplitVertex *v0,
+static int RenderBucket_DrawSplitPrimitiveKeyRelicTokenAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                               CtrRuntimeAddress activeRange, int depthMac0, const struct RenderBucketSplitVertex *v0,
                                                                const struct RenderBucketSplitVertex *v1, const struct RenderBucketSplitVertex *v2)
 {
 	u32 *otEntry;
@@ -3769,9 +3869,9 @@ static int RenderBucket_DrawSplitPrimitiveKeyRelicTokenAtRange(struct RenderBuck
 	return 0;
 }
 
-static int RenderBucket_DrawSplitPrimitiveLitTextureAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange,
-                                                            int depthMac0, const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
-                                                            const struct RenderBucketSplitVertex *v2)
+static int RenderBucket_DrawSplitPrimitiveLitTextureAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex,
+                                                            CtrRuntimeAddress activeRange, int depthMac0, const struct RenderBucketSplitVertex *v0,
+                                                            const struct RenderBucketSplitVertex *v1, const struct RenderBucketSplitVertex *v2)
 {
 	u32 *otEntry;
 	int signedTest;
@@ -3844,11 +3944,11 @@ static int RenderBucket_DrawSplitPrimitiveLitTextureAtRange(struct RenderBucketD
 	return 0;
 }
 
-static int RenderBucket_DrawSplitPrimitiveAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange, int depthMac0,
-                                                  const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
+static int RenderBucket_DrawSplitPrimitiveAtRange(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, CtrRuntimeAddress activeRange,
+                                                  int depthMac0, const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
                                                   const struct RenderBucketSplitVertex *v2)
 {
-	u32 prim = (u32)(u32)ctx->inst->funcPtr[1];
+	u32 prim = (u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1];
 
 	// NOTE(aalhendi): Retail tail-calls Instance+0x60 from the generated split
 	// helpers. Native only claims the labels whose generated-UV ABI is modeled.
@@ -3904,9 +4004,9 @@ static void RenderBucket_BuildDepthSplitIntersection(struct RenderBucketDrawCont
 	RenderBucket_ProjectSplitVertex(ctx, dst);
 }
 
-static int RenderBucket_SelectDepthSplitHelperRange(struct RenderBucketDrawContext *ctx, u32 command, int helperRange)
+static CtrRuntimeAddress RenderBucket_SelectDepthSplitHelperRange(struct RenderBucketDrawContext *ctx, u32 command, CtrRuntimeAddress helperRange)
 {
-	if ((u32)(u32)ctx->inst->funcPtr[1] == RB_RETAIL_INST_PRIM_SELECT_RANGE)
+	if ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1] == RB_RETAIL_INST_PRIM_SELECT_RANGE)
 	{
 		return RenderBucket_SelectPrimitiveActiveRange(ctx, command);
 	}
@@ -3914,8 +4014,8 @@ static int RenderBucket_SelectDepthSplitHelperRange(struct RenderBucketDrawConte
 	return helperRange;
 }
 
-static int RenderBucket_DrawDepthSplitCandidate(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange, int depthMac0,
-                                                const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
+static int RenderBucket_DrawDepthSplitCandidate(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, CtrRuntimeAddress activeRange,
+                                                int depthMac0, const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
                                                 const struct RenderBucketSplitVertex *v2, int guardDist)
 {
 	if (guardDist >= 0)
@@ -3938,8 +4038,8 @@ static int RenderBucket_DrawSplitClipped(struct RenderBucketDrawContext *ctx, u3
 	struct RenderBucketSplitVertex bc;
 	struct RenderBucketSplitVertex cb;
 	int hasTexture = tex != 0;
-	int primaryRange;
-	int secondaryRange;
+	CtrRuntimeAddress primaryRange;
+	CtrRuntimeAddress secondaryRange;
 	int signMask = 0;
 
 	RenderBucket_AssignSplitUvs(ctx, tex);
@@ -4082,9 +4182,9 @@ static void RenderBucket_BuildWaterSplitIntersection(struct RenderBucketDrawCont
 	RenderBucket_ProjectSplitVertex(ctx, dst);
 }
 
-static int RenderBucket_SelectWaterSplitHelperRange(struct RenderBucketDrawContext *ctx, u32 command, int helperRange)
+static CtrRuntimeAddress RenderBucket_SelectWaterSplitHelperRange(struct RenderBucketDrawContext *ctx, u32 command, CtrRuntimeAddress helperRange)
 {
-	if ((u32)(u32)ctx->inst->funcPtr[1] == RB_RETAIL_INST_PRIM_SELECT_RANGE)
+	if ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[1] == RB_RETAIL_INST_PRIM_SELECT_RANGE)
 	{
 		return RenderBucket_SelectPrimitiveActiveRange(ctx, command);
 	}
@@ -4116,7 +4216,7 @@ static int RenderBucket_ApplyWaterSplitSideSelector(struct RenderBucketDrawConte
 	int selector;
 
 	// NOTE(aalhendi): Maps retail side-selector labels 0x8006d55c-0x8006d5b8.
-	switch ((u32)(u32)ctx->inst->funcPtr[2])
+	switch ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[2])
 	{
 	case RB_RETAIL_INST_FUNC2_SPLIT_BOTH_MASK:
 		if (guardDist >= 0)
@@ -4163,8 +4263,8 @@ static int RenderBucket_ApplyWaterSplitSideSelector(struct RenderBucketDrawConte
 	return guardDist < 0;
 }
 
-static int RenderBucket_DrawWaterSplitCandidate(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, int activeRange, int depthMac0,
-                                                const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
+static int RenderBucket_DrawWaterSplitCandidate(struct RenderBucketDrawContext *ctx, u32 command, struct TextureLayout *tex, CtrRuntimeAddress activeRange,
+                                                int depthMac0, const struct RenderBucketSplitVertex *v0, const struct RenderBucketSplitVertex *v1,
                                                 const struct RenderBucketSplitVertex *v2, int guardDist)
 {
 	struct RenderBucketSplitVertex out0 = *v0;
@@ -4191,8 +4291,8 @@ static int RenderBucket_DrawWaterSplitClipped(struct RenderBucketDrawContext *ct
 	struct RenderBucketSplitVertex bc;
 	struct RenderBucketSplitVertex cb;
 	int hasTexture = tex != 0;
-	int primaryRange;
-	int secondaryRange;
+	CtrRuntimeAddress primaryRange;
+	CtrRuntimeAddress secondaryRange;
 	int signMask = 0;
 
 	RenderBucket_AssignSplitUvs(ctx, tex);
@@ -4551,7 +4651,7 @@ static int RenderBucket_DrawSpecialPrimitive(struct RenderBucketDrawContext *ctx
 
 static void RenderBucket_SwapActiveRanges(struct RenderBucketDrawContext *ctx)
 {
-	int range = ctx->idpp->otRangeNormal;
+	CtrRuntimeAddress range = ctx->idpp->otRangeNormal;
 
 	ctx->idpp->otRangeNormal = ctx->idpp->otRangeSecondary;
 	ctx->idpp->otRangeSecondary = range;
@@ -5047,7 +5147,7 @@ static void RenderBucket_SetFarColorFromInstance(struct Instance *inst)
 
 static int RenderBucket_RunInstanceSetupCallback(struct RenderBucketDrawContext *ctx)
 {
-	switch ((u32)(u32)ctx->inst->funcPtr[0])
+	switch ((u32)(CtrRuntimeAddress)ctx->inst->funcPtr[0])
 	{
 	case RB_RETAIL_INST_SETUP_LIGHT_COLOR:
 		CTC2(ctx->inst->specLightX, 16);
@@ -5198,10 +5298,22 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 
 	anim = RenderBucket_GetAnim(inst, mh);
 
-	scratch->instPtr32 = (u32)(u32)inst;
-	if (scratch->pushBufferPtr32 != (u32)(u32)pb)
+#ifdef CTR_NATIVE
+    RenderBucket_HostPointers()->inst=inst;
+#else
+    scratch->instPtr32 = (u32)(u32)inst;
+#endif
+#ifdef CTR_NATIVE
+    if(RenderBucket_HostPointers()->pushBuffer!=pb)
+#else
+    if (scratch->pushBufferPtr32 != (u32)(u32)pb)
+#endif
 	{
-		scratch->pushBufferPtr32 = (u32)(u32)pb;
+#ifdef CTR_NATIVE
+        RenderBucket_HostPointers()->pushBuffer=pb;
+#else
+        scratch->pushBufferPtr32 = (u32)(u32)pb;
+#endif
 		scratch->geomW = pb->rect.w;
 		scratch->geomH = pb->rect.h;
 		gte_SetGeomOffset(pb->rect.w >> 1, pb->rect.h >> 1);
@@ -5211,7 +5323,7 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 	{
 		scratch->frameOrigin.xy.x = mf->pos.x + nextFrame->pos.x;
 		scratch->frameOrigin.xy.y = mf->pos.y + nextFrame->pos.y;
-		scratch->frameOrigin.z = (s32)(mf->pos.z + nextFrame->pos.z) << 1;
+		scratch->frameOrigin.z = (s32)(mf->pos.z + nextFrame->pos.z) * 2;
 	}
 	else
 	{
@@ -5262,16 +5374,25 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 void RenderBucket_Execute(void *param_1, struct PrimMem *param_2)
 {
 	struct RenderBucketEntry *entry = (struct RenderBucketEntry *)param_1;
-	struct RenderBucketExecuteScratch *scratch = RenderBucket_Scratch();
 
 	// Native uses the explicit RenderBucketDrawContext scratch/register ABI.
+#ifdef CTR_NATIVE
+    RenderBucket_HostPointers()->primMem=param_2;
+    RenderBucket_HostPointers()->pushBuffer=NULL;
+#else
+	struct RenderBucketExecuteScratch *scratch = RenderBucket_Scratch();
 	scratch->primMemPtr32 = (u32)(u32)param_2;
 	scratch->pushBufferPtr32 = 0;
+#endif
 	for (; entry->inst != 0; entry++)
 	{
 		struct RenderBucketDrawContext ctx = {0};
 
-		scratch->nextEntryPtr32 = (u32)(u32)(entry + 1);
+#ifdef CTR_NATIVE
+        RenderBucket_HostPointers()->nextEntry=entry+1;
+#else
+        scratch->nextEntryPtr32 = (u32)(u32)(entry + 1);
+#endif
 
 		if (RenderBucket_PrepareDrawContext(&ctx, entry->inst, entry->instPlayerBase, param_2) == 0)
 		{

@@ -28,7 +28,7 @@ static u32 CAM_SkyboxGlow_LerpColor(u32 from, u32 to, s32 ratio)
 
 static s32 CAM_SkyboxGlow_FixedRatio(s32 numerator, s32 denominator)
 {
-	return (numerator << 12) / denominator;
+	return CTR_MipsSll(numerator, 12) / denominator;
 }
 
 static s32 CAM_SkyboxGlow_ScreenX(s32 screenWidth, s32 ratio)
@@ -484,7 +484,7 @@ void CAM_StartOfRace(struct CameraDC *cDC)
 
 	if (hasFlyInCamera)
 	{
-		s32 flyInData = (s32)level1->ptr_restart_points;
+		struct CheckpointNode *flyInData = level1->ptr_restart_points;
 		cDC->trackPathProgress = 0;
 		cDC->transitionBlend = 0;
 
@@ -493,7 +493,7 @@ void CAM_StartOfRace(struct CameraDC *cDC)
 
 		// when camera reaches player, be zoomed in
 		cDC->cameraMode = 0;
-		cDC->trackPathNode = (struct CheckpointNode *)(flyInData + 0x18);
+		cDC->trackPathNode = &flyInData[2];
 
 		// if 1 or less screens
 		cDC->transitionFrame = 0xA5;
@@ -1047,7 +1047,7 @@ void CAM_SetDesiredPosRot(struct CameraDC *cDC, const SVec3 *pos, const SVec3 *r
 void CAM_FollowDriver_Normal(struct CameraDC *cDC, struct Driver *d, SVec3 *pushBufferPos, struct CameraScratchWork *scratchWork, struct ZoomData *zoom)
 {
 	struct PushBuffer *pb = (struct PushBuffer *)pushBufferPos;
-	struct ScratchpadStruct *sps = (struct ScratchpadStruct *)scratchWork;
+	struct ScratchpadStruct *sps = CameraScratchWork_Collision(scratchWork);
 	struct CameraScratch *cam = &scratchWork->camera;
 	struct GameTracker *gGT = sdata->gGT;
 	struct GamepadBuffer *pad = &sdata->gGamepads->gamepad[d->driverID];
@@ -1416,10 +1416,10 @@ void CAM_FollowDriver_Normal(struct CameraDC *cDC, struct Driver *d, SVec3 *push
 		// Mud, Water, or FastWater
 		if (((state == 0xe) || (state == 4)) || (state == 0xd))
 		{
-			scratchWork->collision.terrainHeightFloor = 0;
+			(*CameraScratchWork_TerrainHeight(scratchWork)) = 0;
 		}
 
-		x = (s32)scratchWork->collision.terrainHeightFloor + (s32)zoom->vertDistance;
+		x = (s32)(*CameraScratchWork_TerrainHeight(scratchWork)) + (s32)zoom->vertDistance;
 		if (cam->pos.y < x)
 		{
 			cam->pos.y = x;
@@ -1446,7 +1446,7 @@ LAB_8001ab04:
 
 	if (cDC->BlastedLerp.boolLerpPending != 0)
 	{
-		cam->delta.y = cam->pos.y + (s32) * (s16 *)((s32)cDC + 0xc8);
+		cam->delta.y = cam->pos.y + (s32)cDC->BlastedLerp.unkOffset[0];
 	}
 
 	if (d->kartState == KS_MASK_GRABBED)
@@ -1650,7 +1650,7 @@ LAB_8001ab04:
 	cam->pos.y = (s32)pb->pos.y;
 	cam->pos.z = (s32)pb->pos.z;
 
-	CAM_FindClosestQuadblock((struct ScratchpadStruct *)scratchWork, cDC, d, &cam->pos);
+	CAM_FindClosestQuadblock(CameraScratchWork_Collision(scratchWork), cDC, d, &cam->pos);
 
 	x = cDC->transitionFrameCount;
 	iVar14 = cDC->transitionFrameCount;
@@ -1799,7 +1799,7 @@ void CAM_ThTick(struct Thread *t)
 	s32 iVar25;
 
 	struct GameTracker *gGT = sdata->gGT;
-	struct CameraScratchWork *scratchWork = CTR_SCRATCHPAD_PTR(struct CameraScratchWork, 0x108);
+	struct CameraScratchWork *scratchWork = CTR_CAMERA_WORK();
 	scratchpad = (s16 *)scratchWork;
 	struct CameraScratch *camThTick = &scratchWork->camera;
 	cDC = (struct CameraDC *)t->inst;
@@ -1885,7 +1885,7 @@ void CAM_ThTick(struct Thread *t)
 			uVar16 = (u32)*psVar20;
 
 			// +2 to include respawnPoint and modeID
-			psVar20 = (s16 *)((s32)psVar19 + data.EndOfRace_Camera_Size[iVar7] + 2);
+			psVar20 = (s16 *)((u8 *)psVar19 + data.EndOfRace_Camera_Size[iVar7] + 2);
 
 			psVar15 = &gGT->level1->ptr_restart_points[uVar16];
 
@@ -2287,7 +2287,7 @@ SkipNewCameraEOR:
 			cameraProbePos.y = (s32)pb->pos.y;
 			cameraProbePos.z = (s32)pb->pos.z;
 
-			CAM_FindClosestQuadblock((struct ScratchpadStruct *)scratchWork, cDC, d, &cameraProbePos);
+			CAM_FindClosestQuadblock(CameraScratchWork_Collision(scratchWork), cDC, d, &cameraProbePos);
 			goto LAB_8001c150;
 		}
 	}

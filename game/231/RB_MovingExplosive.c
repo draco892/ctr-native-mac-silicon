@@ -33,7 +33,7 @@ void RB_MovingExplosive_ThTick(struct Thread *t)
 	inst = t->inst;
 	tw = inst->thread->object;
 	tw->timeAlive += GAME_TRACKER->elapsedTimeMS;
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 
 	// Start or update the weapon's looping sound.
 	if (inst->model->id == DYNAMIC_ROCKET)

@@ -62,7 +62,7 @@ void GhostTape_End(void)
 	GhostTape_WriteMoves(1);
 
 	gh = GHOST_RECORDING.ptrGhost;
-	gh->size = (u16)(u32)GHOST_RECORDING.ptrCurrOffset - (u16)(u32)GHOST_RECORDING.ptrStartOffset;
+	gh->size = (u16)(CtrRuntimeAddress)GHOST_RECORDING.ptrCurrOffset - (u16)(CtrRuntimeAddress)GHOST_RECORDING.ptrStartOffset;
 	gh->ySpeed = d->ySpeed;
 	gh->speedApprox = d->speedApprox;
 	gh->timeElapsedInRace = GAME_TRACKER->drivers[0]->timeElapsedInRace;
@@ -175,7 +175,7 @@ void GhostTape_WriteMoves(s16 raceFinished)
 		GHOST_RECORDING.lastSampledPositionY = position[1];
 		GHOST_RECORDING.lastSampledPositionZ = position[2];
 		GHOST_RECORDING.instanceFlags = inst->flags;
-		if ((u32)GHOST_RECORDING.ptrEndOffset < (u32)GHOST_RECORDING.ptrCurrOffset + GHOST_RECORD_BUFFER_END_GUARD)
+		if ((CtrRuntimeAddress)GHOST_RECORDING.ptrEndOffset < (CtrRuntimeAddress)GHOST_RECORDING.ptrCurrOffset + GHOST_RECORD_BUFFER_END_GUARD)
 		{
 			GHOST_CAN_SAVE = 0;
 			if (!(GAME_TRACKER->gameMode1 & END_OF_RACE))

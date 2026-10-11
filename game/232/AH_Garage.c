@@ -217,7 +217,7 @@ checkRewards:
 		s32 byteOffset = (hubLevel - N_SANITY_BEACH) * AH_HUB_TRACK_COUNT * sizeof(s16);
 		for (; i < AH_HUB_TRACK_COUNT; i++)
 		{
-			if (!CHECK_ADV_BIT(rewards, *(s16 *)(byteOffset + (u32)tracks) + ADV_REWARD_FIRST_TROPHY))
+			if (!CHECK_ADV_BIT(rewards, *(s16 *)(byteOffset + (CtrRuntimeAddress)tracks) + ADV_REWARD_FIRST_TROPHY))
 			{
 				bossIsOpen = false;
 				break;
@@ -296,7 +296,7 @@ openGarage:
 {
 	Vec3 pos;
 
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 	sps->Input1.pos.x = inst->instDef->pos.x;
 	sps->Input1.pos.y = inst->instDef->pos.y;
 	sps->Input1.pos.z = inst->instDef->pos.z;
@@ -452,7 +452,7 @@ void AH_Garage_LInB(struct Instance *inst)
 		for (; i < AH_HUB_TRACK_COUNT; i++)
 		{
 			// if any trophy on this hub is not unlocked
-			if (!CHECK_ADV_BIT(rewards, *(s16 *)(trackOffset + (u32)tracks) + ADV_REWARD_FIRST_TROPHY))
+			if (!CHECK_ADV_BIT(rewards, *(s16 *)(trackOffset + (CtrRuntimeAddress)tracks) + ADV_REWARD_FIRST_TROPHY))
 			{
 				// boss is not open
 				bossIsOpen = false;

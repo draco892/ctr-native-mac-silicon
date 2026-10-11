@@ -8,7 +8,9 @@ int NativeCheckpoint_Capture(void *dst, int dstSize);
 int NativeCheckpoint_Restore(const void *src, int srcSize);
 #if defined(CTR_INTERNAL)
 void NativeCheckpoint_OnMempackArenaReset(void);
+// Legacy asset relocation slots remain four bytes.
 void NativeCheckpoint_RegisterPointerSlot(void *slot);
+void NativeCheckpoint_RegisterPointerSlotSized(void *slot,u32 width);
 #endif
 
 #endif

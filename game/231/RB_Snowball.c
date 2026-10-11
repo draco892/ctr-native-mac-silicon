@@ -4,7 +4,7 @@ static inline const struct SpawnPosRot *RB_Snowball_GetFrame(struct Snowball *sn
 {
 	const struct SpawnPosRot *base = GAME_TRACKER->level1->ptrSpawnType2_PosRot[snowObj->snowID].coords.posRot;
 	// NOTE(aalhendi): Keep the byte stride before the base in this 32-bit address calculation.
-	return (const struct SpawnPosRot *)(index * sizeof(struct SpawnPosRot) + (u32)base);
+	return (const struct SpawnPosRot *)(index * sizeof(struct SpawnPosRot) + (CtrRuntimeAddress)base);
 }
 
 void RB_Snowball_ThTick(struct Thread *t)

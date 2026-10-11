@@ -18,6 +18,9 @@
 #include "RenderBucket/RenderBucket_QueueExecute.c"
 #include "RenderLevel/AnimateWater.c"
 #include "RenderLevel/RenderLists.c"
+#ifdef CTR_NATIVE_GAME_SCENE
+#include "RenderLevel/NativeSceneConsumer.c"
+#endif
 #include "DrawTires.c"
 #include "RenderStars.c"
 #include "Torch.c"

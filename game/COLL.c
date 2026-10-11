@@ -75,70 +75,7 @@ void COLL_SearchBSP_CallbackQUADBLK(const SVec3 *top, const SVec3 *bottom, struc
 }
 
 
-internal b32 COLL_SearchBSP_CallbackPARAM_Overlaps(struct BSP *node, const struct BoundingBox *bounds)
-{
-	return ((node->box.min.y <= bounds->max.y) && (node->box.min.x <= bounds->max.x) && (bounds->min.x <= node->box.max.x) &&
-	        (node->box.min.z <= bounds->max.z) && (bounds->min.z <= node->box.max.z) && (bounds->min.y <= node->box.max.y));
-}
-
-internal void COLL_SearchBSP_CallbackPARAM_PushChild(struct BSP *root, BspChildId childID, const struct BoundingBox *bounds, BspChildId **stackTop)
-{
-	u16 rawChildID = (u16)childID;
-	if (rawChildID == BSP_CHILD_ID_NONE)
-	{
-		return;
-	}
-
-	struct BSP *child = &root[rawChildID & BSP_CHILD_ID_INDEX_MASK];
-	if (!COLL_SearchBSP_CallbackPARAM_Overlaps(child, bounds))
-	{
-		return;
-	}
-
-	**stackTop = childID;
-	(*stackTop)++;
-}
-
-internal void COLL_SearchBSP_CallbackPARAM_PushChildren(struct BSP *root, struct BSP *node, const struct BoundingBox *bounds, BspChildId **stackTop)
-{
-	// Retail pushes child 0 then child 1; the scratchpad stack pops child 1 first.
-	COLL_SearchBSP_CallbackPARAM_PushChild(root, node->data.branch.childID[0], bounds, stackTop);
-	COLL_SearchBSP_CallbackPARAM_PushChild(root, node->data.branch.childID[1], bounds, stackTop);
-}
-
-void COLL_SearchBSP_CallbackPARAM(struct BSP *root, struct BoundingBox *bbox, CollBspLeafCallback callback, struct ScratchpadStruct *sps)
-{
-	if (root == NULL)
-	{
-		return;
-	}
-
-	struct BoundingBox bounds = *bbox;
-
-	// Retail stores pending child IDs at scratchpad 0x1f800070 and pops them
-	// LIFO, preserving the original BSP traversal order without host recursion.
-	BspChildId *stackBase = CTR_SCRATCHPAD_PTR(BspChildId, 0x70);
-	BspChildId *stackTop = stackBase;
-
-	COLL_SearchBSP_CallbackPARAM_PushChildren(root, root, &bounds, &stackTop);
-
-	while (stackTop != stackBase)
-	{
-		stackTop--;
-		BspChildId childID = *stackTop;
-		u16 rawChildID = (u16)childID;
-		struct BSP *child = &root[rawChildID & BSP_CHILD_ID_INDEX_MASK];
-
-		if ((rawChildID & BSP_CHILD_ID_LEAF_FLAG) != 0)
-		{
-			callback(child, sps);
-			continue;
-		}
-
-		COLL_SearchBSP_CallbackPARAM_PushChildren(root, child, &bounds, &stackTop);
-	}
-}
-
+#include "COLL_SearchBSP.c"
 
 internal s32 Coll_MipsAbsS32(s32 value)
 {
@@ -1342,7 +1279,7 @@ void COLL_FIXED_PlayerSearch(struct Thread *t, struct Driver *d)
 {
 	struct GameTracker *gGT = sdata->gGT;
 	struct Level *level = gGT->level1;
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 	s32 normalBlendWeight;
 
 	COLL_FIXED_PlayerSearch_SetupSearch(sps, d);
@@ -2109,62 +2046,7 @@ void COLL_MOVED_BSPLEAF_TestQuadblocks(struct BSP *node, struct ScratchpadStruct
 	}
 }
 
-enum
-{
-	COLL_SCRUB_DEPTH_REPEAT_STEP = 0x100,
-	COLL_SCRUB_DEPTH_REPEAT_LIMIT = 0x401,
-	COLL_HITBOX_SCRUB_DEPTH_BONUS = 0x200,
-	COLL_MOVED_PLAYER_HIT_RADIUS = 0x19,
-};
-
-void COLL_MOVED_FindScrub(struct QuadBlock *qb, s32 triangleID, struct ScratchpadStruct *sps)
-{
-	struct ScratchpadStructExtended *ext = (struct ScratchpadStructExtended *)sps;
-	u16 searchFlags = sps->Union.QuadBlockColl.searchFlags;
-
-	if (qb == NULL)
-	{
-		sps->Union.QuadBlockColl.searchFlags = searchFlags & ~COLL_SEARCH_REPEAT_SCRUB;
-		sps->Input1.scrubDepth = 0;
-		ext->numTriangles = 0;
-		return;
-	}
-
-	for (s32 i = ext->numTriangles - 1; i >= 0; i--)
-	{
-		struct BspSearchTriangle *tri = &ext->bspSearchTriangle[i];
-
-		if ((tri->quadblock == qb) && (tri->triangleID == triangleID))
-		{
-			s32 scrubDepth = tri->scrubDepth;
-			s16 scrub = scrubDepth;
-
-			if (scrubDepth < COLL_SCRUB_DEPTH_REPEAT_LIMIT)
-			{
-				scrubDepth = CTR_MipsAddLo(scrubDepth, COLL_SCRUB_DEPTH_REPEAT_STEP);
-				scrub = scrubDepth;
-				tri->scrubDepth = scrubDepth;
-			}
-
-			sps->Union.QuadBlockColl.searchFlags = searchFlags | COLL_SEARCH_REPEAT_SCRUB;
-			sps->Input1.scrubDepth = scrub;
-			return;
-		}
-	}
-
-	{
-		struct BspSearchTriangle *tri = &ext->bspSearchTriangle[ext->numTriangles];
-
-		tri->quadblock = qb;
-		tri->triangleID = triangleID;
-		tri->scrubDepth = 0;
-	}
-
-	sps->Union.QuadBlockColl.searchFlags = searchFlags & ~COLL_SEARCH_REPEAT_SCRUB;
-	sps->Input1.scrubDepth = 0;
-	ext->numTriangles++;
-}
-
+#include "COLL_ScrubHistory.c"
 
 internal s32 CollMoved_PlayerSearch_StepVelocity(s32 velocity, s32 elapsedTimeMS, s32 multiplier)
 {
@@ -2246,7 +2128,7 @@ internal void CollMoved_PlayerSearch_StoreHitbox(struct ScratchpadStruct *sps)
 void COLL_MOVED_PlayerSearch(struct Thread *t, struct Driver *d)
 {
 	struct GameTracker *gGT = sdata->gGT;
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 	s32 multiplier = COLL_FRACTION_ONE;
 	s16 hitRadius = COLL_MOVED_PLAYER_HIT_RADIUS;
 

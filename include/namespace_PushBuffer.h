@@ -156,7 +156,9 @@ struct PushBuffer
 	// 0x110 - end of struct
 };
 
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct PushBuffer) == 0x110);
+#endif
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, distanceToScreen_PREV) == 0x18);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, rect) == 0x1c);
 CTR_STATIC_ASSERT(offsetof(RECT, w) == 0x4);
@@ -174,10 +176,20 @@ CTR_STATIC_ASSERT(offsetof(struct PushBuffer, matrix_Camera) + CTR_OFFSET_OF_ARR
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, frustumPlanes) == 0xa8);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, RenderListJmpIndex) == 0xd0);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, bbox) == 0xe8);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, ptrOT) == 0xf4);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, renderBucketOTRangeEnd) == 0xf8);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, renderBucketOTByteOffset) == 0xfc);
+#endif
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, renderBucketScreenPos) == 0x100);
 CTR_STATIC_ASSERT(offsetof(struct PushBuffer, renderBucketScreenSize) == 0x104);
+#endif
 
+#if defined(CTR_NATIVE_HOST64)
+CTR_STATIC_ASSERT(sizeof(((struct PushBuffer *)0)->ptrOT) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct PushBuffer, ptrOT) % _Alignof(void *) == 0);
+CTR_STATIC_ASSERT(offsetof(struct PushBuffer, renderBucketOTRangeEnd) == offsetof(struct PushBuffer, ptrOT) + sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct PushBuffer, cameraID) == offsetof(struct PushBuffer, renderBucketScreenSize) + sizeof(s32));
+#endif
 #endif

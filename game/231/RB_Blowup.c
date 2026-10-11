@@ -1,12 +1,7 @@
 #include <common.h>
 #include "RB_Effect.h"
 
-struct Blowup
-{
-	struct Instance *shockwave;
-	struct Instance *explosion;
-	u32 reserved; // Retail allocates a third word; these behaviors leave it untouched.
-};
+
 
 void RB_Blowup_ProcessBucket(struct Thread *thread)
 {
@@ -137,7 +132,7 @@ void RB_Blowup_Init(struct Instance *weaponInst)
 #if defined(CTR_NATIVE)
 ApplyDamage:;
 #endif
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 
 	// put weapon position on scratchpad
 	sps->Input1.pos.x = weaponInst->matrix.t[0];

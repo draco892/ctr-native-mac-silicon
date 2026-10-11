@@ -6,6 +6,7 @@
 #if defined(CTR_NATIVE)
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #else
 typedef unsigned int size_t;
 #define NULL                   ((void *)0)
@@ -23,6 +24,31 @@ typedef unsigned int size_t;
 #define CTR_STATIC_ASSERT(expr) _Static_assert((expr), #expr)
 #else
 #define CTR_STATIC_ASSERT(expr) extern char CTR_JOIN(ctr_static_assert_, __LINE__)[(expr) ? 1 : -1]
+#endif
+
+#if defined(CTR_NATIVE) && UINTPTR_MAX > UINT32_MAX
+#define CTR_NATIVE_HOST64 1
+#endif
+
+// Resident objects have two ABIs. Serialized PS1 records must not use this
+// selector: their four-byte fields and strides are independent of the host.
+#if defined(CTR_NATIVE_HOST64)
+#define CTR_RUNTIME_ABI(retail, host64) (host64)
+#else
+#define CTR_RUNTIME_ABI(retail, host64) (retail)
+#endif
+
+// Runtime callback transport retains host width; PS1 ABI stays one word.
+#if defined(CTR_NATIVE)
+typedef uintptr_t CtrRuntimeAddress;
+typedef intptr_t CtrCallbackArg;
+typedef void *CtrRuntimePointer;
+typedef void *CtrVoiceSetPointer;
+#else
+typedef unsigned int CtrRuntimeAddress;
+typedef int CtrCallbackArg;
+typedef int CtrRuntimePointer;
+typedef int CtrVoiceSetPointer;
 #endif
 
 typedef unsigned long long u64;
@@ -50,7 +76,11 @@ CTR_STATIC_ASSERT(sizeof(u32) == 4);
 CTR_STATIC_ASSERT(sizeof(s32) == 4);
 CTR_STATIC_ASSERT(sizeof(u64) == 8);
 CTR_STATIC_ASSERT(sizeof(s64) == 8);
+#if defined(CTR_NATIVE)
+CTR_STATIC_ASSERT(sizeof(void *) == 4 || sizeof(void *) == 8);
+#else
 CTR_STATIC_ASSERT(sizeof(void *) == 4);
+#endif
 
 #define SCREEN_HEIGHT                            216
 #define FPS                                      30

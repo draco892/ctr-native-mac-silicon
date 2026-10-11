@@ -547,7 +547,7 @@ void BOTS_SetRotation(struct Driver *bot, int useSpawnYaw)
 void BOTS_LevInstColl(struct Thread *botThread)
 {
 	struct Driver *driver = (struct Driver *)botThread->object;
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 
 	sps->ptr_mesh_info = sdata->gGT->level1->ptr_mesh_info;
 	sps->Union.QuadBlockColl.searchFlags = COLL_SEARCH_TEST_INSTANCES;
@@ -816,7 +816,7 @@ void BOTS_Killplane(struct Thread *botThread)
 
 void BOTS_ThTick_Drive(struct Thread *botThread)
 {
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 	struct Driver *botDriver = (struct Driver *)botThread->object;     // iVar17
 	struct Instance *botInstance = (struct Instance *)botThread->inst; // iVar22
 	struct GameTracker *gGT = sdata->gGT;
@@ -3086,7 +3086,7 @@ struct Driver *BOTS_Driver_Init(int driverID)
 	// path data found
 	struct Thread *t = PROC_BirthWithObject(
 	    // creation flags
-	    SIZE_RELATIVE_POOL_BUCKET(DRIVER_NTSC_RETAIL_SIZE, NONE, LARGE, ROBOT),
+	    SIZE_RELATIVE_POOL_BUCKET(DRIVER_RUNTIME_BASE_SIZE, NONE, LARGE, ROBOT),
 
 	    BOTS_ThTick_Drive, // behavior
 	    0,                 //"robotcar",	// debug name
@@ -3094,7 +3094,7 @@ struct Driver *BOTS_Driver_Init(int driverID)
 	);
 
 	struct Driver *d = t->object;
-	memset(d, 0x0, DRIVER_NTSC_RETAIL_SIZE);
+	memset(d, 0x0, DRIVER_RUNTIME_BASE_SIZE);
 	VehBirth_NonGhost(t, driverID);
 	sdata->gGT->drivers[driverID] = d;
 	t->modelIndex = DYNAMIC_ROBOT_CAR;

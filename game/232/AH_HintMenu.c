@@ -138,7 +138,7 @@ void AH_HintMenu_MenuProc(struct RectMenu *inputMenu)
 						drawInst = inst;
 						do
 						{
-							u32 drawAddress = (u32)drawInst;
+							CtrRuntimeAddress drawAddress = (CtrRuntimeAddress)drawInst;
 							drawAddress += j * sizeof(struct InstDrawPerPlayer);
 							INST_GETIDPP((struct Instance *)drawAddress)->pushBuffer = NULL;
 							j++;

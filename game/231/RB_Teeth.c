@@ -125,7 +125,7 @@ void RB_Teeth_ThTick(struct Thread *t)
 
 checkObstruction:
 	// Players and mines keep the door from closing through them.
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 	sps->Input1.pos.x = inst->matrix.t[0];
 	sps->Input1.pos.y = inst->matrix.t[1];
 	z = inst->matrix.t[2];

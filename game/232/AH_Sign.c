@@ -15,7 +15,12 @@ CTR_STATIC_ASSERT(offsetof(struct AHSignScratch, sps) == 0x18);
 
 void AH_Sign_LInB(struct Instance *inst)
 {
+#if defined(CTR_NATIVE)
+	struct AHSignScratch storage = {0};
+	struct AHSignScratch *scratch = &storage;
+#else
 	struct AHSignScratch *scratch = CTR_SCRATCHPAD_PTR(struct AHSignScratch, 0x108);
+#endif
 	s16 x, y, z;
 	// NOTE(aalhendi): Keep retail's X-normal allocation while building the
 	// collision probe. Native is free to allocate the same C value normally.

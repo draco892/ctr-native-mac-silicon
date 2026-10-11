@@ -1547,7 +1547,7 @@ struct Data
 	} voiceData[0x10];
 
 	// 8008389c
-	int voiceSetPtr[0x10];
+	CtrVoiceSetPointer voiceSetPtr[0x10];
 
 	// 800838dc
 	u8 voiceID[0x18];
@@ -2377,8 +2377,8 @@ struct Data
 CTR_STATIC_ASSERT(offsetof(struct Data, podiumModel_firstPlace) == offsetof(struct Data, driverModelExtras) + sizeof(((struct Data *)0)->driverModelExtras));
 CTR_STATIC_ASSERT(offsetof(struct Data, currSlot) == offsetof(struct Data, driverModelExtras) + 11 * sizeof(void *));
 CTR_STATIC_ASSERT(sizeof(((struct Data *)0)->characterIDs_2P_AIs) == 0x1c);
-CTR_STATIC_ASSERT(offsetof(struct Data, bakedGteMath) == 0x7554);
-CTR_STATIC_ASSERT(sizeof(((struct Data *)0)->bakedGteMath) == BAKED_GTE_MATRIX_COUNT * 8);
+CTR_STATIC_ASSERT(offsetof(struct Data, bakedGteMath) == CTR_RUNTIME_ABI(0x7554, 0x8bb0));
+CTR_STATIC_ASSERT(sizeof(((struct Data *)0)->bakedGteMath) == CTR_RUNTIME_ABI(BAKED_GTE_MATRIX_COUNT * 8, 0x140));
 
 // NOTE(aalhendi): Grouping the resident block keeps its far-page base and
 // field offsets shared by native and PSX instead of duplicating raw addresses.
@@ -2412,9 +2412,9 @@ struct MemcardState
 	struct GhostProfile ghostProfile_current;
 };
 
-CTR_STATIC_ASSERT(sizeof(struct MemcardState) == 0x1d0);
-CTR_STATIC_ASSERT(offsetof(struct MemcardState, numGhostProfilesSaved) == 0x2c);
-CTR_STATIC_ASSERT(offsetof(struct MemcardState, ghostProfile_memcard) == 0x30);
+CTR_STATIC_ASSERT(sizeof(struct MemcardState) == CTR_RUNTIME_ABI(0x1d0, 0x1e0));
+CTR_STATIC_ASSERT(offsetof(struct MemcardState, numGhostProfilesSaved) == CTR_RUNTIME_ABI(0x2c, 0x38));
+CTR_STATIC_ASSERT(offsetof(struct MemcardState, ghostProfile_memcard) == CTR_RUNTIME_ABI(0x30, 0x3c));
 
 // 0x8008CF6C
 struct sData
@@ -2549,7 +2549,7 @@ struct sData
 	// ============================
 
 	// 8008d088
-	int ptrMPK; // maybe is `void*` instead of `int`
+	CtrRuntimePointer ptrMPK; // maybe is `void*` instead of `int`
 
 	// 8008d08c
 	// ptrLEV, stored here during loading,
@@ -2958,10 +2958,10 @@ struct sData
 	int boolOpenTokenRelicMenu;
 
 	// 8008d4b4 -- ptr to 8009ad18 (pushBuffer) for multiplayer wumpa
-	int ptrPushBufferUI;
+	CtrRuntimePointer ptrPushBufferUI;
 
 	// 8008d4b8
-	int ptrFruitDisp; // should maybe be `struct Instance*` instead of `int`?
+	CtrRuntimePointer ptrFruitDisp; // should maybe be `struct Instance*` instead of `int`?
 
 	// 8008d4bc
 	int menuReadyToPass;
@@ -3312,7 +3312,7 @@ struct sData
 
 	// 8008d770
 	// spu address of some type
-	int audioAllocPtr;
+	int audioAllocPtr; // SPU address in 8-byte units, not a host pointer.
 
 	// 8008d774
 	u8 bankLoadStage;
@@ -3399,7 +3399,7 @@ struct sData
 	struct EngineFX *howl_metaEngineFX;
 
 	// 8008d7d4
-	int howl_endOfHowl;
+	CtrRuntimeAddress howl_endOfHowl;
 
 	// 8008d7d8
 	struct OtherFX *howl_metaOtherFX;
@@ -3494,7 +3494,7 @@ struct sData
 	// 8008d844
 	// save parameters so you can
 	// call the function over and over
-	int howlChainParams[4];
+	CtrCallbackArg howlChainParams[4];
 
 	// 8008d854
 	void *ptrHubAlloc;
@@ -3636,7 +3636,7 @@ struct sData
 	u16 typeTimer;
 
 	// 8008d8f4
-	int ptrLoadSaveObj;
+	CtrRuntimePointer ptrLoadSaveObj;
 
 	// 8008d8f8
 
@@ -4215,13 +4215,13 @@ register struct sData *sdata asm("gp");
 struct sData *sdata = &sdata_static;
 #endif
 
-CTR_STATIC_ASSERT(sizeof(struct MetaDataCHAR) == 0x10);
-CTR_STATIC_ASSERT(offsetof(struct MetaDataCHAR, iconID) == 0x8);
+CTR_STATIC_ASSERT(sizeof(struct MetaDataCHAR) == CTR_RUNTIME_ABI(0x10, 0x18));
+CTR_STATIC_ASSERT(offsetof(struct MetaDataCHAR, iconID) == CTR_RUNTIME_ABI(0x8, 0xc));
 CTR_STATIC_ASSERT(sizeof(((struct MetaDataCHAR *)0)->iconID) == 0x2);
-CTR_STATIC_ASSERT(offsetof(struct MetaDataCHAR, engineID) == 0xc);
-CTR_STATIC_ASSERT(offsetof(struct sData, numIconsEOR) == 0x604);
+CTR_STATIC_ASSERT(offsetof(struct MetaDataCHAR, engineID) == CTR_RUNTIME_ABI(0xc, 0x10));
+CTR_STATIC_ASSERT(offsetof(struct sData, numIconsEOR) == CTR_RUNTIME_ABI(0x604, 0x67c));
 CTR_STATIC_ASSERT(sizeof(((struct sData *)0)->numIconsEOR) == 0x2);
-CTR_STATIC_ASSERT(offsetof(struct sData, s_additionInt) == 0x608);
+CTR_STATIC_ASSERT(offsetof(struct sData, s_additionInt) == CTR_RUNTIME_ABI(0x608, 0x680));
 
 // OVR1
 // 8009f6fc - 800a0cb8
@@ -4238,33 +4238,33 @@ CTR_STATIC_ASSERT(offsetof(struct sData, s_additionInt) == 0x608);
 // SP
 // 801ff800 - 80200000
 
-CTR_STATIC_ASSERT(sizeof(struct Terrain) == 0x40);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, speedMultiplier) == 0x8);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, slowUntilSpeed) == 0xc);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, counterSteerRatio) == 0x10);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, turnLeanScale) == 0x14);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, groundFrictionScale) == 0x20);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, turnAngleScale) == 0x24);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, turnResponseScale) == 0x28);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, skidSound) == 0x30);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, bot.fields.speedFlags) == 0x36);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, bot.fields.targetSpeedScale) == 0x38);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, bot.fields.accelerationScale) == 0x3a);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, botFrictionScale) == 0x3c);
-CTR_STATIC_ASSERT(offsetof(struct Terrain, padding_0x3e) == 0x3e);
+CTR_STATIC_ASSERT(sizeof(struct Terrain) == CTR_RUNTIME_ABI(0x40, 0x50));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, speedMultiplier) == CTR_RUNTIME_ABI(0x8, 0xc));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, slowUntilSpeed) == CTR_RUNTIME_ABI(0xc, 0x10));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, counterSteerRatio) == CTR_RUNTIME_ABI(0x10, 0x14));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, turnLeanScale) == CTR_RUNTIME_ABI(0x14, 0x18));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, groundFrictionScale) == CTR_RUNTIME_ABI(0x20, 0x30));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, turnAngleScale) == CTR_RUNTIME_ABI(0x24, 0x34));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, turnResponseScale) == CTR_RUNTIME_ABI(0x28, 0x38));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, skidSound) == CTR_RUNTIME_ABI(0x30, 0x40));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, bot.fields.speedFlags) == CTR_RUNTIME_ABI(0x36, 0x46));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, bot.fields.targetSpeedScale) == CTR_RUNTIME_ABI(0x38, 0x48));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, bot.fields.accelerationScale) == CTR_RUNTIME_ABI(0x3a, 0x4a));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, botFrictionScale) == CTR_RUNTIME_ABI(0x3c, 0x4c));
+CTR_STATIC_ASSERT(offsetof(struct Terrain, padding_0x3e) == CTR_RUNTIME_ABI(0x3e, 0x4e));
 CTR_STATIC_ASSERT(sizeof(((struct Terrain *)0)->bot.fields.speedFlags) == 0x2);
 CTR_STATIC_ASSERT(sizeof(((struct Terrain *)0)->bot.fields.targetSpeedScale) == 0x2);
 CTR_STATIC_ASSERT(sizeof(((struct Terrain *)0)->bot.fields.accelerationScale) == 0x2);
 CTR_STATIC_ASSERT(sizeof(((struct Terrain *)0)->botFrictionScale) == 0x2);
-CTR_STATIC_ASSERT(sizeof(struct Scrub) == 0x10);
+CTR_STATIC_ASSERT(sizeof(struct Scrub) == CTR_RUNTIME_ABI(0x10, 0x18));
 CTR_STATIC_ASSERT(sizeof(ScrubFlags) == 0x4);
 CTR_STATIC_ASSERT(sizeof(TerrainFlags) == 0x4);
 CTR_STATIC_ASSERT(sizeof(TerrainBotFlags) == 0x2);
-CTR_STATIC_ASSERT(offsetof(struct Scrub, flags) == 0x4);
-CTR_STATIC_ASSERT(offsetof(struct Scrub, speedLimit) == 0x8);
-CTR_STATIC_ASSERT(offsetof(struct Scrub, impactAngle) == 0xC);
-CTR_STATIC_ASSERT(sizeof(struct MetaDataLEV) == 0x18);
-CTR_STATIC_ASSERT(sizeof(struct MetaDataMODEL) == 0xC);
+CTR_STATIC_ASSERT(offsetof(struct Scrub, flags) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct Scrub, speedLimit) == CTR_RUNTIME_ABI(0x8, 0xc));
+CTR_STATIC_ASSERT(offsetof(struct Scrub, impactAngle) == CTR_RUNTIME_ABI(0xC, 0x10));
+CTR_STATIC_ASSERT(sizeof(struct MetaDataLEV) == CTR_RUNTIME_ABI(0x18, 0x20));
+CTR_STATIC_ASSERT(sizeof(struct MetaDataMODEL) == CTR_RUNTIME_ABI(0xC, 0x18));
 
 #define OFFSETOF_SDATA(ELEMENT) ((u32)0x8008cf6c + OFFSETOF(struct sData, ELEMENT))
 #define OFFSETOF_DATA(ELEMENT)  ((u32)0x800809a0 + OFFSETOF(struct Data, ELEMENT))
@@ -4284,6 +4284,8 @@ CTR_STATIC_ASSERT(sizeof(struct MetaDataMODEL) == 0xC);
 #define CTR_MEMCARD_GP_ICON_SIZE         2412
 #define CTR_MEMCARD_ICON_HAND_DATA_OFFSET 0x4e00
 
+#if !defined(CTR_NATIVE_HOST64)
+// PS1 assembly displacements and virtual addresses do not describe host globals.
 CTR_STATIC_ASSERT(offsetof(struct sData, memcard_stage) == CTR_MEMCARD_GP_STAGE);
 CTR_STATIC_ASSERT(offsetof(struct sData, memcard_ptrStart) == CTR_MEMCARD_GP_BUFFER);
 CTR_STATIC_ASSERT(offsetof(struct sData, memcard_remainingAttempts) == CTR_MEMCARD_GP_RETRIES);
@@ -4306,5 +4308,7 @@ CTR_STATIC_ASSERT(OFFSETOF_SDATA(botCrashNavRot) == 0x8008D9EC);
 CTR_STATIC_ASSERT(OFFSETOF_SDATA(vehicleCollisionImpactStrength) == 0x8008D9F4);
 CTR_STATIC_ASSERT(OFFSETOF_SDATA(talkMaskXASamplePeak) == 0x8008D9F8);
 CTR_STATIC_ASSERT(OFFSETOF_SDATA(talkMaskMaxMouthFrame) == 0x8008D9FC);
+
+#endif // retail address contracts
 
 #endif

@@ -35,8 +35,8 @@ struct DrawTiresScratch
 	s32 playerCounter;
 	struct Icon **wheelSprites;
 	u32 tireColor;
-	s32 otRangeNormal;
-	s32 otRangeSecondary;
+	CtrRuntimeAddress otRangeNormal;
+	CtrRuntimeAddress otRangeSecondary;
 	union DrawTiresScratchWord wheelSize;
 	s16 vertSplit;
 	s16 pad4e;
@@ -56,8 +56,8 @@ struct DrawTiresScratch
 	s32 pad164[2];
 	s16 depthOffsetStartBytes;
 	s16 depthOffsetEndBytes;
-	s32 otRangeStart;
-	s32 otRangeEnd;
+	CtrRuntimeAddress otRangeStart;
+	CtrRuntimeAddress otRangeEnd;
 };
 
 CTR_STATIC_ASSERT(sizeof(union DrawTiresScratchWord) == 0x4);
@@ -70,6 +70,7 @@ CTR_STATIC_ASSERT(offsetof(struct DrawTiresPackedVec3, z) == 0x4);
 CTR_STATIC_ASSERT(sizeof(struct DrawTiresWheelLocal) == 0x10);
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresWheelLocal, center) == 0x0);
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresWheelLocal, rim) == 0x8);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, numPlyr) == 0x30);
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, playerCounter) == 0x34);
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, wheelSprites) == 0x38);
@@ -97,5 +98,10 @@ CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, depthOffsetEndBytes) == 0x16
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, otRangeStart) == 0x170);
 CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, otRangeEnd) == 0x174);
 CTR_STATIC_ASSERT(sizeof(struct DrawTiresScratch) == 0x178);
+
+#else
+CTR_STATIC_ASSERT(sizeof(((struct DrawTiresScratch *)0)->otRangeNormal) == sizeof(void *));
+CTR_STATIC_ASSERT(offsetof(struct DrawTiresScratch, wheelSprites) % _Alignof(void *) == 0);
+#endif
 
 #endif

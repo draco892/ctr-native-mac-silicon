@@ -74,11 +74,13 @@ struct NavHeader
 	// 0x4C
 	// struct NavFrame frame[0];
 };
-#define NAVHEADER_GETFRAME(x)    ((struct NavFrame *)((u32)x + sizeof(struct NavHeader)))
+#define NAVHEADER_GETFRAME(x)    ((struct NavFrame *)((u8 *)(x) + sizeof(struct NavHeader)))
 
 #define NAVFRAME_GETNEXTFRAME(x) (((struct NavFrame *)x) + 1)
 
 CTR_STATIC_ASSERT(sizeof(struct NavFrame) == 0x14);
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(sizeof(struct NavHeader) == 0x4c);
+#endif
 
 #endif

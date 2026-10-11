@@ -196,6 +196,6 @@ struct RectMenu
 };
 
 CTR_STATIC_ASSERT(sizeof(struct MenuRow) == 6);
-CTR_STATIC_ASSERT(sizeof(struct RectMenu) == 0x2C);
+CTR_STATIC_ASSERT(sizeof(struct RectMenu) == CTR_RUNTIME_ABI(0x2C, 0x40));
 
 #endif

@@ -26,6 +26,10 @@ void LOAD_StringToUpper(char *path)
 
 #ifdef CTR_NATIVE
 #include <platform/native_cd.h>
+#include <platform/native_asset_loading.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#endif
 #endif
 
 int LOAD_InitCDvol(void)
@@ -124,54 +128,9 @@ void *LOAD_ReadDirectory(char *filename)
 	return result;
 }
 
-void LOAD_DramFileCallback(struct LoadQueueSlot *lqs)
-{
-	char *fileBuf = lqs->ptrDestination;
-	void (*callback)(struct LoadQueueSlot *) = lqs->callbackFuncPtr;
+#include "LOAD_DramCallback.c"
 
-	if (fileBuf != NULL)
-	{
-		int ptrMapOffset = *(int *)&fileBuf[0];
-		char *realFileBuf = &fileBuf[4];
-
-		if (ptrMapOffset >= 0)
-		{
-			struct DramPointerMap *dpm = (struct DramPointerMap *)&realFileBuf[ptrMapOffset];
-
-			LOAD_RunPtrMap(realFileBuf, (int *)DRAM_GETOFFSETS(dpm), dpm->numBytes >> 2);
-
-#if defined(CTR_NATIVE)
-			if ((lqs->flags & LT_MEMPACK) != 0)
-#else
-			if ((lqs->flags & LT_SETADDR) != 0)
-#endif
-			{
-				MEMPACK_ReallocMem(ptrMapOffset + 4);
-			}
-		}
-		else
-		{
-			lqs->flags |= LT_GETADDR;
-		}
-
-		lqs->ptrDestination = &fileBuf[4];
-	}
-
-#if defined(CTR_NATIVE)
-	// NOTE(aalhendi): CTR_NATIVE keeps host callback pointers and queue sentinels.
-	if ((callback != NULL) && (callback != LOAD_DramFileCallback) && (callback != (void (*)(struct LoadQueueSlot *))-1) &&
-	    (callback != LOAD_QUEUE_CALLBACK_SET_POINTER))
-#else
-	if ((callback != NULL) && (((u32)(u32)callback & 0xff000000) == 0x80000000))
-#endif
-	{
-		callback(lqs);
-	}
-
-	sdata->queueReady = 1;
-}
-
-void *LOAD_DramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, int callbackOrFlags)
+void *LOAD_DramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, CtrCallbackArg callbackOrFlags)
 {
 	struct LoadQueueSlot lqs;
 	void *loadedFile;
@@ -241,7 +200,7 @@ void LOAD_VramFileCallback(struct LoadQueueSlot *lqs)
 	sdata->frameFinishedVRAM = sdata->gGT->frameTimer_VsyncCallback;
 }
 
-void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, int callbackOrFlags)
+void *LOAD_VramFile(void *bigfilePtr, int subfileIndex, void *ptrDestination, u32 *sizePtr, CtrCallbackArg callbackOrFlags)
 {
 	struct LoadQueueSlot lqs;
 	void *loadedFile;
@@ -355,12 +314,26 @@ void *LOAD_ReadFile_ex(struct BigHeader *bigfile, u32 loadType, int subfileIndex
 	{
 		bigfile = sdata->ptrBigfile1;
 	}
+	if (bigfile == NULL || sizePtr == NULL || subfileIndex < 0 || subfileIndex >= bigfile->numEntry)
+	{
+		Platform_LogError("[CTR Native] Invalid BIGFILE read request\n");
+		CTR_TRAP();
+	}
 #endif
 
 	// get size and offset of subfile
 	entry = BIG_GETENTRY(bigfile);
 	eSize = entry[subfileIndex].size;
 	eOffs = entry[subfileIndex].offset;
+
+#if defined(CTR_NATIVE)
+	if (eSize <= 0 || eSize > INT32_MAX - LOAD_CD_DATA_SECTOR_ROUND_MASK || eOffs < 0 ||
+	    bigfile->cdpos < 0 || eOffs > INT32_MAX - bigfile->cdpos)
+	{
+		Platform_LogError("[CTR Native] Invalid BIGFILE entry size or sector offset\n");
+		CTR_TRAP();
+	}
+#endif
 
 	*sizePtr = eSize;
 

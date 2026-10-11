@@ -1,15 +1,18 @@
 #include <common.h>
 
 // NOTE(aalhendi): These lists alternate between InstDef* and Instance* in place.
-// Both records keep their peer at 0x2c. Shared PVS lists therefore toggle once
+// Retail keeps the peer at 0x2c; host64 uses a shared full-width peer slot.
+// Shared PVS lists therefore toggle once
 // per reference, just as retail does; do not deduplicate the traversal.
 // Alias-qualified slots and byte-safe peer reads support either declared type.
 typedef void *LevInstDefLink CTR_MAY_ALIAS;
+#if !defined(CTR_NATIVE_HOST64)
 CTR_STATIC_ASSERT(offsetof(struct InstDef, ptrInstance) == offsetof(struct Instance, instDef));
+#endif
 
 static inline void *LevInstDef_Peer(const void *record)
 {
-	return (void *)CTR_ReadU32AlignedLE((const u8 *)record + offsetof(struct InstDef, ptrInstance));
+	return INST_DefinitionPeer(record);
 }
 
 

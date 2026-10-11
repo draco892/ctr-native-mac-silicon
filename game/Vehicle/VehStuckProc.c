@@ -209,7 +209,7 @@ void VehStuckProc_MaskGrab_FindDestPos(struct Driver *d, struct QuadBlock *quad)
 	}
 
 	{
-		sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+		sps = CTR_COLLISION_WORK();
 		searchDirection = 0;
 		sps->Input1.hitRadius = driver->instSelf->thread->driverHitRadius;
 		sps->Input1.hitRadiusSquared = driver->instSelf->thread->driverHitRadiusSquared;

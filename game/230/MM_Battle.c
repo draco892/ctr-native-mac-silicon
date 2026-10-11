@@ -517,7 +517,7 @@ LAB_Battle_ValidSetup:
 				case BATTLE_ROW_WEAPON_BOTTOM:
 				{
 					register u32 gameTrackerPage CTR_PSX_REGISTER("$6");
-					register u32 weaponItemsAddress CTR_PSX_REGISTER("$4");
+					register CtrRuntimeAddress weaponItemsAddress CTR_PSX_REGISTER("$4");
 					register u32 rowPage CTR_PSX_REGISTER("$5");
 					register s32 itemIndex CTR_PSX_REGISTER("$2");
 					register s32 rowOffset CTR_PSX_REGISTER("$3");
@@ -526,7 +526,7 @@ LAB_Battle_ValidSetup:
 					CTR_PSX_LOAD_SYMBOL_PAGE(itemIndex, RETAIL_GAME_TRACKER_ASM_NAME);
 					CTR_PSX_LOAD_SYMBOL_PAGE(gameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME);
 					CTR_PSX_LOAD_SYMBOL_PAGE(weaponItemsAddress, MM_BATTLE_WEAPON_ITEMS_ASM_NAME);
-					CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(weaponItemsAddress, MM_BATTLE_WEAPON_ITEMS_ASM_NAME, (u32)MM_BATTLE_WEAPON_ITEMS);
+					CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(weaponItemsAddress, MM_BATTLE_WEAPON_ITEMS_ASM_NAME, (CtrRuntimeAddress)MM_BATTLE_WEAPON_ITEMS);
 					itemIndex = CTR_PSX_PAGE_LVALUE(u16, itemIndex, MM_BATTLE_ROW_HIGHLIGHTED_PAGE_OFFSET, MM_BATTLE_ROW_HIGHLIGHTED);
 					CTR_PSX_LOAD_SYMBOL_PAGE(rowPage, RETAIL_GAME_TRACKER_ASM_NAME);
 					itemIndex = (s16)(itemIndex - BATTLE_ROW_WEAPON_TOP);

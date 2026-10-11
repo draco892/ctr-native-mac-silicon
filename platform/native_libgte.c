@@ -194,7 +194,7 @@ void NormalColor3(SVECTOR *v0, SVECTOR *v1, SVECTOR *v2, CVECTOR *v3, CVECTOR *v
 
 void NormalColorDpq(SVECTOR *v0, CVECTOR *v1, int p, CVECTOR *v2)
 {
-	gte_NormalColorDpq(v0, v1, p, v2);
+	gte_NormalColorDpq(v0, v1, &p, v2);
 }
 
 void NormalColorCol(SVECTOR *v0, CVECTOR *v1, CVECTOR *v2)
@@ -214,7 +214,7 @@ void DpqColor(CVECTOR *v0, int p, CVECTOR *v1)
 
 void ColorDpq(VECTOR *v0, CVECTOR *v1, int p, CVECTOR *v2)
 {
-	gte_ColorDpq(v0, v1, p, v2);
+	gte_ColorDpq(v0, v1, &p, v2);
 }
 
 void ColorCol(VECTOR *v0, CVECTOR *v1, CVECTOR *v2)

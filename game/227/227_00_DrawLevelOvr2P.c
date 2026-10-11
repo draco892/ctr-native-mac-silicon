@@ -52,7 +52,7 @@ static u32 DrawLevelOvr2P_TranslateCopiedLabel(u32 address)
 
 static void DrawLevelOvr2P_CopyScratchWordsTranslated(const u32 *source, const struct DrawLevelOvrBucketSetupCopy *copy)
 {
-	u32 *scratch = CTR_SCRATCHPAD_PTR(u32, copy->scratchOffset);
+	u32 *scratch = CTR_TERRAIN_WORK_PTR(u32, copy->scratchOffset);
 
 	for (u32 scratchWordIndex = 0; scratchWordIndex <= copy->lastWordIndex; scratchWordIndex++)
 	{
@@ -92,7 +92,7 @@ static void DrawLevelOvr2P_ApplyBucketSetup(u32 setupAddress, u32 handlerAddress
 
 static void DrawLevelOvr2P_CopyScratchInitTable(void)
 {
-	u32 *scratch = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET);
+	u32 *scratch = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_SCRATCH_INIT_TABLE_OFFSET);
 
 	for (s32 scratchWordIndex = 0; scratchWordIndex < OVR227_SCRATCH_INIT_WORD_COUNT; scratchWordIndex++)
 	{
@@ -166,7 +166,7 @@ static int DrawLevelOvr2P_DispatchBucketHandler(u32 handlerAddress, void *bucket
 static int DrawLevelOvr2P_DrawViewportBucket(struct DrawLevelOvr1PRenderList *renderList, s32 renderListOffset, struct PushBuffer *pb, struct mesh_info *mesh,
                                              struct PrimMem *primMem, const int *visFaceList, u8 **clipCursor, int playerIndex, int applySetup)
 {
-	u32 bucketIndex = (u32)renderListOffset / sizeof(u32);
+	u32 bucketIndex = (u32)renderListOffset / sizeof(void *);
 	const struct DrawLevelOvr1PBucket *bucket = &sDrawLevelOvr1PBuckets[bucketIndex];
 	void *bucketValue = DrawLevelOvr1P_GetRenderListBucketValue(renderList, bucket);
 	u32 setupAddress = R227.bucketSetupAddresses[bucketIndex];
@@ -197,9 +197,9 @@ static int DrawLevelOvr2P_DrawViewportBucket(struct DrawLevelOvr1PRenderList *re
 static int DrawLevelOvr2P_DispatchBucketTable(struct DrawLevelOvr1PRenderList *renderLists, struct PushBuffer *pushBuffers, struct mesh_info *mesh,
                                               struct PrimMem *primMem, const int *visFaceList0, const int *visFaceList1, u8 **clipCursors)
 {
-	for (s32 renderListOffset = DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_FULL_DYNAMIC_LIST; renderListOffset >= 0; renderListOffset -= (s32)sizeof(u32))
+	for (s32 renderListOffset = DRAW_LEVEL_OVR1P_RENDER_LIST_OFFSET_FULL_DYNAMIC_LIST; renderListOffset >= 0; renderListOffset -= (s32)sizeof(void *))
 	{
-		u32 bucketIndex = (u32)renderListOffset / sizeof(u32);
+		u32 bucketIndex = (u32)renderListOffset / sizeof(void *);
 		const struct DrawLevelOvr1PBucket *bucket = &sDrawLevelOvr1PBuckets[bucketIndex];
 		void *viewport0BucketValue = DrawLevelOvr1P_GetRenderListBucketValue(&renderLists[0], bucket);
 
@@ -236,25 +236,31 @@ void DrawLevelOvr2P(void *LevRenderList, struct PushBuffer *pb, struct BSP *bspL
 	struct DrawLevelOvr1PRenderList *renderLists = LevRenderList;
 	struct mesh_info *mesh = (struct mesh_info *)bspList;
 	u8 *clipCursors[2] = {data.PtrClipBuffer[0], data.PtrClipBuffer[1]};
-	u32 hostStackAnchor;
+#ifndef CTR_NATIVE
+	int hostStackAnchor = 0;
+#endif
 
-	// NOTE(aalhendi): Native keeps explicit host pointers while preserving retail scratch
-	// ownership and two-viewport ordering.
-	DrawLevelOvr1P_Scratch()->savedStackPtr32 = (u32)(u32)&hostStackAnchor;
-	DrawLevelOvr1P_Scratch()->primMemEndPtr32 = (u32)(u32)primMem->end;
-	DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[0] = (u32)(u32)visFaceList0;
-	DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[1] = (u32)(u32)visFaceList1;
+// NOTE(aalhendi): Native keeps explicit host pointers while preserving retail scratch
+// ownership and two-viewport ordering.
+#ifdef CTR_NATIVE
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->savedStackPtr32, NULL);
+#else
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->savedStackPtr32, &hostStackAnchor);
+#endif
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->primMemEndPtr32, primMem->end);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[0], visFaceList0);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->visFaceListArgPtr32[1], visFaceList1);
 
 	if ((visFaceList0 == NULL) || (visFaceList1 == NULL))
 	{
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->waterEnvMapPtr32 = (u32)(u32)waterEnvMap;
-	DrawLevelOvr1P_Scratch()->pushBufferPtr32[0] = (u32)(u32)&pb[0];
-	DrawLevelOvr1P_Scratch()->pushBufferPtr32[1] = (u32)(u32)&pb[1];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0] = (u32)(u32)clipCursors[0];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1] = (u32)(u32)clipCursors[1];
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->waterEnvMapPtr32, waterEnvMap);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->pushBufferPtr32[0], &pb[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->pushBufferPtr32[1], &pb[1]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0], clipCursors[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1], clipCursors[1]);
 
 	if (mesh->ptrQuadBlockArray == NULL)
 	{
@@ -272,8 +278,8 @@ void DrawLevelOvr2P(void *LevRenderList, struct PushBuffer *pb, struct BSP *bspL
 		return;
 	}
 
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0] = (u32)(u32)clipCursors[0];
-	DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1] = (u32)(u32)clipCursors[1];
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[0], clipCursors[0]);
+	NativeTerrainWork_StoreAddress(&DrawLevelOvr1P_Scratch()->entry.clip.playerClipCursorPtr32[1], clipCursors[1]);
 
 	if (!DrawLevelOvr2P_ConsumeClipRecordsForViewport(&pb[0], primMem, clipCursors[0], 0))
 	{
@@ -288,7 +294,7 @@ void DrawLevelOvr2P(void *LevRenderList, struct PushBuffer *pb, struct BSP *bspL
 
 static void DrawLevelOvr2P_CopyClipRecordJumpTable(void)
 {
-	u32 *clipRecordJumpTable = CTR_SCRATCHPAD_PTR(u32, DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET);
+	u32 *clipRecordJumpTable = CTR_TERRAIN_WORK_PTR(u32, DRAW_LEVEL_OVR1P_GT3_CLIP_RECORD_JUMP_TABLE_OFFSET);
 
 	for (s32 jumpWordIndex = 0; jumpWordIndex < OVR227_CLIP_RECORD_JUMP_WORD_COUNT; jumpWordIndex++)
 	{

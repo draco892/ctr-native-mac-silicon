@@ -32,7 +32,10 @@ these relevant ranges:
 | `.sdata` | `0x8008cf6c`-`0x8008d667` | `sdata_static` |
 | `.bss` | `0x8008d668`-`0x8009f6fc` | `bss` |
 
-The named structs are layout maps. Their field offsets matter because retail code often cares about the address, not only the C field name.
+On PS1 the named structs are layout maps. Native resident aggregates use a
+separate host ABI, including pointer alignment, and are accessed by typed fields
+or offsets derived from their declarations. Retail addresses do not locate host
+global fields. Serialized assets still use the explicit PS1 wire layouts.
 
 ## Overlay Regions
 
@@ -131,7 +134,22 @@ The PS1 scratchpad is 1 KiB:
 
 Native uses a process-local scratchpad buffer and routes `CTR_SCRATCHPAD_PTR`
 through that runtime base. Retail absolute scratchpad addresses are translated
-back to offsets from this buffer.
+back to offsets from this buffer. Native typed access checks bounds and alignment;
+the buffer has max_align_t alignment. RenderBucket temporary host pointers and
+particle render state use separate host workspaces. ARM64 collision contexts and
+camera workspaces also have separate storage: collision quad/thread fields no
+longer overlay pointer and scalar data, and scrub history belongs to each context.
+Camera height/probe consumers use typed fields rather than retail prefix casts.
+Native BSP searches have bounded per-call stacks so nested callbacks cannot reuse
+the outer pending-child list. Host workspace bytes and typed pointer traversal
+participate in version-7 checkpoints. ARM64 Torch has a scalar host workspace;
+skid work contains an aligned PushBuffer pointer and loads its actual origin
+field. Shadow scalar bytes retain their retail offsets, while nine driver/instance
+pointer slots (including the sentinel) live in separate typed arrays. Checkpoint
+visitors rebase those object pointers without interpreting scalar bytes as
+addresses. Torch particle reads use resident fields rather than retail offsets.
+Other pointer-bearing overlays still need
+migration; widening the retail byte buffer is not a substitute for that work.
 
 Scratchpad-heavy areas include:
 

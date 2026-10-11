@@ -5,7 +5,7 @@ static void OVR233_ResetGarage(void);
 static void OVR233_ResetCreditsBSS(void);
 #endif
 
-CTR_STATIC_ASSERT(sizeof(void *) == 4);
+CTR_STATIC_ASSERT(sizeof(void *) == CTR_RUNTIME_ABI(4, 8));
 
 
 #define OVR233_GARAGE_CLASS_STRING_IDS {LNG_BEGINNER, LNG_INTERMEDIATE, LNG_ADVANCED, 0}
@@ -97,7 +97,7 @@ struct Ovr233RetailPointerRange
 
 char *CS_OVR233_TranslateRetailOpcodePointer(char *opCodeAt)
 {
-	u32 ptr = (u32)opCodeAt;
+	CtrRuntimeAddress ptr = (CtrRuntimeAddress)opCodeAt;
 	static const struct Ovr233RetailPointerRange ranges[] = {
 	    OVR233_OPCODE_RANGE(bossOpcodeData, OVR233_BOSS_OPCODE_DATA, 0x2b4),
 	    OVR233_OPCODE_RANGE(script_tawnaNormal, OVR233_SCRIPT_TAWNA_NORMAL, 0x28),

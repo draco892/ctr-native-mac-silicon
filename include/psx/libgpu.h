@@ -157,7 +157,7 @@ static inline void CTR_GPU_WriteTagAddrToken(void *p, u32 token)
 #define isendprim(p)      NativeGpuLinks_IsTerminator(CTR_GPU_ReadTagWord(p) & 0x00ffffffu)
 #define nextPrim(p)       NativeGpuLinks_ToHostPointer(CTR_GPU_ReadTagWord(p) & 0x00ffffffu)
 
-#define setaddr(p, _addr) CTR_GPU_WriteTagAddrToken((p), NativeGpuLinks_FromHostPointer((const void *)(u32)(_addr)))
+#define setaddr(p, _addr) CTR_GPU_WriteTagAddrToken((p), NativeGpuLinks_FromHostPointer((const void *)(CtrRuntimeAddress)(_addr)))
 #define getaddr(p)        (u32)(CTR_GPU_ReadTagWord(p) & 0x00ffffffu)
 
 #define setlen(p, _len)   CTR_GPU_WriteTagWord((p), (CTR_GPU_ReadTagWord(p) & 0x00ffffffu) | ((u32)(u8)(_len) << 24))
@@ -737,7 +737,7 @@ extern u32 *ClearOTag(u32 *ot, int n);
 extern u32 *ClearOTagR(u32 *ot, int n);
 extern u32 *FntFlush();
 extern u32 *KanjiFntFlush(int id);
-extern u32 DrawSyncCallback(void (*func)(void));
+extern CtrRuntimeAddress DrawSyncCallback(void (*func)(void));
 extern u16 GetClut(int x, int y);
 extern u16 GetTPage(int tp, int abr, int x, int y);
 extern u16 LoadClut(u32 *clut, int x, int y);

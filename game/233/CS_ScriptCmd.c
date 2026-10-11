@@ -48,6 +48,12 @@ void CS_ScriptCmd_ReadOpcode_Main(struct CutsceneObj *cs)
 		return;
 	cursor = opcodes;
 	decoded = cs->metadataMeta;
+#if defined(CTR_NATIVE_HOST64)
+	// Wire arguments are four bytes, but their resident union also holds a
+	// host pointer. Clear the upper half before publishing a new wire value.
+	decoded->arg0.ptr = NULL;
+	decoded->arg1.ptr = NULL;
+#endif
 	cs->prevOpcode = opcodes;
 	decoded->opcode = (u8)*opcodes;
 	cursor = opcodes + 1;
@@ -101,7 +107,7 @@ void CS_ScriptCmd_ReadOpcode_Main(struct CutsceneObj *cs)
 
 	if (metaFlags & CS_OPCODE_META_HAS_ALIGNED_ARG1)
 	{
-		while ((u32)cursor & 3)
+		while ((CtrRuntimeAddress)cursor & 3)
 		{
 			cursor++;
 		}

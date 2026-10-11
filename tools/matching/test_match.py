@@ -350,7 +350,9 @@ class CheckTests(unittest.TestCase):
 class EvidenceTests(unittest.TestCase):
     def test_evidence_expires_when_an_input_or_candidate_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            # Match production ROOT's canonical path, including macOS /var's
+            # symlink to /private/var for temporary directories.
+            root = Path(directory).resolve()
             source = root / "source.c"
             header = root / "header.h"
             candidate = root / "candidate.bin"

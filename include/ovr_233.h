@@ -109,7 +109,7 @@ struct CsParticleConfig
 
 CTR_STATIC_ASSERT(sizeof(struct CsParticleConfigMeta) == 0x4);
 CTR_STATIC_ASSERT(sizeof(struct CsParticleConfigSpawn) == 0x4);
-CTR_STATIC_ASSERT(sizeof(struct CsParticleConfig) == 0xc);
+CTR_STATIC_ASSERT(sizeof(struct CsParticleConfig) == CTR_RUNTIME_ABI(0xc, 0x10));
 
 union CsOpcodeArg
 {
@@ -434,7 +434,7 @@ struct Ovr233InitMatrixTableEntry
 	int count;
 };
 
-CTR_STATIC_ASSERT(sizeof(struct Ovr233InitMatrixTableEntry) == 0x8);
+CTR_STATIC_ASSERT(sizeof(struct Ovr233InitMatrixTableEntry) == CTR_RUNTIME_ABI(0x8, 0x10));
 
 struct CsThreadNames
 {
@@ -700,53 +700,92 @@ extern struct OverlayDATA_233 D233;
 	CTR_STATIC_ASSERT(OFFSETOF(struct OverlayDATA_233, ELEMENT) == (OFFSET) - 0x518c); \
 	CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->ELEMENT) == (SIZE))
 
-CTR_STATIC_ASSERT(sizeof(void *) == 4);
+CTR_STATIC_ASSERT(sizeof(void *) == CTR_RUNTIME_ABI(4, 8));
 OVR233_LAYOUT_ASSERT(VertSplitLine, 0x518c, 0x4);
 OVR233_LAYOUT_ASSERT(boolLoadNextSwap, 0x5190, 0x4);
 OVR233_LAYOUT_ASSERT(boolStartToSkip, 0x5194, 0x4);
 OVR233_LAYOUT_ASSERT(bossCutsceneIndex, 0x5198, 0x4);
 OVR233_LAYOUT_ASSERT(CutsceneManipulatesAudio, 0x519c, 0x2);
 OVR233_LAYOUT_ASSERT(audioControlPadding, 0x519e, 0x2);
-OVR233_LAYOUT_ASSERT(particleEmitterData, 0x51a0, 0x8dc);
-OVR233_LAYOUT_ASSERT(particleConfigs, 0x5a7c, 0x60);
-OVR233_LAYOUT_ASSERT(csOpcodeMetaPrefix, 0x5adc, 0x34);
-OVR233_LAYOUT_ASSERT(bossOpcodeData, 0x5b10, 0x2b4);
-OVR233_LAYOUT_ASSERT(script_tawnaNormal, 0x5dc4, 0x28);
-OVR233_LAYOUT_ASSERT(script_tawnaCredits, 0x5dec, 0x164c);
-OVR233_LAYOUT_ASSERT(script_default, 0x7438, 0x18);
-OVR233_LAYOUT_ASSERT(script_dingofire, 0x7450, 0x38);
-OVR233_LAYOUT_ASSERT(danceFirstScripts, 0x7488, 0x40);
-OVR233_LAYOUT_ASSERT(danceOtherOpcodeData, 0x74c8, 0x12d4);
-OVR233_LAYOUT_ASSERT(danceOtherScripts, 0x879c, 0x40);
-OVR233_LAYOUT_ASSERT(introModelOpcodeData, 0x87dc, 0x3b0);
-OVR233_LAYOUT_ASSERT(introModelScripts, 0x8b8c, 0x40);
-OVR233_LAYOUT_ASSERT(introCutsceneOpcodeData, 0x8bcc, 0x11c);
-OVR233_LAYOUT_ASSERT(introCutsceneOpcodes, 0x8ce8, 0x24);
-OVR233_LAYOUT_ASSERT(introEndingOpcodeData, 0x8d0c, 0x50);
-OVR233_LAYOUT_ASSERT(creditsCutsceneOpcodeData, 0x8d5c, 0x1dc);
-OVR233_LAYOUT_ASSERT(creditsCutsceneOpcodes, 0x8f38, 0x50);
-OVR233_LAYOUT_ASSERT(creditsOpcodeData, 0x8f88, 0x40);
-OVR233_LAYOUT_ASSERT(boxAndAdvCharSelectOpcodeData, 0x8fc8, 0x10c4);
-OVR233_LAYOUT_ASSERT(boxModelScripts, 0xa08c, 0xac);
-OVR233_LAYOUT_ASSERT(advCharSelectSelectOpcodes, 0xa138, 0x20);
-OVR233_LAYOUT_ASSERT(advCharSelectDeselectOpcodes, 0xa158, 0x20);
-OVR233_LAYOUT_ASSERT(boxAndAdvCharSelectExtraOpcodes, 0xa178, 0x8);
-OVR233_LAYOUT_ASSERT(cs_initMatrixData, 0xa180, 0x17c0);
-OVR233_LAYOUT_ASSERT(cs_initMatrixTable, 0xb940, 0x20);
-OVR233_LAYOUT_ASSERT(cs_initMatrixBool, 0xb960, 0x1);
-OVR233_LAYOUT_ASSERT(introClearBoxColor, 0xba84, 0x4);
-OVR233_LAYOUT_ASSERT(introClearBoxRect, 0xba88, 0x8);
-OVR233_LAYOUT_ASSERT(creditsDancerRotOffset, 0xba90, 0x6);
-OVR233_LAYOUT_ASSERT(_pad_creditsDancerRotOffset, 0xba96, 0x2);
-OVR233_LAYOUT_ASSERT(bossCS, 0xba98, 0x2d8);
-OVR233_LAYOUT_ASSERT(isCutsceneOver, 0xbd70, 0x4);
-OVR233_LAYOUT_ASSERT(podiumCameraFrame, 0xbd74, 0x4);
-OVR233_LAYOUT_ASSERT(volumeBackup, 0xbd78, 0x6);
-OVR233_LAYOUT_ASSERT(audioVolumeBackupPad, 0xbd7e, 0x2);
-OVR233_LAYOUT_ASSERT(podiumPrizeDropReady, 0xbd80, 0x4);
-OVR233_LAYOUT_ASSERT(cutsceneState, 0xbd84, 0x4);
-OVR233_LAYOUT_ASSERT(bossModels, 0xbd88, 0x8);
-CTR_STATIC_ASSERT(sizeof(struct OverlayDATA_233) == 0x6c04);
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, particleEmitterData) == CTR_RUNTIME_ABI((0x51a0) - 0x518c, 0x18));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->particleEmitterData) == CTR_RUNTIME_ABI(0x8dc, 0xbd0));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, particleConfigs) == CTR_RUNTIME_ABI((0x5a7c) - 0x518c, 0xbe8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->particleConfigs) == CTR_RUNTIME_ABI(0x60, 0x80));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, csOpcodeMetaPrefix) == CTR_RUNTIME_ABI((0x5adc) - 0x518c, 0xc68));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->csOpcodeMetaPrefix) == CTR_RUNTIME_ABI(0x34, 0x34));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, bossOpcodeData) == CTR_RUNTIME_ABI((0x5b10) - 0x518c, 0xc9c));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->bossOpcodeData) == CTR_RUNTIME_ABI(0x2b4, 0x2b4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, script_tawnaNormal) == CTR_RUNTIME_ABI((0x5dc4) - 0x518c, 0xf50));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->script_tawnaNormal) == CTR_RUNTIME_ABI(0x28, 0x28));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, script_tawnaCredits) == CTR_RUNTIME_ABI((0x5dec) - 0x518c, 0xf78));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->script_tawnaCredits) == CTR_RUNTIME_ABI(0x164c, 0x164c));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, script_default) == CTR_RUNTIME_ABI((0x7438) - 0x518c, 0x25c4));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->script_default) == CTR_RUNTIME_ABI(0x18, 0x18));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, script_dingofire) == CTR_RUNTIME_ABI((0x7450) - 0x518c, 0x25dc));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->script_dingofire) == CTR_RUNTIME_ABI(0x38, 0x38));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, danceFirstScripts) == CTR_RUNTIME_ABI((0x7488) - 0x518c, 0x2618));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->danceFirstScripts) == CTR_RUNTIME_ABI(0x40, 0x80));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, danceOtherOpcodeData) == CTR_RUNTIME_ABI((0x74c8) - 0x518c, 0x2698));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->danceOtherOpcodeData) == CTR_RUNTIME_ABI(0x12d4, 0x12d4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, danceOtherScripts) == CTR_RUNTIME_ABI((0x879c) - 0x518c, 0x3970));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->danceOtherScripts) == CTR_RUNTIME_ABI(0x40, 0x80));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introModelOpcodeData) == CTR_RUNTIME_ABI((0x87dc) - 0x518c, 0x39f0));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introModelOpcodeData) == CTR_RUNTIME_ABI(0x3b0, 0x3b0));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introModelScripts) == CTR_RUNTIME_ABI((0x8b8c) - 0x518c, 0x3da0));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introModelScripts) == CTR_RUNTIME_ABI(0x40, 0x80));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introCutsceneOpcodeData) == CTR_RUNTIME_ABI((0x8bcc) - 0x518c, 0x3e20));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introCutsceneOpcodeData) == CTR_RUNTIME_ABI(0x11c, 0x11c));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introCutsceneOpcodes) == CTR_RUNTIME_ABI((0x8ce8) - 0x518c, 0x3f40));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introCutsceneOpcodes) == CTR_RUNTIME_ABI(0x24, 0x48));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introEndingOpcodeData) == CTR_RUNTIME_ABI((0x8d0c) - 0x518c, 0x3f88));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introEndingOpcodeData) == CTR_RUNTIME_ABI(0x50, 0x50));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, creditsCutsceneOpcodeData) == CTR_RUNTIME_ABI((0x8d5c) - 0x518c, 0x3fd8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->creditsCutsceneOpcodeData) == CTR_RUNTIME_ABI(0x1dc, 0x1dc));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, creditsCutsceneOpcodes) == CTR_RUNTIME_ABI((0x8f38) - 0x518c, 0x41b8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->creditsCutsceneOpcodes) == CTR_RUNTIME_ABI(0x50, 0xa0));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, creditsOpcodeData) == CTR_RUNTIME_ABI((0x8f88) - 0x518c, 0x4258));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->creditsOpcodeData) == CTR_RUNTIME_ABI(0x40, 0x40));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, boxAndAdvCharSelectOpcodeData) == CTR_RUNTIME_ABI((0x8fc8) - 0x518c, 0x4298));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->boxAndAdvCharSelectOpcodeData) == CTR_RUNTIME_ABI(0x10c4, 0x10c4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, boxModelScripts) == CTR_RUNTIME_ABI((0xa08c) - 0x518c, 0x5360));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->boxModelScripts) == CTR_RUNTIME_ABI(0xac, 0x158));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, advCharSelectSelectOpcodes) == CTR_RUNTIME_ABI((0xa138) - 0x518c, 0x54b8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->advCharSelectSelectOpcodes) == CTR_RUNTIME_ABI(0x20, 0x40));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, advCharSelectDeselectOpcodes) == CTR_RUNTIME_ABI((0xa158) - 0x518c, 0x54f8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->advCharSelectDeselectOpcodes) == CTR_RUNTIME_ABI(0x20, 0x40));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, boxAndAdvCharSelectExtraOpcodes) == CTR_RUNTIME_ABI((0xa178) - 0x518c, 0x5538));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->boxAndAdvCharSelectExtraOpcodes) == CTR_RUNTIME_ABI(0x8, 0x10));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, cs_initMatrixData) == CTR_RUNTIME_ABI((0xa180) - 0x518c, 0x5548));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->cs_initMatrixData) == CTR_RUNTIME_ABI(0x17c0, 0x17c0));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, cs_initMatrixTable) == CTR_RUNTIME_ABI((0xb940) - 0x518c, 0x6d08));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->cs_initMatrixTable) == CTR_RUNTIME_ABI(0x20, 0x40));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, cs_initMatrixBool) == CTR_RUNTIME_ABI((0xb960) - 0x518c, 0x6d48));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->cs_initMatrixBool) == CTR_RUNTIME_ABI(0x1, 0x1));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introClearBoxColor) == CTR_RUNTIME_ABI((0xba84) - 0x518c, 0x6ed0));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introClearBoxColor) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, introClearBoxRect) == CTR_RUNTIME_ABI((0xba88) - 0x518c, 0x6ed4));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->introClearBoxRect) == CTR_RUNTIME_ABI(0x8, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, creditsDancerRotOffset) == CTR_RUNTIME_ABI((0xba90) - 0x518c, 0x6edc));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->creditsDancerRotOffset) == CTR_RUNTIME_ABI(0x6, 0x6));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, _pad_creditsDancerRotOffset) == CTR_RUNTIME_ABI((0xba96) - 0x518c, 0x6ee2));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->_pad_creditsDancerRotOffset) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, bossCS) == CTR_RUNTIME_ABI((0xba98) - 0x518c, 0x6ee8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->bossCS) == CTR_RUNTIME_ABI(0x2d8, 0x310));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, isCutsceneOver) == CTR_RUNTIME_ABI((0xbd70) - 0x518c, 0x71f8));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->isCutsceneOver) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, podiumCameraFrame) == CTR_RUNTIME_ABI((0xbd74) - 0x518c, 0x71fc));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->podiumCameraFrame) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, volumeBackup) == CTR_RUNTIME_ABI((0xbd78) - 0x518c, 0x7200));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->volumeBackup) == CTR_RUNTIME_ABI(0x6, 0x6));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, audioVolumeBackupPad) == CTR_RUNTIME_ABI((0xbd7e) - 0x518c, 0x7206));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->audioVolumeBackupPad) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, podiumPrizeDropReady) == CTR_RUNTIME_ABI((0xbd80) - 0x518c, 0x7208));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->podiumPrizeDropReady) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, cutsceneState) == CTR_RUNTIME_ABI((0xbd84) - 0x518c, 0x720c));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->cutsceneState) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OverlayDATA_233, bossModels) == CTR_RUNTIME_ABI((0xbd88) - 0x518c, 0x7210));
+CTR_STATIC_ASSERT(sizeof(((struct OverlayDATA_233 *)0)->bossModels) == CTR_RUNTIME_ABI(0x8, 0x10));
+CTR_STATIC_ASSERT(sizeof(struct OverlayDATA_233) == CTR_RUNTIME_ABI(0x6c04, 0x7220));
 
 #undef OVR233_LAYOUT_ASSERT
 
@@ -816,25 +855,43 @@ struct OVR233_Garage
 	CTR_STATIC_ASSERT(OFFSETOF(struct OVR233_Garage, ELEMENT) == (OFFSET)); \
 	CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->ELEMENT) == (SIZE))
 
-OVR233_GARAGE_ASSERT(menuGarage, 0x0, 0x2c);
-OVR233_GARAGE_ASSERT(numFramesMax_GarageMove, 0x2c, 0x4);
-OVR233_GARAGE_ASSERT(padding1, 0x30, 0x4);
-OVR233_GARAGE_ASSERT(numFramesMax_Zoom, 0x34, 0x4);
-OVR233_GARAGE_ASSERT(fovMin, 0x38, 0x4);
-OVR233_GARAGE_ASSERT(fovMax, 0x3c, 0x4);
-OVR233_GARAGE_ASSERT(garageCharacterIDs, 0x40, 0x10);
-OVR233_GARAGE_ASSERT(statBarLengths, 0x50, 0x6);
-OVR233_GARAGE_ASSERT(unusedFrameCount, 0x56, 0x2);
-OVR233_GARAGE_ASSERT(classStringIDs, 0x58, 0x8);
-OVR233_GARAGE_ASSERT(statBarTargetLengths, 0x60, 0x18);
-OVR233_GARAGE_ASSERT(unusedArr_Colors, 0x78, 0xc);
-OVR233_GARAGE_ASSERT(statBarSegmentColors, 0x84, 0x1c);
-OVR233_GARAGE_ASSERT(numFramesCurr_GarageMove, 0xa0, 0x2);
-OVR233_GARAGE_ASSERT(numFramesCurr_ZoomIn, 0xa2, 0x2);
-OVR233_GARAGE_ASSERT(numFramesCurr_ZoomOut, 0xa4, 0x2);
-OVR233_GARAGE_ASSERT(delayOneSecond, 0xa6, 0x2);
-OVR233_GARAGE_ASSERT(boolSelected, 0xa8, 0x2);
-CTR_STATIC_ASSERT(sizeof(struct OVR233_Garage) == 0xac);
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, menuGarage) == CTR_RUNTIME_ABI(0x0, 0x0));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->menuGarage) == CTR_RUNTIME_ABI(0x2c, 0x40));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, numFramesMax_GarageMove) == CTR_RUNTIME_ABI(0x2c, 0x40));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->numFramesMax_GarageMove) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, padding1) == CTR_RUNTIME_ABI(0x30, 0x44));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->padding1) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, numFramesMax_Zoom) == CTR_RUNTIME_ABI(0x34, 0x48));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->numFramesMax_Zoom) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, fovMin) == CTR_RUNTIME_ABI(0x38, 0x4c));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->fovMin) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, fovMax) == CTR_RUNTIME_ABI(0x3c, 0x50));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->fovMax) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, garageCharacterIDs) == CTR_RUNTIME_ABI(0x40, 0x54));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->garageCharacterIDs) == CTR_RUNTIME_ABI(0x10, 0x10));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, statBarLengths) == CTR_RUNTIME_ABI(0x50, 0x64));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->statBarLengths) == CTR_RUNTIME_ABI(0x6, 0x6));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, unusedFrameCount) == CTR_RUNTIME_ABI(0x56, 0x6a));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->unusedFrameCount) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, classStringIDs) == CTR_RUNTIME_ABI(0x58, 0x6c));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->classStringIDs) == CTR_RUNTIME_ABI(0x8, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, statBarTargetLengths) == CTR_RUNTIME_ABI(0x60, 0x74));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->statBarTargetLengths) == CTR_RUNTIME_ABI(0x18, 0x18));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, unusedArr_Colors) == CTR_RUNTIME_ABI(0x78, 0x8c));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->unusedArr_Colors) == CTR_RUNTIME_ABI(0xc, 0xc));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, statBarSegmentColors) == CTR_RUNTIME_ABI(0x84, 0x98));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->statBarSegmentColors) == CTR_RUNTIME_ABI(0x1c, 0x1c));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, numFramesCurr_GarageMove) == CTR_RUNTIME_ABI(0xa0, 0xb4));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->numFramesCurr_GarageMove) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, numFramesCurr_ZoomIn) == CTR_RUNTIME_ABI(0xa2, 0xb6));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->numFramesCurr_ZoomIn) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, numFramesCurr_ZoomOut) == CTR_RUNTIME_ABI(0xa4, 0xb8));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->numFramesCurr_ZoomOut) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, delayOneSecond) == CTR_RUNTIME_ABI(0xa6, 0xba));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->delayOneSecond) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct OVR233_Garage, boolSelected) == CTR_RUNTIME_ABI(0xa8, 0xbc));
+CTR_STATIC_ASSERT(sizeof(((struct OVR233_Garage *)0)->boolSelected) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(sizeof(struct OVR233_Garage) == CTR_RUNTIME_ABI(0xac, 0xc0));
 
 #undef OVR233_GARAGE_ASSERT
 
@@ -974,20 +1031,33 @@ struct Ovr233_Credits_BSS
 	CTR_STATIC_ASSERT(OFFSETOF(struct CreditsObj, ELEMENT) == (OFFSET)); \
 	CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->ELEMENT) == (SIZE))
 
-OVR233_CREDITS_OBJ_ASSERT(creditGhostModel, 0x0, 0x14);
-OVR233_CREDITS_OBJ_ASSERT(creditGhostInst, 0x14, 0x14);
-OVR233_CREDITS_OBJ_ASSERT(creditGhostHeaders, 0x28, 0x280);
-OVR233_CREDITS_OBJ_ASSERT(creditGhostModelCopies, 0x2a8, 0x78);
-OVR233_CREDITS_OBJ_ASSERT(countdown, 0x320, 0x2);
-OVR233_CREDITS_OBJ_ASSERT(unused_324, 0x324, 0x4);
-OVR233_CREDITS_OBJ_ASSERT(creditDanceInst, 0x328, 0x4);
-OVR233_CREDITS_OBJ_ASSERT(creditsPosY, 0x32c, 0x2);
-OVR233_CREDITS_OBJ_ASSERT(creditsTopString, 0x330, 0x4);
-OVR233_CREDITS_OBJ_ASSERT(epilogueTopString, 0x334, 0x4);
-OVR233_CREDITS_OBJ_ASSERT(epilogueNextString, 0x338, 0x4);
-OVR233_CREDITS_OBJ_ASSERT(epilogueFramesLeft, 0x33c, 0x2);
-OVR233_CREDITS_OBJ_ASSERT(epiloguePosX_unused, 0x33e, 0x2);
-CTR_STATIC_ASSERT(sizeof(struct CreditsObj) == 0x340);
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditGhostModel) == CTR_RUNTIME_ABI(0x0, 0x0));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditGhostModel) == CTR_RUNTIME_ABI(0x14, 0x28));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditGhostInst) == CTR_RUNTIME_ABI(0x14, 0x28));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditGhostInst) == CTR_RUNTIME_ABI(0x14, 0x28));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditGhostHeaders) == CTR_RUNTIME_ABI(0x28, 0x50));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditGhostHeaders) == CTR_RUNTIME_ABI(0x280, 0x3c0));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditGhostModelCopies) == CTR_RUNTIME_ABI(0x2a8, 0x410));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditGhostModelCopies) == CTR_RUNTIME_ABI(0x78, 0xa0));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, countdown) == CTR_RUNTIME_ABI(0x320, 0x4b0));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->countdown) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, unused_324) == CTR_RUNTIME_ABI(0x324, 0x4b4));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->unused_324) == CTR_RUNTIME_ABI(0x4, 0x4));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditDanceInst) == CTR_RUNTIME_ABI(0x328, 0x4b8));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditDanceInst) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditsPosY) == CTR_RUNTIME_ABI(0x32c, 0x4c0));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditsPosY) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, creditsTopString) == CTR_RUNTIME_ABI(0x330, 0x4c8));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->creditsTopString) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, epilogueTopString) == CTR_RUNTIME_ABI(0x334, 0x4d0));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->epilogueTopString) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, epilogueNextString) == CTR_RUNTIME_ABI(0x338, 0x4d8));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->epilogueNextString) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, epilogueFramesLeft) == CTR_RUNTIME_ABI(0x33c, 0x4e0));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->epilogueFramesLeft) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct CreditsObj, epiloguePosX_unused) == CTR_RUNTIME_ABI(0x33e, 0x4e2));
+CTR_STATIC_ASSERT(sizeof(((struct CreditsObj *)0)->epiloguePosX_unused) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(sizeof(struct CreditsObj) == CTR_RUNTIME_ABI(0x340, 0x4e8));
 
 #undef OVR233_CREDITS_OBJ_ASSERT
 
@@ -1000,15 +1070,23 @@ OVR233_CREDITS_BSS_ASSERT(_pad_creditGhostPos, 0x6, 0x2);
 OVR233_CREDITS_BSS_ASSERT(unused_Pos, 0x8, 0x6);
 OVR233_CREDITS_BSS_ASSERT(_pad_unused_Pos, 0xe, 0x2);
 OVR233_CREDITS_BSS_ASSERT(creditTextPosX, 0x10, 0x4);
-OVR233_CREDITS_BSS_ASSERT(creditThread, 0x14, 0x4);
-OVR233_CREDITS_BSS_ASSERT(dancerThread, 0x18, 0x4);
-OVR233_CREDITS_BSS_ASSERT(dancerInst_invisible, 0x1c, 0x4);
-OVR233_CREDITS_BSS_ASSERT(numStrings, 0x20, 0x2);
-OVR233_CREDITS_BSS_ASSERT(ptrStrings, 0x24, 0x4);
-OVR233_CREDITS_BSS_ASSERT(boolAllBlue, 0x28, 0x2);
-OVR233_CREDITS_BSS_ASSERT(unused, 0x2c, 0x8);
-OVR233_CREDITS_BSS_ASSERT(creditsObj, 0x34, 0x340);
-CTR_STATIC_ASSERT(sizeof(struct Ovr233_Credits_BSS) == 0x374);
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, creditThread) == CTR_RUNTIME_ABI(0x14, 0x18));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->creditThread) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, dancerThread) == CTR_RUNTIME_ABI(0x18, 0x20));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->dancerThread) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, dancerInst_invisible) == CTR_RUNTIME_ABI(0x1c, 0x28));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->dancerInst_invisible) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, numStrings) == CTR_RUNTIME_ABI(0x20, 0x30));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->numStrings) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, ptrStrings) == CTR_RUNTIME_ABI(0x24, 0x38));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->ptrStrings) == CTR_RUNTIME_ABI(0x4, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, boolAllBlue) == CTR_RUNTIME_ABI(0x28, 0x40));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->boolAllBlue) == CTR_RUNTIME_ABI(0x2, 0x2));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, unused) == CTR_RUNTIME_ABI(0x2c, 0x44));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->unused) == CTR_RUNTIME_ABI(0x8, 0x8));
+CTR_STATIC_ASSERT(offsetof(struct Ovr233_Credits_BSS, creditsObj) == CTR_RUNTIME_ABI(0x34, 0x50));
+CTR_STATIC_ASSERT(sizeof(((struct Ovr233_Credits_BSS *)0)->creditsObj) == CTR_RUNTIME_ABI(0x340, 0x4e8));
+CTR_STATIC_ASSERT(sizeof(struct Ovr233_Credits_BSS) == CTR_RUNTIME_ABI(0x374, 0x538));
 
 #undef OVR233_CREDITS_BSS_ASSERT
 

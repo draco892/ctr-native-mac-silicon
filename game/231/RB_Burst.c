@@ -2,12 +2,7 @@
 #include <ctr_gte_transfer.h>
 #include "RB_Effect.h"
 
-struct Burst
-{
-	struct Instance *shockwave;
-	struct Instance *explosion;
-	struct Instance *rotatedExplosion;
-};
+
 
 void RB_Burst_ProcessBucket(struct Thread *thread)
 {
@@ -283,7 +278,7 @@ void RB_Burst_Init(struct Instance *weaponInst)
 	}
 
 	// Damage originates at the weapon, not the lowered visual effects.
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 	sps->Input1.pos.x = weaponInst->matrix.t[0];
 	sps->Input1.pos.y = weaponInst->matrix.t[1];
 	sps->Input1.pos.z = weaponInst->matrix.t[2];

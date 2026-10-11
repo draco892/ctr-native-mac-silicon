@@ -25,7 +25,7 @@ void RB_Potion_OnShatter_TeethCallback(struct ScratchpadStruct *sps, void *hitOb
 
 void RB_Potion_OnShatter_TeethSearch(struct Instance *inst)
 {
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 
 	sps->Input1.pos.x = (s16)inst->matrix.t[0];
 	sps->Input1.pos.y = (s16)inst->matrix.t[1];
@@ -54,7 +54,7 @@ void RB_Potion_ThTick_InAir(struct Thread *t)
 	struct BSP *bspHitbox;
 	struct InstDef *instDef;
 
-	struct ScratchpadStruct *sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	struct ScratchpadStruct *sps = CTR_COLLISION_WORK();
 
 	inst = t->inst;
 	mw = inst->thread->object;

@@ -1,6 +1,11 @@
 #ifndef GAME_LAYOUTS_H
 #define GAME_LAYOUTS_H
 
+#include <macros.h>
+// Resident declarations support host-width pointers. The complete game's
+// execution guard lives in main.c and CMake until its remaining consumers
+// and checkpoint traversal have been integrated.
+
 // Game layout and namespace headers.
 #include <namespace_Bots.h>
 #include <namespace_Camera.h>

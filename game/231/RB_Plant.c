@@ -398,7 +398,7 @@ void RB_Plant_LInB(struct Instance *inst)
 		plantID = inst->name[strlen(inst->name) - 1] - '0';
 		pointers = ST1_GETPOINTERS(GAME_TRACKER->level1->ptrSpawnType1);
 		metaArray = (s16 *)pointers[ST1_SPAWN];
-		metaArray = (s16 *)((u32)metaArray + plantID * 4);
+		metaArray = (s16 *)((CtrRuntimeAddress)metaArray + plantID * 4);
 
 		plantObj->cooldown = metaArray[0];
 		plantObj->side = metaArray[1];

@@ -23,6 +23,16 @@ void JitPool_Clear(struct JitPool *AP)
 
 void JitPool_Init(struct JitPool *AP, int maxItems, int itemSize, char *name)
 {
+#if defined(CTR_NATIVE)
+	// Every slot starts with an intrusive Item and can hold host pointers.
+	const size_t alignment = CTR_RUNTIME_ABI(sizeof(u32), _Alignof(max_align_t));
+	if (maxItems < 0 || itemSize < (int)sizeof(struct Item) ||
+	    (size_t)itemSize > (size_t)INT32_MAX - (alignment - 1))
+		CTR_TRAP();
+	itemSize = (int)(((size_t)itemSize + alignment - 1) & ~(alignment - 1));
+	if (maxItems && itemSize > INT32_MAX / maxItems)
+		CTR_TRAP();
+#endif
 	memset(AP, 0, sizeof(struct JitPool));
 	AP->maxItems = maxItems;
 	AP->itemSize = itemSize;
@@ -32,10 +42,10 @@ void JitPool_Init(struct JitPool *AP, int maxItems, int itemSize, char *name)
 }
 
 
-int JitPool_Add(struct JitPool *AP)
+CtrRuntimePointer JitPool_Add(struct JitPool *AP)
 {
 	struct Item *item = AP->free.first;
-	s32 result;
+	CtrRuntimePointer result;
 
 	if (item == 0)
 	{
@@ -45,7 +55,7 @@ int JitPool_Add(struct JitPool *AP)
 	{
 		LIST_RemoveMember(&AP->free, item);
 		LIST_AddFront(&AP->taken, item);
-		result = (s32)item;
+		result = (CtrRuntimePointer)item;
 	}
 
 	return result;

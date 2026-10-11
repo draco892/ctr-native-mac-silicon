@@ -29,6 +29,11 @@
 
 #include "game/game_unity.h"
 
+// The host64 executable is opt-in until real gameplay integration is verified.
+#if !defined(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+CTR_STATIC_ASSERT(sizeof(void *) == 4);
+#endif
+
 #include "game/zGlobal_RDATA.c"
 #include "game/zGlobal_DATA.c"
 #include "game/zGlobal_SDATA.c"
@@ -38,7 +43,13 @@
 #include "platform/native_disc_image.c"
 #include "platform/native_assets.c"
 #include "platform/native_audio.c"
+#include "platform/native_host_scratch.c"
+#include "platform/native_terrain_work.c"
+#include "platform/native_collision_work.c"
+#include "platform/native_effect_work.c"
 #include "platform/native_memory.c"
+#include "platform/native_mempack_arena.c"
+#include "platform/native_checkpoint_relocation.c"
 #include "platform/native_checkpoint.c"
 #include "platform/native_checkpoint_file.c"
 #include "platform/native_cd.c"
@@ -47,11 +58,39 @@
 #include "platform/native_gte_core.c"
 #include "platform/native_glad.c"
 #include "platform/native_input.c"
+#include "platform/native_lng.c"
+#include "platform/native_credits.c"
+#include "platform/native_ptrmap.c"
+#include "platform/native_asset_readers.c"
+#include "platform/native_asset_loading.c"
+#include "platform/native_model_library.c"
+#include "platform/native_model_animation.c"
+#include "platform/native_model_vertices.c"
+#include "platform/native_model_transform.c"
+#include "platform/native_model_matrix.c"
+#include "platform/native_model_projection.c"
+#include "platform/native_model_commands.c"
+#include "platform/native_vram.c"
+#include "platform/native_model_draw.c"
+#include "platform/native_raster.c"
+#include "platform/native_instance_transform.c"
+#include "platform/native_mesh_geometry.c"
+#include "platform/native_terrain_material.c"
+#include "platform/native_scene_camera.c"
+#include "platform/native_scene_visibility.c"
+#include "platform/native_resident.c"
+#include "platform/native_resident_graph.c"
+#include "platform/native_scene_assets.c"
+#include "platform/native_vertex_animation.c"
+#include "platform/native_scene_geometry.c"
+#include "platform/native_scene_render.c"
+#include "platform/native_scene_gpu.c"
 #include "platform/native_inline_c.c"
 #include "platform/native_libapi.c"
 #include "platform/native_libetc.c"
 #include "platform/native_libgte.c"
 #include "platform/native_libgpu.c"
+#include "platform/native_gpu_callbacks.c"
 #include "platform/native_libpad.c"
 #include "platform/native_libspu.c"
 #include "platform/native_log.c"
@@ -195,6 +234,7 @@ int main(int argc, char *argv[])
 	if (NativePerf_ConfigureFromArgs(argc, argv) != 0)
 	{
 		Platform_LogFlush();
+		NativeSceneAssets_Reset(&gNativeSceneAssets);
 		Platform_Shutdown();
 		return NativeConsole_Return(1);
 	}
@@ -207,6 +247,7 @@ int main(int argc, char *argv[])
 	if (NativeReplayScheduler_ConfigureFromArgs(argc, argv) != 0)
 	{
 		Platform_LogFlush();
+		NativeSceneAssets_Reset(&gNativeSceneAssets);
 		Platform_Shutdown();
 		return NativeConsole_Return(1);
 	}
@@ -217,6 +258,7 @@ int main(int argc, char *argv[])
 
 	const int result = CTR_Main();
 
+	NativeSceneAssets_Reset(&gNativeSceneAssets);
 	Platform_Shutdown();
 	return NativeConsole_Return(result);
 }

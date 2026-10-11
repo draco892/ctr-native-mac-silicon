@@ -108,6 +108,11 @@ void LOAD_QueueNextBody()
 		if (retry == 0)
 		{
 			int pendingLength;
+#ifdef CTR_NATIVE
+			pendingLength = sdata->queueLength;
+			data.currSlot = sdata->queueSlots[0];
+			destPage = OFFSETOF_DATA(currSlot) & 0xffff0000u;
+#else
 			{
 				register CtrPackedU32 *destWords CTR_PSX_REGISTER("$10");
 				register CtrPackedU32 *sourceWords CTR_PSX_REGISTER("$11");
@@ -139,6 +144,8 @@ void LOAD_QueueNextBody()
 				__asm__("sw %1,16(%2)\n\tsw %3,20(%2)" : "+r"(pendingLength) : "r"(word0), "r"(destWords), "r"(word1));
 #endif
 			}
+
+#endif
 
 			if (i < pendingLength)
 			{
@@ -240,8 +247,8 @@ void LOAD_QueueNextBody()
 			register u32 subfileIndex CTR_PSX_REGISTER("$5") = curr->subfileIndex;
 			register void *destination CTR_PSX_REGISTER("$6") = curr->ptrDestination;
 			register u32 *sizePtr CTR_PSX_REGISTER("$7") = &curr->size_UNUSED;
-			register u32 callback CTR_PSX_REGISTER("$2") = (u32)(s32)curr->callbackFuncPtr;
-			curr->ptrDestination = LOAD_DramFile(bigfile, subfileIndex, destination, sizePtr, (int)callback);
+			register CtrCallbackArg callback CTR_PSX_REGISTER("$2") = (CtrCallbackArg)curr->callbackFuncPtr;
+			curr->ptrDestination = LOAD_DramFile(bigfile, subfileIndex, destination, sizePtr, callback);
 			break;
 		}
 
@@ -252,10 +259,10 @@ void LOAD_QueueNextBody()
 			    CTR_PSX_PAGE_LVALUE(struct BigHeader *, destPage, OFFSETOF_DATA(currSlot) & 0xffffu, curr->ptrBigfileCdPos_UNUSED);
 			register u32 subfileIndex CTR_PSX_REGISTER("$5") = curr->subfileIndex;
 			register void *destination CTR_PSX_REGISTER("$6") = curr->ptrDestination;
-			register u32 callback CTR_PSX_REGISTER("$2");
+			register CtrCallbackArg callback CTR_PSX_REGISTER("$2");
 			CTR_PSX_OBSERVE_VALUE(sizePtr);
-			callback = (u32)(s32)curr->callbackFuncPtr;
-			curr->ptrDestination = LOAD_VramFile(bigfile, subfileIndex, destination, sizePtr, (int)callback);
+			callback = (CtrCallbackArg)curr->callbackFuncPtr;
+			curr->ptrDestination = LOAD_VramFile(bigfile, subfileIndex, destination, sizePtr, callback);
 			break;
 		}
 		}

@@ -92,9 +92,9 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 	register s16 offsetY CTR_PSX_REGISTER("$22");
 	struct MetaDataLEV *levelMetadata;
 	register struct MainMenu_LevelRow *displayData CTR_PSX_REGISTER("$20");
-	register u32 sharedS1 CTR_PSX_REGISTER("$17") = 0;
-	register u32 sharedS2 CTR_PSX_REGISTER("$18");
-	register u32 sharedS5 CTR_PSX_REGISTER("$21");
+	register CtrRuntimeAddress sharedS1 CTR_PSX_REGISTER("$17") = 0;
+	register CtrRuntimeAddress sharedS2 CTR_PSX_REGISTER("$18");
+	register CtrRuntimeAddress sharedS5 CTR_PSX_REGISTER("$21");
 	struct TransitionMeta *sharedS8;
 	s16 lineWidth;
 	s16 bestLapLabelY;
@@ -195,7 +195,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 	// Draw arrow pointing Left
 	{
 		register u32 gameTrackerPage CTR_PSX_REGISTER("$10");
-		register u32 workV1 CTR_PSX_REGISTER("$3");
+		register CtrRuntimeAddress workV1 CTR_PSX_REGISTER("$3");
 		register u32 *orderingTable CTR_PSX_REGISTER("$4");
 		register struct IconGroup *iconGroup CTR_PSX_REGISTER("$8");
 		register struct DB *backBuffer CTR_PSX_REGISTER("$7");
@@ -206,14 +206,14 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 #else
 		asm("lui %0,%%hi(" RETAIL_GAME_TRACKER_ASM_NAME ")\n\t.if 0" : "=r"(gameTrackerPage));
 #endif
-		sharedS1 <<= 2;
-		workV1 = (u32)CTR_PSX_PAGE_LVALUE(struct GameTracker *, gameTrackerPage, MM_GAME_TRACKER_PAGE_OFFSET, GAME_TRACKER);
+		sharedS1 *= sizeof(*MM_COLOR_POINTERS);
+		workV1 = (CtrRuntimeAddress)CTR_PSX_PAGE_LVALUE(struct GameTracker *, gameTrackerPage, MM_GAME_TRACKER_PAGE_OFFSET, GAME_TRACKER);
 		lineWidth /= 2;
 		orderingTable = ((struct GameTracker *)workV1)->pushBuffer_UI.ptrOT;
 		iconGroup = ((struct GameTracker *)workV1)->iconGroup[MM_HIGHSCORE_ARROW_ICON_GROUP];
 		backBuffer = ((struct GameTracker *)workV1)->backBuffer;
 		CTR_PSX_LOAD_SYMBOL_PAGE(workV1, MM_COLOR_POINTERS_ASM_NAME);
-		CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(workV1, MM_COLOR_POINTERS_ASM_NAME, (u32)MM_COLOR_POINTERS);
+		CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(workV1, MM_COLOR_POINTERS_ASM_NAME, (CtrRuntimeAddress)MM_COLOR_POINTERS);
 		sharedS1 += workV1;
 		CTR_PSX_KEEP_VALUE(sharedS1);
 		posYShift = *(volatile u32 *)&draw.posY;
@@ -416,17 +416,17 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 	if (((u32)draw.rowIndex << 0x10) == MM_HIGHSCORE_SCORE_MODE_TIME_TRIAL)
 	{
 		s16 ghostStarIndex;
-		register u32 ghostV0 CTR_PSX_REGISTER("$2");
+		register CtrRuntimeAddress ghostV0 CTR_PSX_REGISTER("$2");
 
 		ghostStarIndex = 0;
 		CTR_PSX_KEEP_VALUE_RELAXED(ghostStarIndex);
 		CTR_PSX_LOAD_SYMBOL_PAGE(sharedS1, RETAIL_GAME_TRACKER_ASM_NAME);
 		CTR_PSX_LOAD_SYMBOL_PAGE(ghostV0, RETAIL_GAME_SAVE_ASM_NAME);
-		CTR_PSX_ADD_SYMBOL_LOW(sharedS5, ghostV0, RETAIL_GAME_SAVE_ASM_NAME, (u32)&GAME_PROGRESS);
+		CTR_PSX_ADD_SYMBOL_LOW(sharedS5, ghostV0, RETAIL_GAME_SAVE_ASM_NAME, (CtrRuntimeAddress)&GAME_PROGRESS);
 		CTR_PSX_LOAD_SYMBOL_PAGE(ghostV0, MM_HIGHSCORE_GHOST_STAR_FLAGS_ASM_NAME);
 		CTR_PSX_ADD_SYMBOL_LOW(displayData, ghostV0, MM_HIGHSCORE_GHOST_STAR_FLAGS_ASM_NAME, (void *)MM_HIGHSCORE_GHOST_STAR_FLAGS);
-		ghostV0 = (u32)CTR_PSX_PAGE_LVALUE(struct GameTracker *, sharedS1, MM_GAME_TRACKER_PAGE_OFFSET, GAME_TRACKER);
-		sharedS2 = (u32)MM_HIGHSCORE_TRANSITIONS;
+		ghostV0 = (CtrRuntimeAddress)CTR_PSX_PAGE_LVALUE(struct GameTracker *, sharedS1, MM_GAME_TRACKER_PAGE_OFFSET, GAME_TRACKER);
+		sharedS2 = (CtrRuntimeAddress)MM_HIGHSCORE_TRANSITIONS;
 		scoreRowIndex = ((struct GameTracker *)ghostV0)->levelID;
 
 		// draw ghost stars
@@ -440,10 +440,10 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 			register s32 doubledGhostStarIndex CTR_PSX_REGISTER("$7");
 			register u16 currentGhostFlag CTR_PSX_REGISTER("$5");
 			register s32 flagWordIndex CTR_PSX_REGISTER("$4");
-			register u32 trackPage CTR_PSX_REGISTER("$12");
+			register CtrRuntimeAddress trackPage CTR_PSX_REGISTER("$12");
 
 			CTR_PSX_LOAD_SYMBOL_PAGE(trackPage, MM_ARCADE_TRACKS_ASM_NAME);
-			CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(trackPage, MM_ARCADE_TRACKS_ASM_NAME, (u32)MM_ARCADE_TRACKS);
+			CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(trackPage, MM_ARCADE_TRACKS_ASM_NAME, (CtrRuntimeAddress)MM_ARCADE_TRACKS);
 			setTracker = CTR_PSX_PAGE_LVALUE(struct GameTracker *, sharedS1, MM_GAME_TRACKER_PAGE_OFFSET, GAME_TRACKER);
 			CTR_PSX_KEEP_VALUE_RELAXED(setTracker);
 			setTracker->levelID = ((struct MainMenu_LevelRow *)trackPage)[(s16) * (volatile u16 *)&draw.trackIndex].levID;
@@ -466,7 +466,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 			if (((timeTrialFlags >> (currentGhostFlag & 0x1f)) & 1) != 0)
 			{
 				register s16 colorIndex CTR_PSX_REGISTER("$4");
-				register u32 colorTablePage CTR_PSX_REGISTER("$2");
+				register CtrRuntimeAddress colorTablePage CTR_PSX_REGISTER("$2");
 				register u32 **ghostColorPtr CTR_PSX_REGISTER("$4");
 				register struct IconGroup *ghostIconGroup CTR_PSX_REGISTER("$8");
 				register u32 *orderingTable CTR_PSX_REGISTER("$3");
@@ -476,18 +476,18 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 				register s32 ghostY CTR_PSX_REGISTER("$6");
 
 				CTR_PSX_LOAD_SYMBOL_PAGE(colorTablePage, MM_HIGHSCORE_GHOST_STAR_COLORS_ASM_NAME);
-				CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(colorTablePage, MM_HIGHSCORE_GHOST_STAR_COLORS_ASM_NAME, (u32)MM_HIGHSCORE_GHOST_STAR_COLORS);
+				CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(colorTablePage, MM_HIGHSCORE_GHOST_STAR_COLORS_ASM_NAME, (CtrRuntimeAddress)MM_HIGHSCORE_GHOST_STAR_COLORS);
 				colorIndex = *(u16 *)((u8 *)colorTablePage + doubledGhostStarIndex);
 				CTR_PSX_KEEP_VALUE_RELAXED(colorIndex);
 				CTR_PSX_LOAD_SYMBOL_PAGE(colorTablePage, MM_COLOR_POINTERS_ASM_NAME);
-				CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(colorTablePage, MM_COLOR_POINTERS_ASM_NAME, (u32)MM_COLOR_POINTERS);
+				CTR_PSX_ADD_SYMBOL_LOW_IN_PLACE(colorTablePage, MM_COLOR_POINTERS_ASM_NAME, (CtrRuntimeAddress)MM_COLOR_POINTERS);
 				orderingTable = drawTracker->pushBuffer_UI.ptrOT;
 				CTR_PSX_KEEP_VALUE_RELAXED(orderingTable);
 				ghostIconGroup = drawTracker->iconGroup[MM_HIGHSCORE_GHOST_STAR_ICON_GROUP];
 				CTR_PSX_KEEP_VALUE_RELAXED(ghostIconGroup);
 				backBuffer = drawTracker->backBuffer;
 				CTR_PSX_KEEP_VALUE_RELAXED(backBuffer);
-				ghostColorPtr = (u32 **)(colorTablePage + (s16)colorIndex * sizeof(u32));
+				ghostColorPtr = (u32 **)(colorTablePage + (s16)colorIndex * sizeof(*MM_COLOR_POINTERS));
 				CTR_PSX_DEPEND_VALUE(ghostColorPtr, orderingTable);
 				CTR_PSX_ORDER_VALUES(ghostIconGroup, backBuffer);
 				ghostX = signedGhostStarIndex * MM_HIGHSCORE_GHOST_STAR_X_STEP;
@@ -514,7 +514,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 	{
 		register s16 selectedScoreMode CTR_PSX_REGISTER("$16");
 
-		sharedS1 = (u32)MM_HIGHSCORE_TRANSITIONS;
+		sharedS1 = (CtrRuntimeAddress)MM_HIGHSCORE_TRANSITIONS;
 		selectedScoreMode = (s16)draw.scoreMode;
 		sharedS5 = MM_HIGHSCORE_BEST_TRACK_LABEL_Y_OFFSET;
 		CTR_PSX_KEEP_VALUE(sharedS5);
@@ -577,7 +577,7 @@ void MM_HighScore_Draw(s16 trackIndex, s32 rowIndex, s32 posX, s32 posY)
 		s32 currentRowIndex = (s16)scoreRowIndex;
 		s32 metaIndex;
 		metaIndex = currentRowIndex + MM_HIGHSCORE_FIRST_VISIBLE_META_INDEX;
-		sharedS1 = (u32)&sharedS8[metaIndex];
+		sharedS1 = (CtrRuntimeAddress)&sharedS8[metaIndex];
 		sharedS2 = currentRowIndex * MM_HIGHSCORE_SCORE_ROW_Y_STEP;
 		rowEntry = (struct HighScoreEntry *)displayData;
 		rowEntry += currentRowIndex + MM_HIGHSCORE_FIRST_VISIBLE_ENTRY;

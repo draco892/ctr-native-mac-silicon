@@ -15,8 +15,8 @@ static const u8 sDrawTiresSpriteIndexTable[0x81] = {
 struct DrawTiresSolidProjectedWheel
 {
 	struct Icon *wheelSprite;
-	int selectedOT;
-	int selectedOTSlot;
+	CtrRuntimeAddress selectedOT;
+	CtrRuntimeAddress selectedOTSlot;
 	int jumpIndex;
 };
 
@@ -152,17 +152,17 @@ static void DrawTiresSolid_BuildWheelLocalPairs(struct DrawTiresScratch *scratch
 	scratch->otRangeSecondary = idpp->otRangeSecondary;
 	scratch->wheelSize.word = (s16)driver->wheelSize;
 
-	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(driver->wheelRotation << 2);
+	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(CTR_MipsSll(driver->wheelRotation, 2));
 	scratch->wheelLocal[0].rim.x = scratch->wheelLocal[0].center.x - steering.cos;
 	scratch->wheelLocal[0].rim.z.word = scratch->wheelLocal[0].center.z.word + steering.sin;
 	scratch->wheelLocal[1].rim.x = scratch->wheelLocal[1].center.x + steering.cos;
 	scratch->wheelLocal[1].rim.z.word = scratch->wheelLocal[1].center.z.word - steering.sin;
 
-	int hazardAngle = driver->hazardTimer << 5;
+	int hazardAngle = CTR_MipsSll(driver->hazardTimer, 5);
 	if ((driver->hazardTimer & 1) != 0)
 	{
 		hazardShift = 6;
-		hazardAngle <<= 1;
+		hazardAngle = CTR_MipsSll(hazardAngle, 1);
 	}
 
 	DrawTiresSolid_AddHazardOffset(&scratch->wheelLocal[0].rim, hazardAngle, hazardShift);
@@ -173,10 +173,10 @@ static void DrawTiresSolid_BuildWheelLocalPairs(struct DrawTiresScratch *scratch
 
 static void DrawTiresSolid_SetupGteState(struct DrawTiresScratch *scratch, struct Instance *inst, struct InstDrawPerPlayer *idpp, struct PushBuffer *pb)
 {
-	int relX = (inst->matrix.t[0] - pb->pos.x) << 2;
-	int relY = (inst->matrix.t[1] - pb->pos.y) << 2;
-	int relZ = (inst->matrix.t[2] - pb->pos.z) << 2;
-	int splitCameraY = (scratch->vertSplit - pb->pos.y) << 2;
+	int relX = CTR_MipsSll(inst->matrix.t[0] - pb->pos.x, 2);
+	int relY = CTR_MipsSll(inst->matrix.t[1] - pb->pos.y, 2);
+	int relZ = CTR_MipsSll(inst->matrix.t[2] - pb->pos.z, 2);
+	int splitCameraY = CTR_MipsSll(scratch->vertSplit - pb->pos.y, 2);
 
 	// NOTE(aalhendi): PSX-backfeed blocker: retail DrawTires_Solid writes
 	// instance matrix words to GTE control regs 16-20, IDPP m3x3 words to regs
@@ -348,7 +348,7 @@ static struct DrawTiresSolidProjectedWheel DrawTiresSolid_SelectProjectedWheel(s
 	struct DrawTiresWheelLocal *wheelLocal = &scratch->wheelLocal[wheelIndex];
 	struct DrawTiresPackedVec3 *viewNormal = &scratch->viewNormalVectors[wheelIndex];
 	struct DrawTiresPackedVec3 *transformedRim = &scratch->transformedRimVectors[wheelIndex];
-	int selectedOT = scratch->otRangeNormal;
+	CtrRuntimeAddress selectedOT = scratch->otRangeNormal;
 	int splitDelta = scratch->splitCameraY - wheelLocal->center.y;
 	struct DrawTiresSolidProjectedWheel selected = {
 	    .selectedOT = selectedOT,
@@ -396,7 +396,7 @@ static void DrawTiresSolid_CopyIconUV(POLY_FT4 *p, struct Icon *icon)
 	CtrGpu_WritePackedUVWord(&p->u3, uv23 >> 16);
 }
 
-static int DrawTiresSolid_ApplyCornerOrder(struct DrawTiresScratch *scratch, int jumpIndex, int *selectedOTSlot, int sxy[4])
+static int DrawTiresSolid_ApplyCornerOrder(struct DrawTiresScratch *scratch, int jumpIndex, CtrRuntimeAddress *selectedOTSlot, int sxy[4])
 {
 	switch (jumpIndex)
 	{
@@ -473,22 +473,30 @@ static void DrawTiresSolid_WritePrimitiveCorners(POLY_FT4 *p, int sxy[4])
 	CtrGpu_WritePackedXY(&p->x3, (u32)sxy[3]);
 }
 
-static void DrawTiresSolid_LinkPrimitive(struct DrawTiresScratch *scratch, POLY_FT4 *p, int selectedOTSlot)
+static void DrawTiresSolid_LinkPrimitive(struct DrawTiresScratch *scratch, POLY_FT4 *p, CtrRuntimeAddress selectedOTSlot)
 {
-	int otRangeStart = scratch->otRangeStart;
-	int otRangeEnd = scratch->otRangeEnd;
+	CtrRuntimeAddress otRangeStart = scratch->otRangeStart;
+	CtrRuntimeAddress otRangeEnd = scratch->otRangeEnd;
 
-	if ((otRangeStart - selectedOTSlot) > 0)
+#ifdef CTR_NATIVE
+	if (otRangeStart > selectedOTSlot)
+#else
+	if ((s32)(otRangeStart - selectedOTSlot) > 0)
+#endif
 	{
 		selectedOTSlot = otRangeStart;
 	}
 
-	if ((otRangeEnd - selectedOTSlot) < 0)
+#ifdef CTR_NATIVE
+	if (otRangeEnd < selectedOTSlot)
+#else
+	if ((s32)(otRangeEnd - selectedOTSlot) < 0)
+#endif
 	{
 		selectedOTSlot = otRangeEnd;
 	}
 
-	u32 *otSlot = (u32 *)(u32)selectedOTSlot;
+	u32 *otSlot = (u32 *)(CtrRuntimeAddress)selectedOTSlot;
 	p->tag = CtrGpu_PackOTTag(*otSlot, 0x09000000);
 	*otSlot = (u32)CtrGpu_PrimToOTLink24(p);
 }
@@ -497,7 +505,7 @@ static int DrawTiresSolid_EmitProjectedWheel(struct DrawTiresScratch *scratch, s
                                              int *primCount)
 {
 	POLY_FT4 *p = (POLY_FT4 *)primMem->cursor;
-	int selectedOTSlot = selected->selectedOTSlot;
+	CtrRuntimeAddress selectedOTSlot = selected->selectedOTSlot;
 	int sxy[4];
 
 	CtrGpu_WriteColorCode(&p->r0, scratch->tireColor);
@@ -568,8 +576,8 @@ static int DrawTiresSolid_StagePlayer(struct DrawTiresScratch *scratch, struct D
 
 	scratch->playerCounter = scratch->numPlyr - playerIndex;
 	scratch->vertSplit = inst->vertSplit;
-	scratch->depthOffsetStartBytes = idpp->depthOffset[0] << 2;
-	scratch->depthOffsetEndBytes = idpp->depthOffset[1] << 2;
+	scratch->depthOffsetStartBytes = CTR_MipsSll(idpp->depthOffset[0], 2);
+	scratch->depthOffsetEndBytes = CTR_MipsSll(idpp->depthOffset[1], 2);
 	scratch->instFlags = flags;
 
 	if ((flags & DRAW_SUCCESSFUL) == 0)
@@ -654,8 +662,8 @@ static const u32 sDrawTiresReflectionJumpTable[8] = {
 struct DrawTiresReflectionProjectedWheel
 {
 	struct Icon *wheelSprite;
-	int selectedOT;
-	int selectedOTSlot;
+	CtrRuntimeAddress selectedOT;
+	CtrRuntimeAddress selectedOTSlot;
 	int jumpIndex;
 };
 
@@ -740,17 +748,17 @@ static void DrawTiresReflection_BuildWheelLocalPairs(struct DrawTiresScratch *sc
 	scratch->otRangeSecondary = idpp->otRangeSecondary;
 	scratch->wheelSize.word = (s16)driver->wheelSize;
 
-	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(driver->wheelRotation << 2);
+	struct TrigPair steering = DrawTiresSolid_TrigAngleSinCos(CTR_MipsSll(driver->wheelRotation, 2));
 	scratch->wheelLocal[0].rim.x = scratch->wheelLocal[0].center.x - steering.cos;
 	scratch->wheelLocal[0].rim.z.word = scratch->wheelLocal[0].center.z.word + steering.sin;
 	scratch->wheelLocal[1].rim.x = scratch->wheelLocal[1].center.x + steering.cos;
 	scratch->wheelLocal[1].rim.z.word = scratch->wheelLocal[1].center.z.word - steering.sin;
 
-	int hazardAngle = driver->hazardTimer << 5;
+	int hazardAngle = CTR_MipsSll(driver->hazardTimer, 5);
 	if ((driver->hazardTimer & 1) != 0)
 	{
 		hazardShift = 6;
-		hazardAngle <<= 1;
+		hazardAngle = CTR_MipsSll(hazardAngle, 1);
 	}
 
 	DrawTiresReflection_AddHazardOffset(&scratch->wheelLocal[0].rim, hazardAngle, hazardShift);
@@ -920,7 +928,7 @@ static struct DrawTiresReflectionProjectedWheel DrawTiresReflection_SelectProjec
 {
 	struct DrawTiresPackedVec3 *viewNormal = &scratch->viewNormalVectors[wheelIndex];
 	struct DrawTiresPackedVec3 *transformedRim = &scratch->transformedRimVectors[wheelIndex];
-	int selectedOT = scratch->otRangeSecondary;
+	CtrRuntimeAddress selectedOT = scratch->otRangeSecondary;
 	struct DrawTiresReflectionProjectedWheel selected = {
 	    .selectedOT = selectedOT,
 	    .jumpIndex = wheelIndex,
@@ -961,7 +969,7 @@ static void DrawTiresReflection_CopyIconUV(POLY_FT4 *p, struct Icon *icon)
 	CtrGpu_WritePackedUVWord(&p->u3, uv23 >> 16);
 }
 
-static int DrawTiresReflection_ApplyCornerOrder(struct DrawTiresScratch *scratch, int jumpIndex, int *selectedOTSlot, int sxy[4])
+static int DrawTiresReflection_ApplyCornerOrder(struct DrawTiresScratch *scratch, int jumpIndex, CtrRuntimeAddress *selectedOTSlot, int sxy[4])
 {
 	switch (jumpIndex)
 	{
@@ -1038,22 +1046,30 @@ static void DrawTiresReflection_WritePrimitiveCorners(POLY_FT4 *p, int sxy[4])
 	CtrGpu_WritePackedXY(&p->x3, (u32)sxy[3]);
 }
 
-static void DrawTiresReflection_LinkPrimitive(struct DrawTiresScratch *scratch, POLY_FT4 *p, int selectedOTSlot)
+static void DrawTiresReflection_LinkPrimitive(struct DrawTiresScratch *scratch, POLY_FT4 *p, CtrRuntimeAddress selectedOTSlot)
 {
-	int otRangeStart = scratch->otRangeStart;
-	int otRangeEnd = scratch->otRangeEnd;
+	CtrRuntimeAddress otRangeStart = scratch->otRangeStart;
+	CtrRuntimeAddress otRangeEnd = scratch->otRangeEnd;
 
-	if ((otRangeStart - selectedOTSlot) > 0)
+#ifdef CTR_NATIVE
+	if (otRangeStart > selectedOTSlot)
+#else
+	if ((s32)(otRangeStart - selectedOTSlot) > 0)
+#endif
 	{
 		selectedOTSlot = otRangeStart;
 	}
 
-	if ((otRangeEnd - selectedOTSlot) < 0)
+#ifdef CTR_NATIVE
+	if (otRangeEnd < selectedOTSlot)
+#else
+	if ((s32)(otRangeEnd - selectedOTSlot) < 0)
+#endif
 	{
 		selectedOTSlot = otRangeEnd;
 	}
 
-	u32 *otSlot = (u32 *)(u32)selectedOTSlot;
+	u32 *otSlot = (u32 *)(CtrRuntimeAddress)selectedOTSlot;
 	p->tag = CtrGpu_PackOTTag(*otSlot, 0x09000000);
 	*otSlot = (u32)CtrGpu_PrimToOTLink24(p);
 }
@@ -1063,7 +1079,7 @@ static void DrawTiresReflection_EmitProjectedWheel(struct DrawTiresScratch *scra
 {
 	POLY_FT4 *p = (POLY_FT4 *)primMem->cursor;
 	struct DrawTiresWheelLocal *wheelLocal = &scratch->wheelLocal[wheelIndex];
-	int selectedOTSlot = selected->selectedOTSlot;
+	CtrRuntimeAddress selectedOTSlot = selected->selectedOTSlot;
 	int sxy[4];
 
 	CtrGpu_WriteColorCode(&p->r0, scratch->tireColor);
@@ -1129,8 +1145,8 @@ static int DrawTiresReflection_StagePlayer(struct DrawTiresScratch *scratch, str
 
 	scratch->playerCounter = scratch->numPlyr - playerIndex;
 	scratch->vertSplit = inst->vertSplit;
-	scratch->depthOffsetStartBytes = idpp->depthOffset[0] << 2;
-	scratch->depthOffsetEndBytes = idpp->depthOffset[1] << 2;
+	scratch->depthOffsetStartBytes = CTR_MipsSll(idpp->depthOffset[0], 2);
+	scratch->depthOffsetEndBytes = CTR_MipsSll(idpp->depthOffset[1], 2);
 	scratch->instFlags = flags;
 
 	if ((flags & DRAW_SUCCESSFUL) == 0)

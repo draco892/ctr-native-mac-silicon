@@ -24,20 +24,20 @@ static inline u32 CtrGpu_PackOTTag(u32 ot, u32 tag)
 #ifdef CTR_NATIVE
 static inline b32 CtrGpu_IsCurrentOTRange(const struct DB *db, const u32 *start, const u32 *end)
 {
-	u32 rangeStart;
-	u32 rangeEnd;
-	u32 otStart;
-	u32 otCursor;
+	uintptr_t rangeStart;
+	uintptr_t rangeEnd;
+	uintptr_t otStart;
+	uintptr_t otCursor;
 
 	if ((db == NULL) || (start == NULL) || (end == NULL))
 	{
 		return false;
 	}
 
-	rangeStart = (u32)start;
-	rangeEnd = (u32)end;
-	otStart = (u32)db->otMem.start;
-	otCursor = (u32)db->otMem.cursor;
+	rangeStart = (uintptr_t)start;
+	rangeEnd = (uintptr_t)end;
+	otStart = (uintptr_t)db->otMem.start;
+	otCursor = (uintptr_t)db->otMem.cursor;
 
 	if (rangeEnd < rangeStart)
 	{

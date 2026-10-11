@@ -27,7 +27,7 @@ enum
 #define VehGroundSkids_LoadOriginTransform()                                                        \
 	do                                                                                              \
 	{                                                                                               \
-		const VehGroundSkidsWord *originWords = CTR_SCRATCHPAD_PTR(const VehGroundSkidsWord, 0xb8); \
+		const VehGroundSkidsWord *originWords = (const VehGroundSkidsWord *)(const void *)&scratch->origin; \
 		CTC2(originWords[0], 5);                                                                    \
 		CTC2(originWords[1], 6);                                                                    \
 		CTC2(originWords[2], 7);                                                                    \
@@ -51,6 +51,14 @@ enum
 	} while (0)
 #else
 #define VehGroundSkids_SetCallScratch(result, source, dependency) __asm__("addu %0,%1,$0" : "=r"(result) : "r"(source), "r"(dependency))
+#endif
+
+#ifdef CTR_NATIVE
+#define VehGroundSkids_PrepareFrontRight(value, xy) ((void)(value), (void)(xy))
+#define VehGroundSkids_FrontRightPointer(value, xy) (&(xy)[6])
+#else
+#define VehGroundSkids_PrepareFrontRight(value, xy) ((value) = (s32)(size_t)&(xy)[6])
+#define VehGroundSkids_FrontRightPointer(value, xy) ((u32 *)(size_t)(u32)(value))
 #endif
 
 typedef u32 VehGroundSkidsWord CTR_MAY_ALIAS;
@@ -121,22 +129,7 @@ void VehGroundSkids_Subset1(u32 *currXY, u32 *prevXY, int depth, struct VehGroun
 	*ot = packetAddress;
 }
 
-void VehGroundSkids_Subset2(struct VehGroundSkidsScratch *scratch, const SVECTOR *v1, const SVECTOR *v2, const SVECTOR *v3)
-{
-	// NOTE(aalhendi): Retail deliberately subtracts the low halfwords before
-	// projection; keep the 16-bit wraparound visible to both targets.
-	scratch->projected[0].vx = (s16)(u16)(((u32)(u16)v1->vx - (u32)(u16)scratch->origin.x) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-	scratch->projected[0].vy = (s16)(u16)(((u32)(u16)v1->vy - (u32)(u16)scratch->origin.y) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-	scratch->projected[0].vz = (s16)(u16)(((u32)(u16)v1->vz - (u32)(u16)scratch->origin.z) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-
-	scratch->projected[1].vx = (s16)(u16)(((u32)(u16)v2->vx - (u32)(u16)scratch->origin.x) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-	scratch->projected[1].vy = (s16)(u16)(((u32)(u16)v2->vy - (u32)(u16)scratch->origin.y) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-	scratch->projected[1].vz = (s16)(u16)(((u32)(u16)v2->vz - (u32)(u16)scratch->origin.z) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-
-	scratch->projected[2].vx = (s16)(u16)(((u32)(u16)v3->vx - (u32)(u16)scratch->origin.x) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-	scratch->projected[2].vy = (s16)(u16)(((u32)(u16)v3->vy - (u32)(u16)scratch->origin.y) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-	scratch->projected[2].vz = (s16)(u16)(((u32)(u16)v3->vz - (u32)(u16)scratch->origin.z) << VEH_GROUND_SKIDS_PROJECT_SCALE_SHIFT);
-}
+#include "VehGroundSkids_Subset2.c"
 
 void VehGroundSkids_Main(struct Thread *thread, struct PushBuffer *pb)
 {
@@ -179,7 +172,11 @@ void VehGroundSkids_Main(struct Thread *thread, struct PushBuffer *pb)
 	cursor = (size_t)pb->distanceToScreen_PREV;
 	gte_SetGeomScreen((s32)cursor);
 
+#if defined(CTR_NATIVE_HOST64)
+	scratch = NativeSkidWork_Get();
+#else
 	scratch = CTR_SCRATCHPAD_PTR(struct VehGroundSkidsScratch, 0x0);
+#endif
 	CTR_PSX_KEEP_VALUE(scratch);
 	scratch->pushBuffer = pb;
 	scratch->origin.x = 0;
@@ -386,7 +383,7 @@ void VehGroundSkids_Main(struct Thread *thread, struct PushBuffer *pb)
 									// predicate preserves retail's branch-delay-slot scheduling.
 									if ((flags & prevFlags & DRIVER_SKIDMARK_FRONT_RIGHT) != 0 && currDepth[6] > VEH_GROUND_SKIDS_MIN_VISIBLE_DEPTH &&
 									    currDepth[7] > VEH_GROUND_SKIDS_MIN_VISIBLE_DEPTH && prevDepth[6] > VEH_GROUND_SKIDS_MIN_VISIBLE_DEPTH &&
-									    (value = (s32)(size_t)&currXY[6], prevDepth[7] > VEH_GROUND_SKIDS_MIN_VISIBLE_DEPTH))
+									    (VehGroundSkids_PrepareFrontRight(value, currXY), prevDepth[7] > VEH_GROUND_SKIDS_MIN_VISIBLE_DEPTH))
 									{
 										register struct VehGroundSkidsScratch *callScratch CTR_PSX_REGISTER("$7");
 
@@ -401,7 +398,7 @@ void VehGroundSkids_Main(struct Thread *thread, struct PushBuffer *pb)
 										depth = (currDepth[6] >> VEH_GROUND_SKIDS_DEPTH_SHIFT) +
 										        (markBytes[offsetof(struct Driver, skidmarks) + 3 * sizeof(union VehEmitterSkidmark) + 6]
 										         << VEH_GROUND_SKIDS_OT_DEPTH_SHIFT);
-										VehGroundSkids_Subset1((u32 *)(size_t)(u32)value, (u32 *)initialFrame, depth, callScratch);
+										VehGroundSkids_Subset1(VehGroundSkids_FrontRightPointer(value, currXY), (u32 *)initialFrame, depth, callScratch);
 									}
 								}
 

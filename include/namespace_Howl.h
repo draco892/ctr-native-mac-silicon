@@ -398,7 +398,7 @@ struct CseqSongHeader
 	// each seq is an array of SongNote
 	// s16 seqOffsetArr[0];
 };
-#define SONGHEADER_GETSEQOFFARR(x) ((u32)x + sizeof(struct CseqSongHeader))
+#define SONGHEADER_GETSEQOFFARR(x) ((u8 *)(x) + sizeof(struct CseqSongHeader))
 
 // right before first note
 struct SongNoteHeader
@@ -410,7 +410,7 @@ struct SongNoteHeader
 
 	// char notes[0];
 };
-#define NOTEHEADER_GETNOTES(x) ((u32)x + sizeof(struct SongNoteHeader))
+#define NOTEHEADER_GETNOTES(x) ((u8 *)(x) + sizeof(struct SongNoteHeader))
 
 struct SongSeq
 {
@@ -536,7 +536,7 @@ struct SampleBlockHeader
 
 	// s16 spuIndexArr[0];
 };
-#define SBHEADER_GETARR(x) (s16 *)((u32)x + sizeof(struct SampleBlockHeader))
+#define SBHEADER_GETARR(x) (s16 *)((u8 *)(x) + sizeof(struct SampleBlockHeader))
 
 struct SpuAddrEntry
 {
@@ -607,13 +607,13 @@ enum VoiceType_XAGAME2
 #endif
 
 CTR_STATIC_ASSERT(sizeof(SpuReverbAttr) == 0x14);
-CTR_STATIC_ASSERT(sizeof(struct VoicelineItem) == 0x10);
-CTR_STATIC_ASSERT(sizeof(struct ChannelAttr) == 0x10);
-CTR_STATIC_ASSERT(sizeof(struct ChannelStats) == 0x20);
+CTR_STATIC_ASSERT(sizeof(struct VoicelineItem) == CTR_RUNTIME_ABI(0x10, 0x18));
+CTR_STATIC_ASSERT(sizeof(struct ChannelAttr) == CTR_RUNTIME_ABI(0x10, 0x18));
+CTR_STATIC_ASSERT(sizeof(struct ChannelStats) == CTR_RUNTIME_ABI(0x20, 0x28));
 CTR_STATIC_ASSERT(sizeof(struct GarageFX) == 0xC);
 CTR_STATIC_ASSERT(OFFSETOF(struct GarageFX, LR) == 0x4);
 CTR_STATIC_ASSERT(OFFSETOF(struct GarageFX, soundIDCount) == 0x8);
-CTR_STATIC_ASSERT(sizeof(struct SongSeq) == 0x1C);
-CTR_STATIC_ASSERT(sizeof(struct Song) == 0x7C);
+CTR_STATIC_ASSERT(sizeof(struct SongSeq) == CTR_RUNTIME_ABI(0x1C, 0x28));
+CTR_STATIC_ASSERT(sizeof(struct Song) == CTR_RUNTIME_ABI(0x7C, 0xe0));
 
 #endif

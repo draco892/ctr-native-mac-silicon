@@ -201,7 +201,7 @@ static inline void MainFreeze_ConfigDrawRaceWheel(int value, struct GameTracker 
 
 		if ((i != 1) && (value == 0x600))
 		{
-			ot = (void *)((s32)ot + 0xc);
+			ot = (void *)((u8 *)ot + 0xc);
 		}
 
 		y = sdata->analogConfigY[0] + ((sin * (i - 1) * 0x20) >> 0xc) + 0x20;

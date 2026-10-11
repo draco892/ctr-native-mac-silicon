@@ -11,7 +11,7 @@ static inline const struct SpawnPosRot *RB_Baron_GetFrame(s32 pointIndex)
 {
 	const struct SpawnPosRot *base = GAME_TRACKER->level1->ptrSpawnType2_PosRot[0].coords.posRot;
 	// NOTE(aalhendi): Keep the byte stride before the base in this 32-bit address calculation.
-	return (const struct SpawnPosRot *)(pointIndex * sizeof(struct SpawnPosRot) + (u32)base);
+	return (const struct SpawnPosRot *)(pointIndex * sizeof(struct SpawnPosRot) + (CtrRuntimeAddress)base);
 }
 
 void RB_Baron_ThTick(struct Thread *t)

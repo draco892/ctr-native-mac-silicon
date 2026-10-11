@@ -1,4 +1,8 @@
 #include "VehCommon.h"
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_assets.h>
+#include <platform/native_model_animation.h>
+#endif
 
 enum
 {
@@ -49,6 +53,11 @@ int VehFrameInst_GetStartFrame(int animIndex, int numFrames)
 
 u32 VehFrameInst_GetNumAnimFrames(struct Instance *inst, int animIndex)
 {
+#ifdef CTR_NATIVE_GAME_SCENE
+    struct NativeModelView nativeModel; struct NativeAnimationView nativeAnimation;
+    if (inst != NULL && NativeSceneAssets_GetModel(&gNativeSceneAssets, inst->model, &nativeModel) == NATIVE_ASSET_OK)
+        return animIndex >= 0 && NativeModel_GetAnimation(&nativeModel, 0, (u32)animIndex, &nativeAnimation) == NATIVE_ASSET_OK ? nativeAnimation.logicalFrameCount : 0;
+#endif
 	struct ModelHeader *mh;
 	struct ModelAnim *anim;
 

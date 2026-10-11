@@ -21,7 +21,7 @@ enum
 	VEH_BIRTH_RESERVED_0x412_INITIAL = 0x600,
 	VEH_BIRTH_STEERING_FRAMES_RESET = 10000,
 	VEH_BIRTH_QUIP_NONE = -1,
-	VEH_BIRTH_PLAYER_THREAD_FLAGS = SIZE_RELATIVE_POOL_BUCKET(DRIVER_NTSC_RETAIL_SIZE, NONE, LARGE, PLAYER),
+	VEH_BIRTH_PLAYER_THREAD_FLAGS = SIZE_RELATIVE_POOL_BUCKET(DRIVER_RUNTIME_BASE_SIZE, NONE, LARGE, PLAYER),
 };
 
 typedef u32 VehBirthInstDefNameWord CTR_MAY_ALIAS;
@@ -50,7 +50,7 @@ void VehBirth_TeleportSelf(struct Driver *d, u32 spawnFlag, int spawnPosY)
 		return;
 	}
 
-	sps = CTR_SCRATCHPAD_PTR(struct ScratchpadStruct, 0x108);
+	sps = CTR_COLLISION_WORK();
 	sps->Union.QuadBlockColl.quadFlagsWanted = QUADBLOCK_FLAG_GROUND | QUADBLOCK_FLAG_COLLISION_SURFACE;
 	sps->Union.QuadBlockColl.quadFlagsIgnored = 0;
 	sps->Union.QuadBlockColl.searchFlags = 0;
@@ -459,6 +459,10 @@ VehBirth_RotationReady:
 
 	if (driver->instSelf->thread->modelIndex == DYNAMIC_PLAYER)
 	{
+#if defined(CTR_NATIVE_HOST64)
+		for (int i = 0; i < DRIVER_FUNC_COUNT; i++)
+			driver->funcPtrs[i] = NULL;
+#else
 		register int funcIndex CTR_PSX_REGISTER("$6");
 		register u8 *funcCursor CTR_PSX_REGISTER("$2");
 
@@ -472,6 +476,7 @@ VehBirth_RotationReady:
 			funcIndex--;
 			funcCursor -= sizeof(DriverFunc);
 		} while (funcIndex >= 0);
+#endif
 
 		CAM_StartOfRace(&GAME_TRACKER->cameraDC[driver->driverID]);
 
@@ -860,7 +865,7 @@ struct Driver *VehBirth_Player(int index)
 
 	t = PROC_BirthWithObject(VEH_BIRTH_PLAYER_THREAD_FLAGS, 0, VEH_PLAYER_THREAD_NAME, 0);
 	d = t->object;
-	memset(d, 0, DRIVER_NTSC_RETAIL_SIZE);
+	memset(d, 0, DRIVER_RUNTIME_BASE_SIZE);
 
 	VehBirth_NonGhost(t, index);
 

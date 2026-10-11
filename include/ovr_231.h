@@ -25,6 +25,20 @@ struct MaskHeadScratch
 	s16 _pad_posOffset;
 };
 
+struct Blowup
+{
+	struct Instance *shockwave;
+	struct Instance *explosion;
+	u32 reserved; // Retail allocates a third word; these behaviors leave it untouched.
+};
+
+struct Burst
+{
+	struct Instance *shockwave;
+	struct Instance *explosion;
+	struct Instance *rotatedExplosion;
+};
+
 struct MaskHeadWeapon
 {
 	// 0x0
@@ -44,7 +58,7 @@ struct MaskHeadWeapon
 
 	// 0x14 bytes large
 };
-CTR_STATIC_ASSERT(sizeof(struct MaskHeadWeapon) == 0x14);
+CTR_STATIC_ASSERT(sizeof(struct MaskHeadWeapon) == CTR_RUNTIME_ABI(0x14, 0x18));
 
 enum
 {
@@ -157,9 +171,9 @@ struct TrackerWeapon
 
 	// 0x58 bytes large
 };
-CTR_STATIC_ASSERT(offsetof(struct TrackerWeapon, pathProgress) == 0x2c);
-CTR_STATIC_ASSERT(offsetof(struct TrackerWeapon, savedPos) == 0x4c);
-CTR_STATIC_ASSERT(sizeof(struct TrackerWeapon) == 0x58);
+CTR_STATIC_ASSERT(offsetof(struct TrackerWeapon, pathProgress) == CTR_RUNTIME_ABI(0x2c, 0x3c));
+CTR_STATIC_ASSERT(offsetof(struct TrackerWeapon, savedPos) == CTR_RUNTIME_ABI(0x4c, 0x68));
+CTR_STATIC_ASSERT(sizeof(struct TrackerWeapon) == CTR_RUNTIME_ABI(0x58, 0x78));
 
 struct RainLocal
 {
@@ -187,10 +201,10 @@ struct RainLocal
 
 	// 0x28 -- size
 };
-CTR_STATIC_ASSERT(offsetof(struct RainLocal, scroll) == 0xc);
-CTR_STATIC_ASSERT(offsetof(struct RainLocal, vel) == 0x14);
-CTR_STATIC_ASSERT(offsetof(struct RainLocal, pos) == 0x1c);
-CTR_STATIC_ASSERT(sizeof(struct RainLocal) == 0x28);
+CTR_STATIC_ASSERT(offsetof(struct RainLocal, scroll) == CTR_RUNTIME_ABI(0xc, 0x14));
+CTR_STATIC_ASSERT(offsetof(struct RainLocal, vel) == CTR_RUNTIME_ABI(0x14, 0x1c));
+CTR_STATIC_ASSERT(offsetof(struct RainLocal, pos) == CTR_RUNTIME_ABI(0x1c, 0x24));
+CTR_STATIC_ASSERT(sizeof(struct RainLocal) == CTR_RUNTIME_ABI(0x28, 0x38));
 
 struct RainCloud
 {
@@ -205,8 +219,8 @@ struct RainCloud
 
 	// size - 0x8
 };
-CTR_STATIC_ASSERT(offsetof(struct RainCloud, effect) == 0x6);
-CTR_STATIC_ASSERT(sizeof(struct RainCloud) == 0x8);
+CTR_STATIC_ASSERT(offsetof(struct RainCloud, effect) == CTR_RUNTIME_ABI(0x6, 0xa));
+CTR_STATIC_ASSERT(sizeof(struct RainCloud) == CTR_RUNTIME_ABI(0x8, 0x10));
 
 typedef u16 ShieldFlags;
 
@@ -242,7 +256,7 @@ struct Shield
 	// 0x18
 };
 CTR_STATIC_ASSERT(offsetof(struct Shield, flags) == 0x6);
-CTR_STATIC_ASSERT(sizeof(struct Shield) == 0x18);
+CTR_STATIC_ASSERT(sizeof(struct Shield) == CTR_RUNTIME_ABI(0x18, 0x20));
 
 struct MineWeapon;
 
@@ -254,7 +268,7 @@ struct WeaponSlot231
 	// 0x8
 	struct MineWeapon *mineWeapon;
 };
-CTR_STATIC_ASSERT(sizeof(struct WeaponSlot231) == 0xc);
+CTR_STATIC_ASSERT(sizeof(struct WeaponSlot231) == CTR_RUNTIME_ABI(0xc, 0x18));
 
 typedef u16 MineWeaponFlags;
 
@@ -317,8 +331,8 @@ struct MineWeapon
 	// 0x2a
 	s16 cooldown;
 };
-CTR_STATIC_ASSERT(offsetof(struct MineWeapon, flags) == 0x28);
-CTR_STATIC_ASSERT(sizeof(struct MineWeapon) == 0x2c);
+CTR_STATIC_ASSERT(offsetof(struct MineWeapon, flags) == CTR_RUNTIME_ABI(0x28, 0x3c));
+CTR_STATIC_ASSERT(sizeof(struct MineWeapon) == CTR_RUNTIME_ABI(0x2c, 0x40));
 
 struct Baron
 {
@@ -355,8 +369,8 @@ struct Baron
 	// 0x30 bytes large
 };
 CTR_STATIC_ASSERT(offsetof(struct Baron, soundID_flags) == 0x24);
-CTR_STATIC_ASSERT(offsetof(struct Baron, pointIndex) == 0x2c);
-CTR_STATIC_ASSERT(sizeof(struct Baron) == 0x30);
+CTR_STATIC_ASSERT(offsetof(struct Baron, pointIndex) == CTR_RUNTIME_ABI(0x2c, 0x30));
+CTR_STATIC_ASSERT(sizeof(struct Baron) == CTR_RUNTIME_ABI(0x30, 0x38));
 
 struct Blade
 {
@@ -517,13 +531,13 @@ struct Follower
 	SVec3 realPos;
 	s16 _pad_realPos;
 };
-CTR_STATIC_ASSERT(sizeof(struct Follower) == 0x18);
+CTR_STATIC_ASSERT(sizeof(struct Follower) == CTR_RUNTIME_ABI(0x18, 0x28));
 
 struct Fruit
 {
 	struct Driver *driver;
 };
-CTR_STATIC_ASSERT(sizeof(struct Fruit) == 0x4);
+CTR_STATIC_ASSERT(sizeof(struct Fruit) == CTR_RUNTIME_ABI(0x4, 0x8));
 
 struct Minecart
 {
@@ -708,8 +722,8 @@ struct Spider
 };
 CTR_STATIC_ASSERT(offsetof(struct Spider, isNearRoof) == 0x6);
 CTR_STATIC_ASSERT(offsetof(struct Spider, delay) == 0x4);
-CTR_STATIC_ASSERT(offsetof(struct Spider, shadowInst) == 0xc);
-CTR_STATIC_ASSERT(sizeof(struct Spider) == 0x10);
+CTR_STATIC_ASSERT(offsetof(struct Spider, shadowInst) == CTR_RUNTIME_ABI(0xc, 0x10));
+CTR_STATIC_ASSERT(sizeof(struct Spider) == CTR_RUNTIME_ABI(0x10, 0x18));
 
 typedef s32 TeethDirection;
 

@@ -35,7 +35,7 @@ typedef s16 VehGroundShadowSignedHalfword CTR_MAY_ALIAS;
 #define VehGroundShadow_SetGeomOffset(x, y)              gte_SetGeomOffset(x, y)
 #define VehGroundShadow_AddPointer(result, base, offset) ((result) = (base) + (offset))
 #define VehGroundShadow_SetCounterZero(counter)          ((counter) = 0)
-#define VehGroundShadow_SetFirstTexture(texture)         ((texture) = (size_t)CTR_SCRATCHPAD_PTR(struct TextureLayout, 0x224))
+#define VehGroundShadow_SetFirstTexture(texture)         ((texture) = (size_t)(scratch + 0x224))
 #define VehGroundShadow_SetIconIndex(index)              ((index) = NULL)
 #else
 // NOTE(aalhendi): These matching-only loads intentionally expose only their
@@ -54,6 +54,14 @@ typedef s16 VehGroundShadowSignedHalfword CTR_MAY_ALIAS;
 #define VehGroundShadow_SetCounterZero(counter)          __asm__ volatile("move %0,$0" : "=r"(counter))
 #define VehGroundShadow_SetFirstTexture(texture)         __asm__("lui %0,0x1f80\n\tori %0,%0,0x224" : "=r"(texture))
 #define VehGroundShadow_SetIconIndex(index)              __asm__("move %0,$0" : "=r"(index))
+#endif
+
+#if defined(CTR_NATIVE_HOST64)
+#define VEH_SHADOW_DRIVER_SLOT(address) (*NativeShadowWork_DriverSlot(NativeShadowWork_Get(), (address)))
+#define VEH_SHADOW_INSTANCE_SLOT(address) (*NativeShadowWork_InstanceSlot(NativeShadowWork_Get(), (address)))
+#else
+#define VEH_SHADOW_DRIVER_SLOT(address) (*(struct Driver **)(address))
+#define VEH_SHADOW_INSTANCE_SLOT(address) (*(struct Instance **)(address))
 #endif
 
 /// @brief Copies texture layout data from icon to arbitrary mem address. Particularly used to copy kart shadow textures to scratchpad.
@@ -104,7 +112,9 @@ void VehGroundShadow_Main(void)
 	u32 *prim;
 	register s32 playerIndex CTR_PSX_REGISTER("$23");
 	register u8 *entryBase CTR_PSX_REGISTER("$21");
+	#if !defined(CTR_NATIVE_HOST64)
 	register u8 *pushBufferCursor CTR_PSX_REGISTER("$22");
+#endif
 	register u32 colorOrDistance CTR_PSX_REGISTER("$20");
 	register u8 *entryCursor CTR_PSX_REGISTER("$18");
 	register s32 height CTR_PSX_REGISTER("$17");
@@ -135,11 +145,22 @@ void VehGroundShadow_Main(void)
 	s32 packetAddress;
 	s32 geomX;
 	s32 geomY;
-	u32 retailCallState[3];
+	CtrRuntimeAddress retailCallState[3];
 
-	VehGroundShadow_SetFirstTexture(z);
-	VehGroundShadow_SetIconIndex(localOutput);
-	scratch = CTR_SCRATCHPAD_PTR(u8, 0);
+#if defined(CTR_NATIVE_HOST64)
+	struct NativeShadowWork *hostShadow = NativeShadowWork_Get();
+	scratch = hostShadow->payload.bytes;
+#elif defined(CTR_NATIVE)
+    scratch = CTR_SCRATCHPAD_PTR(u8, 0);
+#else
+    VehGroundShadow_SetFirstTexture(z);
+    VehGroundShadow_SetIconIndex(localOutput);
+    scratch = CTR_SCRATCHPAD_PTR(u8, 0);
+#endif
+#ifdef CTR_NATIVE
+    VehGroundShadow_SetFirstTexture(z);
+    VehGroundShadow_SetIconIndex(localOutput);
+#endif
 	if (!VehGroundShadow_Subset1((struct TextureLayout *)z, (int)(size_t)localOutput))
 		return;
 	CTR_PSX_MEMORY_BARRIER();
@@ -171,9 +192,9 @@ void VehGroundShadow_Main(void)
 		driver = tracker->drivers[playerIndex];
 		if (driver != NULL)
 		{
-			*(struct Driver **)((u8 *)y + 2) = driver;
+			VEH_SHADOW_DRIVER_SLOT((u8 *)y + 2) = driver;
 			x = (size_t)driver->instSelf;
-			*(struct Instance **)((u8 *)y + 6) = (struct Instance *)x;
+			VEH_SHADOW_INSTANCE_SLOT((u8 *)y + 6) = (struct Instance *)x;
 			VEH_GROUND_SHADOW_HALF((u8 *)y, 0x14) = (u16)((struct Instance *)x)->flags;
 			v0Value = tracker->numPlyrCurrGame;
 			entryPlayerIndex = (s32)v0Value - 1;
@@ -185,7 +206,11 @@ void VehGroundShadow_Main(void)
 				z = v0Value + x;
 				do
 				{
+#if defined(CTR_NATIVE_HOST64)
+					v1Value = (u8)INST_GETIDPP((struct Instance *)x)[entryPlayerIndex].instFlags;
+#else
 					v1Value = VEH_GROUND_SHADOW_BYTE((u8 *)z, 0xb8);
+#endif
 					z -= sizeof(struct InstDrawPerPlayer);
 					v0Value = (size_t)entryBase + entryPlayerIndex;
 					entryPlayerIndex--;
@@ -202,7 +227,7 @@ void VehGroundShadow_Main(void)
 		}
 		else
 		{
-			*(struct Driver **)((u8 *)y + 2) = NULL;
+			VEH_SHADOW_DRIVER_SLOT((u8 *)y + 2) = NULL;
 		}
 		VEH_GROUND_SHADOW_BYTE((u8 *)y, 0) = 0;
 		playerIndex++;
@@ -213,30 +238,42 @@ void VehGroundShadow_Main(void)
 	{
 		struct GameTracker *tracker = GAME_TRACKER;
 
-		*(struct Driver **)(entryBase + 0x14) = NULL;
+		VEH_SHADOW_DRIVER_SLOT(entryBase + 0x14) = NULL;
 		v0Value = tracker->numPlyrCurrGame;
 		playerIndex = (s32)v0Value - 1;
-		v0Value = playerIndex << 4;
-		v0Value += playerIndex;
-		v0Value <<= 4;
-		v0Value += 0x168;
-		v0Value = (size_t)tracker + v0Value;
+#if !defined(CTR_NATIVE_HOST64)
+        v0Value = playerIndex << 4;
+        v0Value += playerIndex;
+        v0Value <<= 4;
+        v0Value += 0x168;
+        v0Value = (size_t)tracker + v0Value;
+#endif
 	}
 	if (playerIndex < 0)
 		goto write_cursor;
 	culledState = VEH_GROUND_SHADOW_STATE_CULLED;
 	VehGroundShadow_SetLocalVector(localVector, scratch);
 	readyState = VEH_GROUND_SHADOW_STATE_READY;
+#if !defined(CTR_NATIVE_HOST64)
 	pushBufferCursor = (u8 *)v0Value + 0x38;
+#endif
 
 	do
 	{
+#if defined(CTR_NATIVE_HOST64)
+		struct PushBuffer *pb = &GAME_TRACKER->pushBuffer[playerIndex];
+		hostShadow->ot = pb->ptrOT;
+		VEH_GROUND_SHADOW_WORD(scratch, 0x240) = pb->distanceToScreen_PREV;
+		geomX = pb->rect.w >> 1;
+		geomY = pb->rect.h >> 1;
+		memcpy(scratch + 0x90, pb->matrix_Camera.t, sizeof(pb->matrix_Camera.t));
+		memcpy(scratch + 0x50, pb->matrix_ViewProj.m, sizeof(pb->matrix_ViewProj.m));
+#else
 		VEH_GROUND_SHADOW_WORD(scratch, 0x240) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, -0x20);
 		VEH_GROUND_SHADOW_WORD(scratch, 0x23c) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0xbc);
 		geomX = (s16)VEH_GROUND_SHADOW_HALF(pushBufferCursor, -0x18) >> 1;
 		geomY = (s16)VEH_GROUND_SHADOW_HALF(pushBufferCursor, -0x16) >> 1;
-		VehGroundShadow_SetGeomOffset(geomX, geomY);
-		CTC2(VEH_GROUND_SHADOW_WORD(scratch, 0x240), 26);
+
 		VEH_GROUND_SHADOW_WORD(scratch, 0x90) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0x44);
 		VEH_GROUND_SHADOW_WORD(scratch, 0x94) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0x48);
 		VEH_GROUND_SHADOW_WORD(scratch, 0x98) = VEH_GROUND_SHADOW_WORD(pushBufferCursor, 0x4c);
@@ -247,10 +284,13 @@ void VehGroundShadow_Main(void)
 		v1Value = VEH_GROUND_SHADOW_WORD(pushBufferCursor, -0x04);
 		VEH_GROUND_SHADOW_HALF(scratch, 0x60) = (u16)v0Value;
 		VEH_GROUND_SHADOW_WORD(scratch, 0x5c) = (u32)v1Value;
+#endif
+		VehGroundShadow_SetGeomOffset(geomX, geomY);
+		CTC2(VEH_GROUND_SHADOW_WORD(scratch, 0x240), 26);
 		VehGroundShadow_LoadRotMatrix((MATRIX *)(scratch + 0x50));
 
 		VehGroundShadow_AddPointer(entryBase, scratch, 0xa4);
-		driver = *(struct Driver **)(entryBase + 0x14);
+		driver = VEH_SHADOW_DRIVER_SLOT(entryBase + 0x14);
 		if (driver == NULL)
 			goto drivers_done;
 		CTR_PSX_MEMORY_BARRIER();
@@ -350,7 +390,7 @@ void VehGroundShadow_Main(void)
 				axisAngle = driver->rotCurr.y;
 				retailCallState[0] = (u32)culledState;
 				retailCallState[1] = (u32)readyState;
-				retailCallState[2] = (u32)localVector;
+				retailCallState[2] = (CtrRuntimeAddress)localVector;
 				VehPhysForce_RotAxisAngle(axisMatrix, axisVector, axisAngle);
 				CTR_PSX_FORGET_VALUE(axisMatrix);
 				gteWord0 = VEH_GROUND_SHADOW_WORD(axisMatrix, 0x00);
@@ -380,7 +420,7 @@ void VehGroundShadow_Main(void)
 				VEH_GROUND_SHADOW_SIGNED_HALF(scratch, 0x48) = (s16)v1Value;
 				VEH_GROUND_SHADOW_SIGNED_HALF(scratch, 0x4a) = 0;
 				VEH_GROUND_SHADOW_SIGNED_HALF(scratch, 0x4c) = 0;
-				localVector = (u8 *)(size_t)*(volatile u32 *)&retailCallState[2];
+				localVector = (u8 *)(size_t)*(volatile CtrRuntimeAddress *)&retailCallState[2];
 				readyState = (s32) * (volatile u32 *)&retailCallState[1];
 				culledState = (s32) * (volatile u32 *)&retailCallState[0];
 				do
@@ -563,7 +603,11 @@ void VehGroundShadow_Main(void)
 				if (depthIndex > VEH_GROUND_SHADOW_OT_MAX)
 					depthIndex = VEH_GROUND_SHADOW_OT_MAX;
 				packetAddress = (s32)CtrGpu_PrimToOTLink24(prim);
+#if defined(CTR_NATIVE_HOST64)
+				ot = hostShadow->ot + depthIndex;
+#else
 				ot = (u32 *)VEH_GROUND_SHADOW_WORD(scratch, 0x23c) + depthIndex;
+#endif
 				prim[0] = *ot | VEH_GROUND_SHADOW_GPU_TAG_POLY_FT4;
 				prim += 10;
 				*ot = (u32)packetAddress;
@@ -573,13 +617,16 @@ void VehGroundShadow_Main(void)
 
 		next_driver:
 			entryCursor += 0x28;
-			driver = *(struct Driver **)entryCursor;
+			driver = VEH_SHADOW_DRIVER_SLOT(entryCursor);
 			entryBase += 0x28;
 		} while (driver != NULL);
 
 	drivers_done:
 		playerIndex--;
-		pushBufferCursor -= sizeof(struct PushBuffer);
+#if !defined(CTR_NATIVE_HOST64)
+		if (playerIndex >= 0)
+			pushBufferCursor -= sizeof(struct PushBuffer);
+#endif
 	} while (playerIndex >= 0);
 
 write_cursor:

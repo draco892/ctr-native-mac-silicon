@@ -4,12 +4,440 @@ include(CheckCCompilerFlag)
 
 set(CTR_NATIVE_VERSION "0.1.0-beta.7.1")
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+option(CTR_BUILD_GAME "Build the complete game executable" ON)
+option(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME "Build the host64 game for runtime integration (gameplay unverified)" OFF)
+option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native tests and game" OFF)
+include(CTest)
+option(CTR_NATIVE_DECODED_TERRAIN "Use experimental decoded terrain in the game" OFF)
+
+# Build actual production memory modules independently of resident game layouts
+# and SDL. This is the ARM64 porting entry point until asset decoding is ready.
+if(BUILD_TESTING)
+    add_executable(ctr_native_memory_tests
+        tests/native_memory_tests.c
+        game/MEMPACK.c
+        platform/native_mempack_arena.c
+        platform/native_gpu_links.c
+    )
+    set_target_properties(ctr_native_memory_tests PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_include_directories(ctr_native_memory_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_memory_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_memory_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_memory_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_memory_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    elseif(CTR_ENABLE_SANITIZERS)
+        message(FATAL_ERROR "Native memory sanitizers require a GCC or Clang frontend.")
+    endif()
+    add_test(NAME ctr_native_memory COMMAND ctr_native_memory_tests)
+
+    add_executable(ctr_native_lng_tests
+        tests/native_lng_tests.c
+        platform/native_lng.c
+        game/MEMPACK.c
+        platform/native_mempack_arena.c
+    )
+    set_target_properties(ctr_native_lng_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_lng_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_lng_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_lng_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_lng_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_lng_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_lng COMMAND ctr_native_lng_tests)
+
+    add_executable(ctr_native_ptrmap_tests tests/native_ptrmap_tests.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_ptrmap_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_ptrmap_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_ptrmap_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_ptrmap_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_ptrmap_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_ptrmap_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_ptrmap COMMAND ctr_native_ptrmap_tests)
+
+    add_executable(ctr_native_assets_tests tests/native_assets_tests.c platform/native_asset_readers.c platform/native_ptrmap.c platform/native_asset_loading.c)
+    set_target_properties(ctr_native_assets_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_assets_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_assets_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_assets_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_assets_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_assets_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_assets COMMAND ctr_native_assets_tests)
+
+    add_executable(ctr_native_model_library_tests tests/native_model_library_tests.c platform/native_model_library.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_library_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_library_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_library_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_library_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_library_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_library_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_library COMMAND ctr_native_model_library_tests)
+
+    add_executable(ctr_native_model_animation_tests tests/native_model_animation_tests.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_animation_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_animation_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_animation_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_animation_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_animation_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_animation_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_animation COMMAND ctr_native_model_animation_tests)
+
+    add_executable(ctr_native_model_vertices_tests tests/native_model_vertices_tests.c platform/native_model_vertices.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_vertices_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_vertices_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_vertices_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_vertices_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_vertices_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_vertices_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_vertices COMMAND ctr_native_model_vertices_tests)
+
+    add_executable(ctr_native_model_transform_tests tests/native_model_transform_tests.c platform/native_model_transform.c platform/native_model_vertices.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_transform_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_transform_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_transform_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_transform_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_transform_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_transform_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_transform COMMAND ctr_native_model_transform_tests)
+
+    add_executable(ctr_native_model_matrix_tests tests/native_model_matrix_tests.c platform/native_model_matrix.c platform/native_model_transform.c platform/native_model_vertices.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_matrix_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_matrix_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_matrix_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_matrix_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_matrix_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_matrix_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_matrix COMMAND ctr_native_model_matrix_tests)
+
+    add_executable(ctr_native_model_projection_tests tests/native_model_projection_tests.c platform/native_model_projection.c platform/native_model_matrix.c platform/native_gte_core.c platform/native_model_transform.c platform/native_model_vertices.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_projection_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_projection_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_projection_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_projection_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_projection_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_projection_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_projection COMMAND ctr_native_model_projection_tests)
+
+    add_executable(ctr_native_model_draw_tests tests/native_model_draw_tests.c platform/native_model_draw.c platform/native_model_commands.c platform/native_vram.c platform/native_model_projection.c platform/native_model_matrix.c platform/native_model_transform.c platform/native_model_vertices.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_draw_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_draw_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_draw_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_draw_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_draw_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_draw_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_draw COMMAND ctr_native_model_draw_tests)
+
+    add_executable(ctr_native_model_commands_tests tests/native_model_commands_tests.c platform/native_model_commands.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_model_commands_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_model_commands_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_model_commands_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_model_commands_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_model_commands_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_model_commands_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_model_commands COMMAND ctr_native_model_commands_tests)
+
+    add_executable(ctr_native_vram_tests tests/native_vram_tests.c platform/native_vram.c)
+    set_target_properties(ctr_native_vram_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_vram_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_vram_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_vram_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_vram_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_vram_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_vram COMMAND ctr_native_vram_tests)
+
+    add_executable(ctr_native_raster_tests tests/native_raster_tests.c platform/native_raster.c platform/native_vram.c)
+    set_target_properties(ctr_native_raster_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_raster_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_raster_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_raster_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_raster_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_raster_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_raster COMMAND ctr_native_raster_tests)
+
+    add_executable(ctr_native_instance_transform_tests tests/native_instance_transform_tests.c platform/native_instance_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_model_transform.c platform/native_model_vertices.c platform/native_model_animation.c platform/native_asset_readers.c platform/native_ptrmap.c platform/native_gte_core.c)
+    set_target_properties(ctr_native_instance_transform_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_instance_transform_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_instance_transform_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_instance_transform_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_instance_transform_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_instance_transform_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_instance_transform COMMAND ctr_native_instance_transform_tests)
+
+    add_executable(ctr_native_mesh_geometry_tests tests/native_mesh_geometry_tests.c platform/native_mesh_geometry.c)
+    set_target_properties(ctr_native_mesh_geometry_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_mesh_geometry_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_mesh_geometry_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_mesh_geometry_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_mesh_geometry_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_mesh_geometry_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_mesh_geometry COMMAND ctr_native_mesh_geometry_tests)
+
+    add_executable(ctr_native_terrain_material_tests tests/native_terrain_material_tests.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_terrain_material_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_terrain_material_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_terrain_material_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_terrain_material_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_terrain_material_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_terrain_material_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_terrain_material COMMAND ctr_native_terrain_material_tests)
+
+    add_executable(ctr_native_scene_runtime_tests tests/native_scene_runtime_tests.c platform/native_resident_graph.c platform/native_resident.c game/MEMPACK.c platform/native_mempack_arena.c platform/native_scene_gpu.c platform/native_gpu_links.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_geometry.c platform/native_vertex_animation.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_scene_runtime_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_scene_runtime_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_scene_runtime_tests PRIVATE CTR_NATIVE CTR_NATIVE_GAME_SCENE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_scene_runtime_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_scene_runtime_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_scene_runtime_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_scene_runtime COMMAND ctr_native_scene_runtime_tests)
+
+    add_executable(ctr_native_checkpoint_relocation_tests tests/native_checkpoint_relocation_tests.c platform/native_checkpoint_relocation.c platform/native_checkpoint_file.c platform/native_host_scratch.c platform/native_collision_work.c platform/native_libetc.c)
+    set_target_properties(ctr_native_checkpoint_relocation_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_checkpoint_relocation_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_checkpoint_relocation_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_checkpoint_relocation_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_checkpoint_relocation_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_checkpoint_relocation_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_checkpoint_relocation COMMAND ctr_native_checkpoint_relocation_tests ${CMAKE_CURRENT_BINARY_DIR}/test-native-checkpoint.ctrstates)
+
+    add_executable(ctr_native_collision_work_tests tests/native_collision_work_tests.c platform/native_collision_work.c platform/native_host_scratch.c platform/native_checkpoint_relocation.c)
+    set_target_properties(ctr_native_collision_work_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_collision_work_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_collision_work_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_collision_work_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_collision_work_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_collision_work_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_collision_work COMMAND ctr_native_collision_work_tests)
+
+    add_executable(ctr_native_scene_geometry_tests tests/native_scene_geometry_tests.c platform/native_scene_geometry.c platform/native_scene_camera.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_readers.c platform/native_model_commands.c platform/native_model_projection.c platform/native_model_matrix.c platform/native_model_transform.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_instance_transform.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_scene_geometry_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_scene_geometry_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_scene_geometry_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_scene_geometry_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_scene_geometry_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_scene_geometry_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_scene_geometry COMMAND ctr_native_scene_geometry_tests)
+
+    add_executable(ctr_native_resident_tests tests/native_resident_tests.c platform/native_resident.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_resident_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_resident_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_resident_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_resident_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_resident_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_resident_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_resident COMMAND ctr_native_resident_tests)
+
+    add_executable(ctr_native_camera_resident_tests tests/native_camera_resident_tests.c platform/native_host_scratch.c platform/native_gte_core.c platform/native_inline_c.c)
+    set_target_properties(ctr_native_camera_resident_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_camera_resident_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_camera_resident_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_camera_resident_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_camera_resident_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_camera_resident_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_camera_resident COMMAND ctr_native_camera_resident_tests)
+
+    add_executable(ctr_native_effect_work_tests tests/native_effect_work_tests.c platform/native_effect_work.c platform/native_host_scratch.c platform/native_checkpoint_relocation.c game/Vehicle/VehGroundSkids_Subset2.c)
+    set_target_properties(ctr_native_effect_work_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_effect_work_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_effect_work_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_effect_work_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_effect_work_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_effect_work_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_effect_work COMMAND ctr_native_effect_work_tests)
+
+    add_executable(ctr_native_vertex_animation_tests tests/native_vertex_animation_tests.c platform/native_vertex_animation.c platform/native_mesh_geometry.c platform/native_asset_readers.c platform/native_ptrmap.c platform/native_gte_core.c)
+    set_target_properties(ctr_native_vertex_animation_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_vertex_animation_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_vertex_animation_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_vertex_animation_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_vertex_animation_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_vertex_animation_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_vertex_animation COMMAND ctr_native_vertex_animation_tests)
+
+    add_executable(ctr_native_asset_validate tools/native_asset_validate.c platform/native_resident.c platform/native_resident_graph.c platform/native_scene_camera.c platform/native_scene_visibility.c platform/native_scene_render.c platform/native_scene_geometry.c platform/native_vertex_animation.c platform/native_scene_assets.c platform/native_terrain_material.c platform/native_mesh_geometry.c platform/native_asset_loading.c platform/native_asset_readers.c platform/native_model_library.c platform/native_model_animation.c platform/native_model_vertices.c platform/native_model_commands.c platform/native_model_transform.c platform/native_model_matrix.c platform/native_model_projection.c platform/native_vram.c platform/native_model_draw.c platform/native_raster.c platform/native_instance_transform.c platform/native_ptrmap.c platform/native_disc_image.c)
+    set_target_properties(ctr_native_asset_validate PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_asset_validate PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_asset_validate PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_asset_validate PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_asset_validate PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_asset_validate PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+
+    set(CTR_RESIDENT_TEST_SOURCES
+        platform/native_resident.c platform/native_resident_graph.c
+        platform/native_scene_assets.c platform/native_model_library.c
+        platform/native_asset_readers.c platform/native_model_animation.c
+        platform/native_model_vertices.c platform/native_model_commands.c platform/native_ptrmap.c)
+    add_executable(ctr_native_render_bucket_tests tests/native_render_bucket_tests.c
+        platform/native_host_scratch.c platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)
+    add_executable(ctr_native_terrain_renderer_tests tests/native_terrain_renderer_tests.c
+        ${CTR_RESIDENT_TEST_SOURCES} platform/native_terrain_work.c platform/native_host_scratch.c
+        platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)
+    add_executable(ctr_native_resident_graph_tests tests/native_resident_graph_tests.c ${CTR_RESIDENT_TEST_SOURCES} platform/native_asset_loading.c platform/native_checkpoint_relocation.c)
+    target_compile_definitions(ctr_native_resident_graph_tests PRIVATE CTR_NATIVE_GAME_SCENE)
+    add_executable(ctr_native_runtime_globals_tests tests/native_runtime_globals_tests.c
+        platform/native_gpu_callbacks.c
+        platform/native_credits.c platform/native_gpu_links.c)
+    foreach(target ctr_native_render_bucket_tests ctr_native_terrain_renderer_tests ctr_native_resident_graph_tests ctr_native_runtime_globals_tests)
+        set_target_properties(${target} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+        target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        target_compile_definitions(${target} PRIVATE CTR_NATIVE)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -Wno-unused-function)
+            if(CTR_ENABLE_SANITIZERS)
+                target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+                target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+            endif()
+        endif()
+        add_test(NAME ${target} COMMAND ${target})
+    endforeach()
+
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME ctr_native_asset_validate
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native_asset_validate_tests.py
+            $<TARGET_FILE:ctr_native_asset_validate>)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/ctr-u.bin")
+        add_test(NAME ctr_native_asset_retail
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native_asset_retail_tests.py
+                $<TARGET_FILE:ctr_native_asset_validate> ${CMAKE_SOURCE_DIR}/assets)
+        set_tests_properties(ctr_native_asset_retail PROPERTIES LABELS retail)
+    endif()
+    add_test(
+        NAME ctr_match_unit
+        COMMAND ${Python3_EXECUTABLE} -m unittest discover
+            -s ${CMAKE_SOURCE_DIR}/tools/matching
+            -p test_*.py
+    )
+    add_test(NAME ctr_native_memory_rejections
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native_memory_rejections.py
+            $<TARGET_FILE:ctr_native_memory_tests>
+    )
+endif()
+
+if(NOT CTR_BUILD_GAME)
+    if(NOT BUILD_TESTING)
+        message(FATAL_ERROR "CTR_BUILD_GAME=OFF requires BUILD_TESTING=ON.")
+    endif()
+    return()
+endif()
+
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
     message(FATAL_ERROR
         "CTR Native currently requires a 32-bit target. "
         "Select Win32 for MSVC, an i686 MinGW compiler on Windows, or pass -m32 "
-        "in the initial compiler and linker flags on Linux."
+        "in the initial compiler and linker flags on Linux. "
+        "For ARM64 tests use macos-arm64-memory; for experimental runtime integration "
+        "use macos-arm64-game."
     )
+endif()
+
+if(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CTR_NATIVE_DECODED_TERRAIN)
+        message(FATAL_ERROR "Experimental host64 game requires 64-bit pointers and CTR_NATIVE_DECODED_TERRAIN=ON.")
+    endif()
 endif()
 
 set(CTR_NATIVE_MSVC_FRONTEND OFF)
@@ -91,7 +519,14 @@ set_target_properties(ctr_native PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 target_include_directories(ctr_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+    target_compile_definitions(ctr_native PRIVATE CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+endif()
+if(CTR_NATIVE_DECODED_TERRAIN)
+    target_compile_definitions(ctr_native PRIVATE CTR_NATIVE_DECODED_TERRAIN)
+endif()
 target_compile_definitions(ctr_native PRIVATE
+    CTR_NATIVE_GAME_SCENE
     CTR_NATIVE
     CTR_INTERNAL
     CTR_NATIVE_VERSION=\"${CTR_NATIVE_VERSION}\"
@@ -109,8 +544,10 @@ if(CTR_NATIVE_MSVC_FRONTEND)
         /wd5287
     )
 else()
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86|x86_64|AMD64)$")
+        target_compile_options(ctr_native PRIVATE -msse)
+    endif()
     target_compile_options(ctr_native PRIVATE
-        -msse
         -Wenum-conversion
         -Wenum-compare
         -Wswitch-enum
@@ -128,6 +565,10 @@ else()
     endif()
 endif()
 target_link_libraries(ctr_native SDL3::SDL3)
+if(CTR_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(ctr_native PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(ctr_native PRIVATE -fsanitize=address,undefined)
+endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_link_options(ctr_native PRIVATE -static-libgcc)
 endif()
@@ -135,18 +576,9 @@ if(MINGW)
     target_link_options(ctr_native PRIVATE -static)
 endif()
 
-include(CTest)
 if(BUILD_TESTING)
     add_test(NAME ctr_native_version COMMAND $<TARGET_FILE:ctr_native> --version)
     set_tests_properties(ctr_native_version PROPERTIES PASS_REGULAR_EXPRESSION "^CTR Native ")
-
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    add_test(
-        NAME ctr_match_unit
-        COMMAND ${Python3_EXECUTABLE} -m unittest discover
-            -s ${CMAKE_SOURCE_DIR}/tools/matching
-            -p test_*.py
-    )
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         add_executable(ctr_particle_renderer_smoke
