@@ -1,5 +1,7 @@
 #include <common.h>
 
+#define MM_HIGHSCORE_TEXT_JUSTIFICATION_MASK (0xffffc000u)
+
 enum
 {
 	MM_HIGHSCORE_MAIN_TRANSITION_MAX_FRAME = 0xc,
@@ -64,7 +66,6 @@ enum
 	MM_HIGHSCORE_VIDEO_BOX_X_OFFSET = 0x124,
 	MM_HIGHSCORE_VIDEO_BOX_Y_OFFSET = 0x5a,
 	MM_HIGHSCORE_MENU_WIDTH = 0xa4,
-	MM_HIGHSCORE_TEXT_JUSTIFICATION_MASK = 0xffffc000u,
 };
 
 void MM_HighScore_Text3D(char *string, s32 posX, s32 posY, s16 font, u32 flags)

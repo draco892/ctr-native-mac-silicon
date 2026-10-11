@@ -82,7 +82,7 @@ void howl_InitChannelAttr_Music(struct SongSeq *seq, struct ChannelAttr *attr, i
 
 		pitch = howl_InstrumentPitch(longSample->basePitch, index, seq->distort);
 
-		attr->spuStartAddr = (void *)(sdata->howl_spuAddrs[longSample->spuIndex].spuAddr << 3);
+		attr->spuStartAddr = (void *)(uintptr_t)(sdata->howl_spuAddrs[longSample->spuIndex].spuAddr << 3);
 
 		// audio ADSR
 		attr->ad = longSample->ad;
@@ -106,7 +106,7 @@ void howl_InitChannelAttr_Music(struct SongSeq *seq, struct ChannelAttr *attr, i
 			pitch = CTR_MipsSrl(CTR_MipsMulLo((u16)shortSample->pitch, data.distortConst_OtherFX[seq->distort]), 16);
 		}
 
-		attr->spuStartAddr = (void *)(sdata->howl_spuAddrs[shortSample->spuIndex].spuAddr << 3);
+		attr->spuStartAddr = (void *)(uintptr_t)(sdata->howl_spuAddrs[shortSample->spuIndex].spuAddr << 3);
 
 		// audio ADSR
 		attr->ad = 0x80ff;

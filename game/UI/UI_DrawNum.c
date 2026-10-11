@@ -38,7 +38,7 @@ void UI_DrawNumWumpa(s16 posX, s16 posY, struct Driver *d)
 	{
 		DecalFont_DrawLine(UI_NUM_X, posX, posY + UI_DRAWNUM_SMALL_X_OFFSET_Y, FONT_SMALL, ORANGE);
 
-		sprintf(message, UI_NUM_INT, d->numWumpas);
+		CTR_SNPRINTF(message, sizeof(message), UI_NUM_INT, d->numWumpas);
 		DecalFont_DrawLine(message, posX + UI_DRAWNUM_BIG_TEXT_OFFSET_X, posY, FONT_BIG, ORANGE);
 	}
 	else
@@ -74,7 +74,7 @@ void UI_DrawNumTimebox(s16 posX, s16 posY, struct Driver *d)
 
 	DecalFont_DrawLine(UI_NUM_X, posX + UI_DRAWNUM_TIMEBOX_X_OFFSET_X, posY + UI_DRAWNUM_TIMEBOX_X_OFFSET_Y, FONT_SMALL, ORANGE);
 
-	sprintf(string, rdata.s_lapString, d->numTimeCrates, CTR_PRINTF_PSX_LONG(GAME_TRACKER->timeCratesInLEV));
+	CTR_SNPRINTF(string, sizeof(string), rdata.s_lapString, d->numTimeCrates, CTR_PRINTF_PSX_LONG(GAME_TRACKER->timeCratesInLEV));
 
 	DecalFont_DrawLine(string, posX + UI_DRAWNUM_TIMEBOX_TEXT_OFFSET_X, posY + UI_DRAWNUM_TIMEBOX_TEXT_OFFSET_Y, FONT_BIG, ORANGE);
 }
@@ -97,7 +97,7 @@ void UI_DrawNumRelic(s16 posX, s16 posY, struct Driver *driver)
 		num--;
 	}
 
-	sprintf(string, UI_NUM_LONG, CTR_PRINTF_PSX_LONG(num));
+	CTR_SNPRINTF(string, sizeof(string), UI_NUM_LONG, CTR_PRINTF_PSX_LONG(num));
 	DecalFont_DrawLine(string, posX + UI_DRAWNUM_BIG_TEXT_OFFSET_X, posY, FONT_BIG, ORANGE);
 }
 
@@ -117,7 +117,7 @@ void UI_DrawNumKey(s16 posX, s16 posY, struct Driver *driver)
 		num--;
 	}
 
-	sprintf(string, UI_NUM_LONG, CTR_PRINTF_PSX_LONG(num));
+	CTR_SNPRINTF(string, sizeof(string), UI_NUM_LONG, CTR_PRINTF_PSX_LONG(num));
 	DecalFont_DrawLine(string, posX + UI_DRAWNUM_BIG_TEXT_OFFSET_X, posY, FONT_BIG, ORANGE);
 }
 
@@ -137,7 +137,7 @@ void UI_DrawNumTrophy(s16 posX, s16 posY, struct Driver *driver)
 		num--;
 	}
 
-	sprintf(string, UI_NUM_LONG, CTR_PRINTF_PSX_LONG(num));
+	CTR_SNPRINTF(string, sizeof(string), UI_NUM_LONG, CTR_PRINTF_PSX_LONG(num));
 	DecalFont_DrawLine(string, posX + UI_DRAWNUM_BIG_TEXT_OFFSET_X, posY, FONT_BIG, ORANGE);
 }
 
@@ -147,7 +147,7 @@ void UI_DrawNumCrystal(s16 posX, s16 posY, struct Driver *d)
 
 	DecalFont_DrawLine(UI_NUM_X, posX, posY + UI_DRAWNUM_SMALL_X_OFFSET_Y, FONT_SMALL, ORANGE);
 
-	sprintf(string, rdata.s_lapString, d->numCrystals, CTR_PRINTF_PSX_LONG(GAME_TRACKER->numCrystalsInLEV));
+	CTR_SNPRINTF(string, sizeof(string), rdata.s_lapString, d->numCrystals, CTR_PRINTF_PSX_LONG(GAME_TRACKER->numCrystalsInLEV));
 
 	DecalFont_DrawLine(string, posX + UI_DRAWNUM_BIG_TEXT_OFFSET_X, posY, FONT_BIG, ORANGE);
 }

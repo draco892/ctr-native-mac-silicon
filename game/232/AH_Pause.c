@@ -370,7 +370,7 @@ void AH_Pause_Draw(s32 pageID, s32 inputPosX)
 			SelectProfile_PrintInteger(totals[i], (s16)(instPosX + AH_PAUSE_RELIC_TOTAL_NUMBER_X), AH_PAUSE_RELIC_TOTAL_Y, 0, 0);
 			DecalFont_DrawLine(AH_PAUSE_X_GLYPH, instPosX + AH_PAUSE_RELIC_TOTAL_X_GLYPH_X, AH_PAUSE_RELIC_TOTAL_X_GLYPH_Y, FONT_SMALL, 0);
 		}
-		sprintf(totalString, AH_PAUSE_TOTAL_FORMAT, GAME_LANGUAGE_STRINGS[LNG_TOTAL], totals[0] + totals[1] + totals[2]);
+		CTR_SNPRINTF(totalString, sizeof(totalString), AH_PAUSE_TOTAL_FORMAT, GAME_LANGUAGE_STRINGS[LNG_TOTAL], totals[0] + totals[1] + totals[2]);
 		DecalFont_DrawLine(totalString, savedPosX + AH_PAUSE_TITLE_CENTER_X, AH_PAUSE_TOTAL_TEXT_Y, FONT_BIG, JUSTIFY_CENTER | ORANGE);
 		break;
 	}

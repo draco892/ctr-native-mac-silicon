@@ -321,7 +321,7 @@ void UI_DrawRaceClock(s16 labelPosX, s16 labelPosY, u32 flags, struct Driver *dr
 					// DAT_8008d510
 					// %d
 
-					sprintf(lapNumberString, &sdata->s_int[0], numParamY);
+					CTR_SNPRINTF(lapNumberString, sizeof(lapNumberString), &sdata->s_int[0], numParamY);
 					lapTextHeight = (s16 *)(&data.font_charPixHeight[lapFontType]);
 
 					// draw string

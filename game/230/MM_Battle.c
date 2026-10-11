@@ -14,6 +14,8 @@ void MM_Battle_CloseSubMenu(struct RectMenu *menu)
 	menu->state |= ONLY_DRAW_TITLE;
 }
 
+#define BATTLE_TPAGE_TRANSPARENCY_MASK (0xff9fffffu)
+
 enum
 {
 	BATTLE_TRANSITION_FRAME_COUNT = 0xc,
@@ -119,7 +121,6 @@ enum
 	BATTLE_GPU_CODE_POLY_FT4 = 0x2c000000u,
 	BATTLE_GPU_CODE_POLY_FT4_SEMI_TRANS = 0x2e000000u,
 	BATTLE_GPU_TAG_LENGTH_POLY_FT4 = 0x09000000u,
-	BATTLE_TPAGE_TRANSPARENCY_MASK = 0xff9fffffu,
 	BATTLE_TPAGE_TRANSPARENCY_SHIFT = 0x15,
 };
 
@@ -854,6 +855,7 @@ LAB_Battle_ValidSetup:
 		{
 			MM_MENU_BATTLE_LENGTH_LIFE_TIME.state |= SHOW_ONLY_HIGHLIT_ROW;
 		}
+
 		{
 			register s32 highlightedRow CTR_PSX_REGISTER("$2");
 #ifdef CTR_NATIVE
@@ -950,6 +952,7 @@ LAB_Battle_ValidSetup:
 			}
 			sharedTeamPadding = ((u32)paddedRemainingTeamWidth) >> 2;
 		}
+
 		for (teamIndex = 0; teamIndex < BATTLE_TEAM_COUNT; teamIndex++)
 		{
 			s32 nextRemainingTeamWidth;

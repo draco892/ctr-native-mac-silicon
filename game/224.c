@@ -97,7 +97,7 @@ void TT_EndEvent_DrawHighScore(s16 startX, s32 startY, s16 scoreMode)
 	// This is different from High Score in Main Menu because Main Menu
 	// does not show the rank icons '1', '2', '3', '4', '5'
 	char *timeString;
-	s16 timeColor;
+	u16 timeColor;
 	u32 timeColorSource;
 	SVec2 pos;
 	RECT box;

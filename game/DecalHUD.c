@@ -1,11 +1,12 @@
 #include <common.h>
 
+#define DECAL_HUD_TPAGE_TRANSPARENCY_MASK (0xff9fffffu)
+
 enum
 {
 	DECAL_HUD_GPU_CODE_SEMI_TRANS = 0x02000000u,
 	DECAL_HUD_GPU_CODE_POLY_GT4 = 0x3c000000u,
 	DECAL_HUD_GPU_TAG_LENGTH_POLY_GT4 = 0x0c000000u,
-	DECAL_HUD_TPAGE_TRANSPARENCY_MASK = 0xff9fffffu,
 };
 
 
@@ -335,6 +336,7 @@ void DecalHUD_Arrow2D(struct Icon *icon, s32 posX, s32 posY, struct PrimMem *pri
 	CtrGpu_WriteColorCode(&p->r1, ColorCode_GetPacked(&color1));
 	CtrGpu_WriteColorCode(&p->r2, ColorCode_GetPacked(&color2));
 	CtrGpu_WriteColorCode(&p->r3, ColorCode_GetPacked(&color3));
+
 	p->tag = *ot | DECAL_HUD_GPU_TAG_LENGTH_POLY_GT4;
 	*ot = CtrGpu_PrimToOTLink24(p);
 	primMem->cursor = p + 1;

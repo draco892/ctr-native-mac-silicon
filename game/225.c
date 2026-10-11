@@ -343,8 +343,7 @@ void VB_EndEvent_DrawMenu(void)
 								}
 
 							DrawPlace:
-								sprintf(
-								    text, "%d%s-%2.02ld", player + 1, GAME_LANGUAGE_STRINGS[s_standingsSuffixStringIds225[player]],
+								CTR_SNPRINTF(text, sizeof(text), "%d%s-%2.02ld", player + 1, GAME_LANGUAGE_STRINGS[s_standingsSuffixStringIds225[player]],
 								    CTR_PRINTF_PSX_LONG(
 								        GAME_TRACKER
 								            ->standingsPoints[GAME_TRACKER->battleSetup.standingsOrder[resultIndex] * VB_STANDINGS_POINTS_PER_ENTRY + player]));
@@ -382,7 +381,7 @@ void VB_EndEvent_DrawMenu(void)
 						rowStagger += VB_ROW_STAGGER_FRAMES;
 						previousStandingsScore = (s16)GAME_TRACKER->battleSetup.standingsScore[GAME_TRACKER->battleSetup.standingsOrder[resultIndex]];
 
-						sprintf(rankText, rankFormat, displayedRankNumber, GAME_LANGUAGE_STRINGS[*rankSuffix]);
+						CTR_SNPRINTF(rankText, sizeof(text), rankFormat, displayedRankNumber, GAME_LANGUAGE_STRINGS[*rankSuffix]);
 						resultIndex++;
 						DecalFont_DrawLine(text, pos.x + VB_STANDINGS_RANK_X_OFFSET, rankTextY + VB_STANDINGS_RANK_Y_OFFSET, FONT_BIG,
 						                   (JUSTIFY_CENTER | ORANGE));

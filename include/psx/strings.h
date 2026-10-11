@@ -10,6 +10,10 @@
 #if defined(CTR_NATIVE)
 #include <ctype.h>
 #include <string.h>
+#include <stdio.h>
+
+// Bound native UI formatting while retaining the retail PSYQ call contract.
+#define CTR_SNPRINTF(dst, size, ...) snprintf((dst), (size), __VA_ARGS__)
 #else
 void *memcpy(void *dst, const void *src, u32 count);
 void *memmove(void *dst, const void *src, u32 count);
@@ -21,6 +25,7 @@ int strcmp(const char *lhs, const char *rhs);
 int strncmp(const char *lhs, const char *rhs, u32 count);
 u32 strlen(const char *text);
 int sprintf(char *dst, const char *format, ...);
+#define CTR_SNPRINTF(dst, size, ...) sprintf((dst), __VA_ARGS__)
 int tolower(int value);
 #endif
 

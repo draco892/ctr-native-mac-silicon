@@ -121,7 +121,7 @@ void GhostTape_WriteMoves(s16 raceFinished)
 		if (GHOST_RECORDING.animFrame != inst->animFrame || GHOST_RECORDING.animIndex != inst->animIndex)
 		{
 			char *writeCursor;
-			*GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_ANIMATION;
+			*(u8 *)GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_ANIMATION;
 			writeCursor = GHOST_RECORDING.ptrCurrOffset;
 			writeCursor[1] = (GHOST_RECORDING.animFrame = inst->animFrame);
 			writeCursor[0] = (GHOST_RECORDING.animIndex = inst->animIndex);
@@ -129,7 +129,7 @@ void GhostTape_WriteMoves(s16 raceFinished)
 		}
 		if ((inst->flags & GHOST_RECORD_INSTANCE_SPLIT_FLAG) != (GHOST_RECORDING.instanceFlags & GHOST_RECORD_INSTANCE_SPLIT_FLAG))
 		{
-			*GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_INSTANCE;
+			*(u8 *)GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_INSTANCE;
 			*GHOST_RECORDING.ptrCurrOffset++ = (inst->flags >> GHOST_RECORD_INSTANCE_SPLIT_SHIFT) & 1;
 		}
 
@@ -140,7 +140,7 @@ void GhostTape_WriteMoves(s16 raceFinished)
 		    velocity[2] <= GHOST_RECORD_VELOCITY_MIN_EXCLUSIVE || timeSincePositionPacket >= GHOST_RECORD_TIME_DELTA_MAX_EXCLUSIVE)
 		{
 			char *writeCursor;
-			*GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_POSITION;
+			*(u8 *)GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_POSITION;
 			writeCursor = GHOST_RECORDING.ptrCurrOffset;
 			writeCursor[0] = (u16)position[0] >> 8;
 			writeCursor[1] = ((u8 *)&position[0])[0];
@@ -157,7 +157,7 @@ void GhostTape_WriteMoves(s16 raceFinished)
 		}
 		else if (velocity[0] == 0 && velocity[1] == 0 && velocity[2] == 0)
 		{
-			*GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_IDLE;
+			*(u8 *)GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_IDLE;
 		}
 		else
 		{
@@ -210,7 +210,7 @@ void GhostTape_WriteBoosts(s32 addReserve, u32 type, s32 speedCap)
 	}
 
 	// Boost payload: big-endian reserves, boost type, big-endian speed cap.
-	*GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_BOOST;
+	*(u8 *)GHOST_RECORDING.ptrCurrOffset++ = GHOST_OP_BOOST;
 	writeCursor = GHOST_RECORDING.ptrCurrOffset;
 
 	writeCursor[0] = (char)(addReserve >> 8);

@@ -484,7 +484,7 @@ void UI_VsQuipDrawAll(void)
 		else
 		{
 			// Add two strings together
-			sprintf(printBuffer,
+			CTR_SNPRINTF(printBuffer, sizeof(printBuffer),
 
 			        // Contains '%s' format:
 			        // Original end-of-race comment
@@ -612,7 +612,7 @@ void UI_VsWaitForPressX(void)
 						numAttacked = driver->numTimesAttackedByPlayer[statPlayerIndex];
 					}
 
-					sprintf(statText, "p%d:%2.02d",
+					CTR_SNPRINTF(statText, sizeof(statText), "p%d:%2.02d",
 
 					        // basically, j + 1
 					        // which is (1, 2, 3, 4)

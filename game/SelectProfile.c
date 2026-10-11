@@ -63,7 +63,7 @@ void SelectProfile_PrintInteger(int value, int posX, int posY, b32 usePaddedForm
 		format = &sdata->stringFormat2[0];
 	}
 
-	sprintf(text, format, value);
+	CTR_SNPRINTF(text, sizeof(text), format, value);
 	DecalFont_DrawLine(text, posX, posY, FONT_BIG, color);
 }
 

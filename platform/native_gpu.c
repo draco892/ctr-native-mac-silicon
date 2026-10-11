@@ -1142,7 +1142,7 @@ void ParsePrimitivesLinkedList(u32 *p, int singlePrimitive)
 				{
 					char packetRegion[64];
 					NativeGpu_FormatPointerRegion(packetRegion, sizeof(packetRegion), (uintptr_t)basePacket);
-					NATIVE_GPU_ERROR("did not output valid primitive or ptag length is not valid (diff=%d packet=%p region=%s words=%08x %08x %08x %08x)\n",
+					NATIVE_GPU_ERROR("did not output valid primitive or ptag length is not valid (diff=%td packet=%p region=%s words=%08x %08x %08x %08x)\n",
 					                 endPacket - currentPacket, (void *)basePacket, packetRegion, NativeGpu_ReadPacketWordForLog((uintptr_t)basePacket, 0),
 					                 NativeGpu_ReadPacketWordForLog((uintptr_t)basePacket, 1), NativeGpu_ReadPacketWordForLog((uintptr_t)basePacket, 2),
 					                 NativeGpu_ReadPacketWordForLog((uintptr_t)basePacket, 3));

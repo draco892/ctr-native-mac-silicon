@@ -597,7 +597,7 @@ void UI_DrawLapCount(s16 posX, int posY, int unusedScale, struct Driver *d)
 	{
 		DecalFont_DrawLine(sdata->lngStrings[LNG_LAP], posX, posY, FONT_SMALL, (JUSTIFY_RIGHT | PERIWINKLE));
 
-		sprintf(&message[0], &sdata->s_intDividing[0], currLap, numLaps);
+		CTR_SNPRINTF(&message[0], sizeof(message), &sdata->s_intDividing[0], currLap, numLaps);
 		str = &message[0];
 		type = FONT_BIG;
 		flags = (JUSTIFY_RIGHT | PERIWINKLE);
@@ -646,7 +646,7 @@ void UI_DrawBattleScores(int posX, int posY, struct Driver *d)
 	}
 
 	// add value to string
-	sprintf(string, (char *)&sdata->s_longInt, value);
+	CTR_SNPRINTF(string, sizeof(string), (char *)&sdata->s_longInt, value);
 
 	DecalFont_DrawLine(string, (s16)(posX + UI_BATTLE_SCORE_TEXT_X_OFFSET), (s16)(posY + UI_BATTLE_SCORE_TEXT_Y_OFFSET), FONT_SMALL,
 	                   data.battleScoreColor[gGT->numPlyrCurrGame - 1][d->driverID]);
