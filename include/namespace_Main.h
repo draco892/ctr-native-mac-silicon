@@ -419,19 +419,19 @@ struct GameTracker
 	struct Stars stars;
 
 	// 1b14
-	u32 ptrCircle;
+	CtrRuntimeAddress ptrCircle;
 
 	// 1b18
-	u32 ptrClod;
+	CtrRuntimeAddress ptrClod;
 
 	// 1b1c
-	u32 ptrDustpuff;
+	CtrRuntimeAddress ptrDustpuff;
 
 	// 1b20
-	u32 ptrSmoking;
+	CtrRuntimeAddress ptrSmoking;
 
 	// 1b24
-	u32 ptrSparkle;
+	CtrRuntimeAddress ptrSparkle;
 
 	// 1b28
 	// handles character icons,

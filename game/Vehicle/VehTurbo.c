@@ -35,7 +35,6 @@ enum
 	TURBO_STOP_SFX_ID = -1,
 };
 
-#define VEH_TURBO_FIELD(cursor, type, offset) (*(type *)((cursor) + (offset)))
 
 // NOTE(aalhendi): Retail emits all three GTE result stores from one base; native reads the same emulated registers as ordinary C values.
 #if defined(CTR_NATIVE)
@@ -60,75 +59,8 @@ enum
 	} while (0)
 #endif
 
-void VehTurbo_ProcessBucket(struct Thread *turboThread)
-{
-	register struct GameTracker *initialGameTracker CTR_PSX_REGISTER("$11");
-	register struct GameTracker *loopGameTracker CTR_PSX_REGISTER("$9");
-	struct Turbo *turbo;
-	register struct Instance *primaryBase CTR_PSX_REGISTER("$5");
-	register struct Instance *driverBase CTR_PSX_REGISTER("$2");
-	register u32 primary CTR_PSX_REGISTER("$7");
-	register u32 secondary CTR_PSX_REGISTER("$6");
-	register u32 driver CTR_PSX_REGISTER("$5");
-	register u32 clearMask CTR_PSX_REGISTER("$10");
-	u32 range;
-	u16 depth;
-	register int i CTR_PSX_REGISTER("$8");
+#include "VehTurbo_ProcessBucket.c"
 
-	clearMask = ~DRAW_SUCCESSFUL;
-	if (turboThread == NULL)
-	{
-		return;
-	}
-
-	initialGameTracker = GAME_TRACKER;
-	do
-	{
-		turbo = turboThread->object;
-		primaryBase = turboThread->inst;
-		secondary = (u32)turbo->inst;
-		driverBase = turbo->driver->instSelf;
-
-		i = 0;
-		if (initialGameTracker->numPlyrCurrGame != 0)
-		{
-			loopGameTracker = GAME_TRACKER;
-			primary = (u32)primaryBase;
-			driver = (u32)driverBase;
-			do
-			{
-				if ((VEH_TURBO_FIELD(driver, u32, 0xb8) & PUSHBUFFER_EXISTS) == 0)
-				{
-					VEH_TURBO_FIELD(secondary, u32, 0xb8) &= VEH_TURBO_FIELD(driver, u32, 0xb8) | clearMask;
-					VEH_TURBO_FIELD(primary, u32, 0xb8) &= VEH_TURBO_FIELD(driver, u32, 0xb8) | clearMask;
-
-					range = VEH_TURBO_FIELD(driver, u32, 0xe4);
-					VEH_TURBO_FIELD(primary, u32, 0xe4) = range;
-					VEH_TURBO_FIELD(secondary, u32, 0xe4) = range;
-					range = VEH_TURBO_FIELD(driver, u32, 0xe8);
-					VEH_TURBO_FIELD(primary, u32, 0xe8) = range;
-					VEH_TURBO_FIELD(secondary, u32, 0xe8) = range;
-
-					depth = VEH_TURBO_FIELD(driver, u16, 0xdc);
-					VEH_TURBO_FIELD(primary, u16, 0xdc) = depth;
-					VEH_TURBO_FIELD(secondary, u16, 0xdc) = depth;
-					depth = VEH_TURBO_FIELD(driver, u16, 0xde);
-					VEH_TURBO_FIELD(primary, u16, 0xde) = depth;
-					VEH_TURBO_FIELD(secondary, u16, 0xde) = depth;
-				}
-
-				primary += sizeof(struct InstDrawPerPlayer);
-				secondary += sizeof(struct InstDrawPerPlayer);
-				driver += sizeof(struct InstDrawPerPlayer);
-				i++;
-			} while (i < loopGameTracker->numPlyrCurrGame);
-		}
-
-		turboThread = turboThread->siblingThread;
-	} while (turboThread != NULL);
-}
-
-#undef VEH_TURBO_FIELD
 
 void VehTurbo_ThDestroy(struct Thread *t)
 {

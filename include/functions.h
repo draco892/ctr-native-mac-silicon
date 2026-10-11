@@ -294,7 +294,7 @@ s32 INSTANCE_GetNumAnimFrames(struct Instance *pInstance, s32 animIndex);
 void INSTANCE_LevInitAll(struct InstDef *definitions, s32 count);
 
 // JitPool
-int JitPool_Add(struct JitPool *AP);
+CtrRuntimePointer JitPool_Add(struct JitPool *AP);
 void JitPool_Clear(struct JitPool *AP);
 void JitPool_Init(struct JitPool *AP, int maxItems, int itemSize, char *name);
 void JitPool_Remove(struct JitPool *AP, struct Item *item);
@@ -1313,8 +1313,8 @@ void AnimateWater3P(int timer, int numWaterVertices, struct WaterVert *waterVert
                     int *visOVertList1, int *visOVertList2);
 void AnimateWater4P(int timer, int numWaterVertices, struct WaterVert *waterVert, const struct TextureLayout *waterEnvMap, int *visOVertList0,
                     int *visOVertList1, int *visOVertList2, int *visOVertList3);
-int RenderLists_Init1P2P(struct BSP *bspRoot, int *visLeafList, struct PushBuffer *pb, u32 LevRenderList, void *bspList, u8 numPlyr);
-int RenderLists_Init3P4P(struct BSP *bspRoot, int *visLeafList, struct PushBuffer *pb, u32 LevRenderList, void *bspList);
+int RenderLists_Init1P2P(struct BSP *bspRoot, int *visLeafList, struct PushBuffer *pb, CtrRuntimeAddress LevRenderList, void *bspList, u8 numPlyr);
+int RenderLists_Init3P4P(struct BSP *bspRoot, int *visLeafList, struct PushBuffer *pb, CtrRuntimeAddress LevRenderList, void *bspList);
 // TODO:
 void MainLoadVLC(void);
 void MainKillGame_StopCTR(void);

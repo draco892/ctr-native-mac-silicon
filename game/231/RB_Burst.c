@@ -2,12 +2,7 @@
 #include <ctr_gte_transfer.h>
 #include "RB_Effect.h"
 
-struct Burst
-{
-	struct Instance *shockwave;
-	struct Instance *explosion;
-	struct Instance *rotatedExplosion;
-};
+
 
 void RB_Burst_ProcessBucket(struct Thread *thread)
 {

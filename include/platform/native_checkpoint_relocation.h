@@ -11,6 +11,12 @@ int NativeCheckpointRanges_Validate(const struct NativeCheckpointAddressRange *r
 int NativeCheckpointRanges_Owner(const struct NativeCheckpointAddressRange *ranges,size_t count,u64 address,u32 *index,u32 *offset);
 int NativeCheckpointRanges_Rebase(const struct NativeCheckpointAddressRange *oldRanges,size_t oldCount,
     const struct NativeCheckpointAddressRange *liveRanges,size_t liveCount,u64 address,u64 *out);
+// Heap-owned resident graphs have independent saved/live allocations. Consult
+// their validated owner map after checking the captured global/arena ranges.
+typedef int (*NativeCheckpointExternalRebase)(void *user, uintptr_t saved, void **live);
+int NativeCheckpointPointer_Rebase(const struct NativeCheckpointAddressRange *oldRanges, size_t oldCount,
+    const struct NativeCheckpointAddressRange *liveRanges, size_t liveCount, u64 address,
+    NativeCheckpointExternalRebase external, void *user, u64 *out);
 // Explicit widths preserve four-byte wire slots and eight-byte host slots.
 int NativeCheckpointSlot_Read(const void *slot,u32 width,u64 *out);
 int NativeCheckpointSlot_Write(void *slot,u32 width,u64 address);

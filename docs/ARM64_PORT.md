@@ -1830,3 +1830,67 @@ preparation. Remaining work: migrate remaining global/overlay/direct-offset
 consumers and global checkpoint visitors, integrate/build the full executable,
 then validate and fix real menu/race/input/audio/GPU behavior. See
 [the cumulative Italian progress list](ARM64_PROGRESS_IT.md).
+
+## Stage 16 — resident globals, overlays and runtime pointer transport
+
+Global and overlay declarations now have explicit PS1 and host64 ABI assertions.
+`CTR_RUNTIME_ABI` selects the resident contract; it is never used to enlarge wire
+records. Retail virtual-address and memcard `$gp` assertions remain on the
+PS1-shaped ABI. The aggregate headers compile in the native runtime test with
+assertions enabled. The full executable's width guard moved to `main.c`; CMake
+still rejects a complete ARM64 game build pending runtime integration.
+
+Menu register-shaped address temporaries retain host width, including character,
+cup, track and high-score tables. Pointer-table indexes use host strides. Audio
+header cursors, sector-chain retry parameters, allocator/OT cursors and the five
+GameTracker effect-icon references no longer truncate addresses. `setaddr` sends
+the complete host pointer to the GPU token bridge. Depth-cue SDK wrappers pass
+the address of the depth value to `gte_lddp`.
+
+`JitPool_Add` returns a native pointer while retaining the PS1 integer ABI. Native
+pool initialization validates counts/strides and multiplication, aligns each
+slot, and allocates complete oscillator records. Small/medium stack capacities
+include the enlarged intrusive prefix and room for pointer-bearing host objects.
+Stack initialization follows full-width Item links. The ARM64 turbo bucket copies
+IDPP flags, OT ranges and depth fields through their declarations instead of
+retail offsets. Its retail body remains in the same single function definition.
+
+Credits keep their eight-byte header and inline four-byte offsets unchanged.
+A bounded decoder validates all strings before publishing a separate aligned
+`char *` table in the same mempack allocation. The game's credits loader also
+requires enough entries for its initial text index. Shared strings are preserved;
+invalid offsets, counts, missing terminators and undersized outputs are rejected.
+
+Whole-game checkpoint payload version is **10**, rejecting earlier global/overlay
+ABIs and pool strides. Published resident heap references now consult the staged
+asset-owner graph map after the ordinary global/arena range map. Blowup/Burst
+visitors use shared typed records; credits visitors include the copied Model and
+ModelHeader references. The transient graph map is cleared on restore completion
+or failure. Tests cover the shared range/graph resolver with relocated, mutually
+referencing asset owners; they do **not** execute a complete game checkpoint.
+
+Validation: **33/33 CTest entries pass normally and with ASan/UBSan**, including
+the supplied retail disc. The new runtime test compiles actual aggregate headers
+and runs production LIST/JitPool, audio retry and turbo bucket logic. It substitutes
+only the allocator and CD boundary, and verifies high-address pointers, aligned
+slots, pool exhaustion/reuse, all four turbo viewports, credits and the actual
+GPU `setaddr` macro. Matching source-inventory tests also pass.
+
+The full syntax inventory is now **one intentional executable-width guard,
+zero pointer/integer-cast diagnostics, zero other syntax errors, and 39 scratchpad
+source sites**. This is source-contract progress, not proof of complete gameplay,
+absence of every raw-offset assumption, image parity or full checkpoint safety.
+The next stage must build/link the complete executable and validate real menu,
+load/unload, race and checkpoint behavior before enabling production ARM64 use.
+
+```sh
+cmake --preset macos-arm64-memory
+cmake --build --preset macos-arm64-memory
+ctest --preset macos-arm64-memory
+cmake --preset macos-arm64-memory-sanitized
+cmake --build --preset macos-arm64-memory-sanitized
+ctest --preset macos-arm64-memory-sanitized
+# Expected failure: the one intentional guard in main.c.
+/usr/bin/clang -fsyntax-only -ferror-limit=0 -std=c17 -DCTR_NATIVE -DCTR_INTERNAL -DCTR_NATIVE_GAME_SCENE -DCTR_NATIVE_DECODED_TERRAIN -DCTR_NATIVE_BUILD_ID='"port-check"' -DCTR_NATIVE_VERSION='"port-check"' -Iinclude -I/opt/homebrew/include main.c > build-macos-arm64-memory/stage16-syntax.log 2>&1
+python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage16-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
+```

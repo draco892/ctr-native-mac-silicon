@@ -208,7 +208,7 @@ b32 GAMEPROG_CheckGhostsBeaten(s32 ghostID)
 		{
 			trackOffset = GAME_TRACKER->levelID * (s32)sizeof(struct HighScoreTrack);
 			trackOffset = wordOffset + trackOffset;
-			trackBeaten = (CTR_ReadU32AlignedLE((u8 *)(trackOffset + (u32)progress) + OFFSETOF(struct GameProgress, highScoreTracks[0].timeTrialFlags)) >>
+			trackBeaten = (CTR_ReadU32AlignedLE((u8 *)(trackOffset + (CtrRuntimeAddress)progress) + OFFSETOF(struct GameProgress, highScoreTracks[0].timeTrialFlags)) >>
 			               (ghostBit & 0x1f)) &
 			              1;
 		}
@@ -338,7 +338,7 @@ void GAMEPROG_GetPtrHighScoreTrack(void)
 	u8 *scores = (u8 *)&GAME_PROGRESS.highScoreTracks + relicMode * MEMCARD_HIGH_SCORE_ENTRIES_PER_MODE * (s32)sizeof(struct HighScoreEntry);
 	// NOTE(aalhendi): Both targets use 32-bit addresses. Keeping the track offset
 	// separate from the mode's base address preserves retail's addition order.
-	u32 scoreAddress = trackOffset + (u32)scores;
+	CtrRuntimeAddress scoreAddress = trackOffset + (CtrRuntimeAddress)scores;
 
 	sdata->ptrActiveHighScoreEntry = (struct HighScoreEntry *)scoreAddress;
 	// NOTE(aalhendi): Keep the store before the return, outside its delay slot.

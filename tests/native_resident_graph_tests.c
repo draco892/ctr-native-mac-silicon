@@ -1,5 +1,6 @@
 #include <platform/native_scene_assets.h>
 #include <namespace_Load.h>
+#include <platform/native_checkpoint_relocation.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +44,17 @@ static int RebaseSources(void *user, u64 saved, u32 bytes, uintptr_t *live)
 			return 1;
 		}
 	return 0;
+}
+struct PublishedGraphRebase
+{
+    const void *blob;
+    size_t bytes;
+    const struct NativeSceneAssets *assets;
+};
+static int RebasePublishedGraph(void *user, uintptr_t saved, void **live)
+{
+    struct PublishedGraphRebase *ctx = user;
+    return NativeSceneAssets_RebaseSavedPointer(ctx->blob, ctx->bytes, ctx->assets, saved, live);
 }
 static int EmptyHitboxes(void)
 {
@@ -239,6 +251,20 @@ int main(void)
 	CHECK(NativeSceneAssets_RebaseSavedPointer(blob, bytes, &restored, (uintptr_t)a, &newA));
 	CHECK(NativeSceneAssets_RebaseSavedPointer(blob, bytes, &restored, (uintptr_t)b, &newB));
 	CHECK(newA != a && newB != b && NativeSceneAssets_Contains(&restored, newB, sizeof(struct Model)));
+	// The global checkpoint visitor uses the same range-first/graph-fallback
+	// resolver for modelPtr, Instance.model, and other published heap roots.
+	struct PublishedGraphRebase published = {blob, bytes, &restored};
+	struct NativeCheckpointAddressRange oldRange = {1, 1024, (u64)(uintptr_t)wire};
+	struct NativeCheckpointAddressRange liveRange = {1, 1024, r.targets[0]};
+	u64 target = 0;
+	CHECK(NativeCheckpointPointer_Rebase(&oldRange, 1, &liveRange, 1, (u64)(uintptr_t)a,
+	    RebasePublishedGraph, &published, &target) && target == (u64)(uintptr_t)newA);
+	CHECK(NativeCheckpointPointer_Rebase(&oldRange, 1, &liveRange, 1, (u64)(uintptr_t)b,
+	    RebasePublishedGraph, &published, &target) && target == (u64)(uintptr_t)newB);
+	CHECK(NativeCheckpointPointer_Rebase(&oldRange, 1, &liveRange, 1, oldRange.start + 23,
+	    RebasePublishedGraph, &published, &target) && target == liveRange.start + 23);
+	CHECK(!NativeCheckpointPointer_Rebase(&oldRange, 1, &liveRange, 1, 0x123,
+	    RebasePublishedGraph, &published, &target));
 	CHECK(NativeSceneAssets_Materialize(&restored, (void *)r.targets[0], NR_LEVEL, &root) == NATIVE_ASSET_OK);
 	CHECK(((struct Level *)root)->ptrModelsPtrArray[0] == newB);
 	CHECK(NativeSceneAssets_Materialize(&restored, (void *)r.targets[1], NR_LEVEL, &root) == NATIVE_ASSET_OK);

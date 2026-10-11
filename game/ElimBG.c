@@ -84,8 +84,8 @@ void ElimBG_SaveScreenshot_Full(struct GameTracker *gGT)
 	RECT rect2;
 	RECT rSrc;
 	RECT rDst;
-	u32 start1;
-	u32 start2;
+	CtrRuntimeAddress start1;
+	CtrRuntimeAddress start2;
 
 	bufferIndex = 0;
 
@@ -100,8 +100,8 @@ void ElimBG_SaveScreenshot_Full(struct GameTracker *gGT)
 
 	// vram copy, then overwrite vram with pause image
 
-	start1 = (u32)gGT->db[0].primMem.end;
-	start2 = (u32)gGT->db[1].primMem.end;
+	start1 = (CtrRuntimeAddress)gGT->db[0].primMem.end;
+	start2 = (CtrRuntimeAddress)gGT->db[1].primMem.end;
 	start1 -= ELIM_BG_PRIMMEM_PAUSE_BYTES;
 	start2 -= ELIM_BG_PRIMMEM_PAUSE_BYTES;
 	gGT->db[0].primMem.end = (void *)start1;
@@ -287,8 +287,8 @@ void ElimBG_HandleState(struct GameTracker *gGT)
 
 		DrawSync(0);
 
-		gGT->db[0].primMem.end = (void *)((int)gGT->db[0].primMem.end + ELIM_BG_PRIMMEM_PAUSE_BYTES);
-		gGT->db[1].primMem.end = (void *)((int)gGT->db[1].primMem.end + ELIM_BG_PRIMMEM_PAUSE_BYTES);
+		gGT->db[0].primMem.end = (void *)((CtrRuntimeAddress)gGT->db[0].primMem.end + ELIM_BG_PRIMMEM_PAUSE_BYTES);
+		gGT->db[1].primMem.end = (void *)((CtrRuntimeAddress)gGT->db[1].primMem.end + ELIM_BG_PRIMMEM_PAUSE_BYTES);
 
 		// Enable all instances
 		ElimBG_ToggleAllInstances(gGT, 0);

@@ -13,8 +13,10 @@ enum STACK_POOL
 // Pool record capacities, including the intrusive list header.
 enum ThreadStackSize
 {
-	THREAD_SMALL_STACK_SIZE = 0x48,
-	THREAD_MEDIUM_STACK_SIZE = 0x88,
+	// Host records can double their pointer-bearing payload. Include the
+	// enlarged Item prefix; JitPool_Init aligns the resulting slot stride.
+	THREAD_SMALL_STACK_SIZE = CTR_RUNTIME_ABI(0x48, 0x90),
+	THREAD_MEDIUM_STACK_SIZE = CTR_RUNTIME_ABI(0x88, 0x110),
 #if !defined(CTR_NATIVE_HOST64)
 	THREAD_LARGE_STACK_SIZE = 0x670,
 #endif

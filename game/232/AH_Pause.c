@@ -116,7 +116,7 @@ void AH_Pause_Destroy(void)
 {
 	s16 i;
 	struct Thread *t;
-	u32 memberAddress;
+	CtrRuntimeAddress memberAddress;
 
 	// global -> register
 	struct PauseObject *ptrPauseObject = AH_PAUSE_OBJECT;
@@ -127,9 +127,9 @@ void AH_Pause_Destroy(void)
 		return;
 	}
 
-	// NOTE(aalhendi): Both targets use 32-bit addresses. An integer cursor
+	// NOTE(aalhendi): The address cursor retains the native pointer width. An integer cursor
 	// preserves retail's reverse walk without forming a pointer before the array.
-	memberAddress = (u32)&ptrPauseObject->members[AH_PAUSE_MEMBER_COUNT - 1];
+	memberAddress = (CtrRuntimeAddress)&ptrPauseObject->members[AH_PAUSE_MEMBER_COUNT - 1];
 	i = 0;
 	do
 	{

@@ -295,9 +295,9 @@ struct RacingWheelData
 	s16 range;
 };
 
-CTR_STATIC_ASSERT(sizeof(struct GamepadBuffer) == 0x50);
+CTR_STATIC_ASSERT(sizeof(struct GamepadBuffer) == CTR_RUNTIME_ABI(0x50, 0x58));
 CTR_STATIC_ASSERT(sizeof(struct GamepadButtonMap) == 0x8);
-CTR_STATIC_ASSERT(sizeof(struct GamepadSystem) == 0x31C);
+CTR_STATIC_ASSERT(sizeof(struct GamepadSystem) == CTR_RUNTIME_ABI(0x31C, 0x360));
 CTR_STATIC_ASSERT(sizeof(struct RacingWheelData) == 6);
 
 #endif

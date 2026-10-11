@@ -375,9 +375,11 @@ if(BUILD_TESTING)
     add_executable(ctr_native_terrain_renderer_tests tests/native_terrain_renderer_tests.c
         ${CTR_RESIDENT_TEST_SOURCES} platform/native_terrain_work.c platform/native_host_scratch.c
         platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)
-    add_executable(ctr_native_resident_graph_tests tests/native_resident_graph_tests.c ${CTR_RESIDENT_TEST_SOURCES} platform/native_asset_loading.c)
+    add_executable(ctr_native_resident_graph_tests tests/native_resident_graph_tests.c ${CTR_RESIDENT_TEST_SOURCES} platform/native_asset_loading.c platform/native_checkpoint_relocation.c)
     target_compile_definitions(ctr_native_resident_graph_tests PRIVATE CTR_NATIVE_GAME_SCENE)
-    foreach(target ctr_native_render_bucket_tests ctr_native_terrain_renderer_tests ctr_native_resident_graph_tests)
+    add_executable(ctr_native_runtime_globals_tests tests/native_runtime_globals_tests.c
+        platform/native_credits.c platform/native_gpu_links.c)
+    foreach(target ctr_native_render_bucket_tests ctr_native_terrain_renderer_tests ctr_native_resident_graph_tests ctr_native_runtime_globals_tests)
         set_target_properties(${target} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
         target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/include)
         target_compile_definitions(${target} PRIVATE CTR_NATIVE)

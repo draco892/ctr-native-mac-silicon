@@ -129,11 +129,11 @@ int RB_Banner_Animate_Init(struct ModelHeader *mh)
 
 	if (GAME_TRACKER->numPlyrCurrGame >= 4)
 	{
-		u32 end;
+		CtrRuntimeAddress end;
 
 		vertex = RB_Banner_FirstVertex(mh);
-		end = (u32)vertex + (s32)count * 3;
-		for (; (u32)vertex < end; vertex += 3)
+		end = (CtrRuntimeAddress)vertex + (s32)count * 3;
+		for (; (CtrRuntimeAddress)vertex < end; vertex += 3)
 		{
 			vertex[1] = 0x80;
 		}
@@ -148,7 +148,7 @@ void RB_Banner_Animate_Play(struct ModelHeader *mh, s16 numVertices)
 	s16 i;
 	u8 *cursor = (u8 *)(palette + 1);
 	u32 firstColor = palette[0];
-	u32 end;
+	CtrRuntimeAddress end;
 
 	for (i = 0; i < 0x3f; i++)
 	{
@@ -160,8 +160,8 @@ void RB_Banner_Animate_Play(struct ModelHeader *mh, s16 numVertices)
 	// NOTE(aalhendi): Reuse the read cursor only after palette rotation has finished.
 	cursor = RB_Banner_FirstVertex(mh);
 	colors = mh->ptrColors;
-	end = (u32)cursor + (s32)numVertices * 3;
-	for (; (u32)cursor < end; cursor += 3)
+	end = (CtrRuntimeAddress)cursor + (s32)numVertices * 3;
+	for (; (CtrRuntimeAddress)cursor < end; cursor += 3)
 	{
 		s16 x = cursor[0];
 		u8 color = ((u8 *)colors)[(((x >> 2) + 10) & 0x3f) * 4];

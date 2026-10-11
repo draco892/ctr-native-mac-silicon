@@ -52,7 +52,7 @@ void MainFrame_ResetDB(struct GameTracker *gGT)
 	u32 *puVar3;
 	int iVar4;
 	struct DB *db;
-	int otSwapchainDB;
+	CtrRuntimeAddress otSwapchainDB;
 
 	// check if new adv hub should be loaded,
 	// this was a random place for ND to put it
@@ -63,7 +63,7 @@ void MainFrame_ResetDB(struct GameTracker *gGT)
 	gGT->backBuffer = &gGT->db[gGT->swapchainIndex];
 	gGT->frameTimer_MainFrame_ResetDB++;
 
-	otSwapchainDB = (int)gGT->otSwapchainDB[gGT->swapchainIndex];
+	otSwapchainDB = (CtrRuntimeAddress)gGT->otSwapchainDB[gGT->swapchainIndex];
 
 	db = gGT->backBuffer;
 	db->blurCameraMask = 0;
@@ -82,16 +82,16 @@ void MainFrame_ResetDB(struct GameTracker *gGT)
 
 	for (iVar4 = 0; iVar4 < sdata->gGT->numPlyrCurrGame; iVar4++)
 	{
-		gGT->pushBuffer[iVar4].ptrOT = (u32 *)((int)otSwapchainDB + (sdata->gGT->numPlyrCurrGame - iVar4 - 1) * 0x1000 + 0x18);
+		gGT->pushBuffer[iVar4].ptrOT = (u32 *)(otSwapchainDB + (sdata->gGT->numPlyrCurrGame - iVar4 - 1) * 0x1000 + 0x18);
 	}
 
 	for (; iVar4 < 4; iVar4++)
 	{
 		// but why?
-		gGT->pushBuffer[iVar4].ptrOT = (u32 *)((int)otSwapchainDB + 3 * 0x1000 + 0x18);
+		gGT->pushBuffer[iVar4].ptrOT = (u32 *)(otSwapchainDB + 3 * 0x1000 + 0x18);
 	}
 
-	puVar3 = (u32 *)((int)otSwapchainDB + 4);
+	puVar3 = (u32 *)(otSwapchainDB + 4);
 	gGT->pushBuffer_UI.ptrOT = puVar3;
 	db->otMem.uiOT = puVar3;
 

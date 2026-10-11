@@ -254,24 +254,25 @@ void MainInit_JitPoolsNew(struct GameTracker *gGT)
 
 	int numParticle = poolScale >> 5;
 	JitPool_Init(&gGT->JitPools.particle, numParticle, sizeof(struct Particle), rdata.s_ParticlePool);
-	JitPool_Init(&gGT->JitPools.oscillator, numParticle, 0x18, rdata.s_OscillatorPool);
+	JitPool_Init(&gGT->JitPools.oscillator, numParticle, sizeof(struct ParticleOscillator), rdata.s_OscillatorPool);
 	JitPool_Init(&gGT->JitPools.rain, poolScale >> 9, sizeof(struct RainLocal), rdata.s_RainPool);
 
 #ifndef CTR_NATIVE
 	gGT->ptrRenderBucketInstance = MEMPACK_AllocMem(renderBucketSize, NULL);
 #else
 	// NOTE(aalhendi): Native reuses static RDATA scratch for existing PC memory headroom.
-	gGT->ptrRenderBucketInstance = (void *)((u32)&rdata.s_STATIC_GNORMALZ[0] + 148);
+	gGT->ptrRenderBucketInstance = (void *)((u8 *)&rdata.s_STATIC_GNORMALZ[0] + 148);
 #endif
 
 	for (int i = 0; i < 3; i++)
 	{
 		struct JitPool *pool = (struct JitPool *)((char *)&gGT->JitPools.smallStack + (sizeof(struct JitPool) * i));
-		int *pointer = (int *)pool->free.first;
-		while (pointer != (int *)0x0)
+		struct Item *pointer = pool->free.first;
+		while (pointer != NULL)
 		{
-			*(int **)(pointer + 2) = pointer + 2;
-			pointer = (int *)*pointer;
+			void *object = (u8 *)pointer + sizeof(*pointer);
+			*(void **)object = object;
+			pointer = pointer->next;
 		}
 	}
 

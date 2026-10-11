@@ -354,7 +354,7 @@ void UI_DrawRankedDrivers(void)
 
 			struct TrackerWeapon *tw = warpballInst->thread->object;
 
-			int checkpointIndex = ((s32)tw->ptrNodeCurr - (s32)cn) / (s32)sizeof(struct CheckpointNode);
+			int checkpointIndex = (tw->ptrNodeCurr - cn);
 
 			if (((u32)(gGT->level1->cnt_restart_points - 1) >= UI_RANK_TRACK_CHECKPOINT_COUNT_LIMIT) || (checkpointIndex < 0))
 			{

@@ -530,7 +530,7 @@ void Channel_UpdateChannels()
 			{
 				cur->spuStartAddr = startAddr;
 
-				SpuSetVoiceStartAddr(vNum, (int)startAddr);
+				SpuSetVoiceStartAddr(vNum, (u32)(CtrRuntimeAddress)startAddr);
 			}
 		}
 

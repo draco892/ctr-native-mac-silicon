@@ -29,6 +29,9 @@
 
 #include "game/game_unity.h"
 
+// Header ABI support alone does not make legacy consumers safe to execute.
+CTR_STATIC_ASSERT(sizeof(void *) == 4);
+
 #include "game/zGlobal_RDATA.c"
 #include "game/zGlobal_DATA.c"
 #include "game/zGlobal_SDATA.c"
@@ -54,6 +57,7 @@
 #include "platform/native_glad.c"
 #include "platform/native_input.c"
 #include "platform/native_lng.c"
+#include "platform/native_credits.c"
 #include "platform/native_ptrmap.c"
 #include "platform/native_asset_readers.c"
 #include "platform/native_asset_loading.c"

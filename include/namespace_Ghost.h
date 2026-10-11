@@ -57,7 +57,7 @@ struct GhostPacket
 	// 0x10 -- size of packet
 };
 
-CTR_STATIC_ASSERT(sizeof(struct GhostPacket) == 0x10);
+CTR_STATIC_ASSERT(sizeof(struct GhostPacket) == CTR_RUNTIME_ABI(0x10, 0x18));
 
 struct GhostTape
 {

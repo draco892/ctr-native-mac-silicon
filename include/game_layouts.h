@@ -2,10 +2,9 @@
 #define GAME_LAYOUTS_H
 
 #include <macros.h>
-// Remaining globals, overlays and legacy asset publications still require
-// 32-bit pointers. Migrated resident contracts compile independently; keep
-// this full-game guard until every consumer uses the new host/wire boundary.
-CTR_STATIC_ASSERT(sizeof(void *) == 4);
+// Resident declarations support host-width pointers. The complete game's
+// execution guard lives in main.c and CMake until its remaining consumers
+// and checkpoint traversal have been integrated.
 
 // Game layout and namespace headers.
 #include <namespace_Bots.h>

@@ -748,7 +748,7 @@ void AA_EndEvent_DisplayTime(s16 driverId, s16 timeOffsetFrames)
 	{
 		struct UiElement2D *bigNumHud;
 
-		bigNumHud = (struct UiElement2D *)((u32)(driverId * AA_HUD_ELEMENTS_PER_DRIVER * sizeof(*hudArray)) + (u32)hudArray);
+		bigNumHud = (struct UiElement2D *)((u32)(driverId * AA_HUD_ELEMENTS_PER_DRIVER * sizeof(*hudArray)) + (CtrRuntimeAddress)hudArray);
 		UI_Lerp2D_Linear(CTR_VECTOR_DATA(&pos), UI_ConvertX_2(bigNumHud[AA_TIME_DISPLAY_BIG_NUM_SLOT].x, bigNumHud[AA_TIME_DISPLAY_BIG_NUM_SLOT].z),
 		                 UI_ConvertY_2(bigNumHud[AA_TIME_DISPLAY_BIG_NUM_SLOT].y, bigNumHud[AA_TIME_DISPLAY_BIG_NUM_SLOT].z), -0xae, bigNumY,
 		                 driver->framesSinceRaceEnded_forThisDriver, AA_TIME_DISPLAY_FLYIN_FRAMES);
@@ -757,7 +757,7 @@ void AA_EndEvent_DisplayTime(s16 driverId, s16 timeOffsetFrames)
 	driver->instBigNum->matrix.t[0] = pos.x;
 	driver->instBigNum->matrix.t[1] = pos.y;
 
-	hud = (struct UiElement2D *)((u32)(driverId * AA_HUD_ELEMENTS_PER_DRIVER * sizeof(*hudArray)) + (u32)hudArray);
+	hud = (struct UiElement2D *)((u32)(driverId * AA_HUD_ELEMENTS_PER_DRIVER * sizeof(*hudArray)) + (CtrRuntimeAddress)hudArray);
 
 	// interpolate scale to the target big-number size
 	UI_Lerp2D_Linear(CTR_VECTOR_DATA(&pos), hud[AA_TIME_DISPLAY_BIG_NUM_SLOT].scale, 0, AA_BIG_NUM_TARGET_SCALE, 0, driver->framesSinceRaceEnded_forThisDriver,

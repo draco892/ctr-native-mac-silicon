@@ -1,6 +1,6 @@
 # Conversione C17 per Apple Silicon: attività completate
 
-Aggiornato alla tappa 15. Il progetto dispone di moduli e test nativi ARM64;
+Aggiornato alla tappa 16. Il progetto dispone di moduli e test nativi ARM64;
 non dispone ancora di una build completa giocabile. “Verificato” qui indica i
 percorsi coperti dai test, senza implicare equivalenza completa al gioco PS1.
 
@@ -46,19 +46,23 @@ percorsi coperti dai test, senza implicare equivalenza completa al gioco PS1.
     di grafi con riferimenti reciproci, verifiche di ABI/dimensioni e rifiuto
     transazionale dei dati invalidi. Il checkpoint dell'intero gioco resta da
     integrare con questi nuovi oggetti heap.
-17. **Verifica continua:** 32 test CTest superati sia normalmente sia con
+17. **Globali e overlay residenti:** contratti separati per ABI PS1 e host,
+    trasporti a larghezza host per menu/audio/icone, pool allineati e ritorni
+    tipizzati, copia dei metadati turbo tramite IDPP, crediti con tabella host
+    separata e ponte tra visitatori del checkpoint e grafi residenti.
+18. **Verifica continua:** 33 test CTest superati sia normalmente sia con
     ASan/UBSan, inclusi gli asset reali; audit ARM64 riproducibile e documentazione.
 
 ## Cosa manca per giocare
 
-- **Completare l'integrazione dei contratti runtime:** globali e overlay
-  rimanenti, accessi tramite offset, trasporti di puntatori e visitatori del
-  checkpoint dell'intero gioco. L'audit corrente conta 307 guardie di layout,
-  290 diagnostiche di cast puntatore/intero e 39 siti scratchpad; molti sono
-  collegati fra loro e non equivalgono a singoli task.
+- **Verificare l'integrazione nel runtime completo:** l'audit sintattico ora
+  conta una sola guardia intenzionale dell'eseguibile, zero diagnostiche di
+  cast puntatore/intero e 39 siti scratchpad (inclusi rami PS1 e workspace
+  scalari). I test non certificano tutti gli accessi tramite offset né un
+  checkpoint completo durante una gara: serve la verifica nel loop reale.
 - **Compilare e avviare l'eseguibile ARM64 completo:** chiudere i contratti
   precedenti, collegare i moduli e verificare il caricamento del menu e della gara.
-  I guardrail CMake e del layout globale sono tuttora attivi.
+  I guardrail CMake e dell'eseguibile sono tuttora attivi.
 - **Rendere la prima gara effettivamente giocabile:** controlli/input,
   simulazione, collisioni, camera, GPU e audio con gli asset reali; correggere
   crash e divergenze, verificare i cicli di caricamento/scaricamento.

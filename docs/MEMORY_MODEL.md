@@ -32,7 +32,10 @@ these relevant ranges:
 | `.sdata` | `0x8008cf6c`-`0x8008d667` | `sdata_static` |
 | `.bss` | `0x8008d668`-`0x8009f6fc` | `bss` |
 
-The named structs are layout maps. Their field offsets matter because retail code often cares about the address, not only the C field name.
+On PS1 the named structs are layout maps. Native resident aggregates use a
+separate host ABI, including pointer alignment, and are accessed by typed fields
+or offsets derived from their declarations. Retail addresses do not locate host
+global fields. Serialized assets still use the explicit PS1 wire layouts.
 
 ## Overlay Regions
 

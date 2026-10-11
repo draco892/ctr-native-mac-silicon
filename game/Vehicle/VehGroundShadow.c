@@ -145,7 +145,7 @@ void VehGroundShadow_Main(void)
 	s32 packetAddress;
 	s32 geomX;
 	s32 geomY;
-	u32 retailCallState[3];
+	CtrRuntimeAddress retailCallState[3];
 
 #if defined(CTR_NATIVE_HOST64)
 	struct NativeShadowWork *hostShadow = NativeShadowWork_Get();
@@ -390,7 +390,7 @@ void VehGroundShadow_Main(void)
 				axisAngle = driver->rotCurr.y;
 				retailCallState[0] = (u32)culledState;
 				retailCallState[1] = (u32)readyState;
-				retailCallState[2] = (u32)localVector;
+				retailCallState[2] = (CtrRuntimeAddress)localVector;
 				VehPhysForce_RotAxisAngle(axisMatrix, axisVector, axisAngle);
 				CTR_PSX_FORGET_VALUE(axisMatrix);
 				gteWord0 = VEH_GROUND_SHADOW_WORD(axisMatrix, 0x00);
@@ -420,7 +420,7 @@ void VehGroundShadow_Main(void)
 				VEH_GROUND_SHADOW_SIGNED_HALF(scratch, 0x48) = (s16)v1Value;
 				VEH_GROUND_SHADOW_SIGNED_HALF(scratch, 0x4a) = 0;
 				VEH_GROUND_SHADOW_SIGNED_HALF(scratch, 0x4c) = 0;
-				localVector = (u8 *)(size_t)*(volatile u32 *)&retailCallState[2];
+				localVector = (u8 *)(size_t)*(volatile CtrRuntimeAddress *)&retailCallState[2];
 				readyState = (s32) * (volatile u32 *)&retailCallState[1];
 				culledState = (s32) * (volatile u32 *)&retailCallState[0];
 				do

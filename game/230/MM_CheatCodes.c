@@ -179,7 +179,7 @@ void MM_ParseCheatCodes(void)
 		{
 			// remember, inputButtons is backward
 			if ((buttonHistory[historyIndex] &
-			     *(u32 *)(cheatOffset + (expectedButtonIndex * sizeof(u32)) + (u32)cheats + OFFSETOF(struct MainMenuCheatCode, buttons))) == 0)
+			     *(u32 *)(cheatOffset + (expectedButtonIndex * sizeof(u32)) + (CtrRuntimeAddress)cheats + OFFSETOF(struct MainMenuCheatCode, buttons))) == 0)
 			{
 				cheatMatches = false;
 			}

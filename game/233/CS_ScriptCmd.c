@@ -101,7 +101,7 @@ void CS_ScriptCmd_ReadOpcode_Main(struct CutsceneObj *cs)
 
 	if (metaFlags & CS_OPCODE_META_HAS_ALIGNED_ARG1)
 	{
-		while ((u32)cursor & 3)
+		while ((CtrRuntimeAddress)cursor & 3)
 		{
 			cursor++;
 		}

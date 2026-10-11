@@ -21,14 +21,19 @@ void LOAD_RunPtrMap(char *origin, int *patchArr, int numPtrs)
 #if defined(CTR_NATIVE)
 		// Legacy native consumers still require four-byte host-pointer slots.
 		// ARM64 readers use NativePtrMap_Decode/Resolve with explicit asset sizes.
-		CTR_STATIC_ASSERT(sizeof(void *) == 4);
+#if defined(CTR_NATIVE_HOST64)
+		// Four-byte wire slots cannot contain host addresses. A stray legacy
+		// caller must fail instead of silently corrupting a resident graph.
+		CTR_TRAP();
+#else
 		u8 *location = (u8 *)(void *)(origin + offset);
 		CTR_WriteU32LE(location, CTR_ReadU32LE(location) + (u32)(uintptr_t)origin);
+#endif
 #else
 		int *location = (int *)((u32)offset + (u32)origin);
 		*location = *location + (int)origin;
 #endif
-#if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
+#if defined(CTR_NATIVE) && defined(CTR_INTERNAL) && !defined(CTR_NATIVE_HOST64)
 		NativeCheckpoint_RegisterPointerSlot((char *)location);
 #endif
 	}
@@ -54,7 +59,7 @@ void LOAD_Robots2P(struct BigHeader *bigfile, int p1, int p2, void (*callback)(s
 		do
 		{
 			// NOTE(aalhendi): The offset-first 32-bit address keeps retail's two-add order.
-			u8 racerID = *(u8 *)((u32)(racerIndex + setOffset) + (u32)robotSetBase);
+			u8 racerID = *(u8 *)((u32)(racerIndex + setOffset) + (CtrRuntimeAddress)robotSetBase);
 			if ((p1 == racerID) || (p2 == racerID))
 			{
 				boolFoundRepeat = true;

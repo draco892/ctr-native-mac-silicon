@@ -30,6 +30,14 @@ typedef unsigned int size_t;
 #define CTR_NATIVE_HOST64 1
 #endif
 
+// Resident objects have two ABIs. Serialized PS1 records must not use this
+// selector: their four-byte fields and strides are independent of the host.
+#if defined(CTR_NATIVE_HOST64)
+#define CTR_RUNTIME_ABI(retail, host64) (host64)
+#else
+#define CTR_RUNTIME_ABI(retail, host64) (retail)
+#endif
+
 // Runtime callback transport retains host width; PS1 ABI stays one word.
 #if defined(CTR_NATIVE)
 typedef uintptr_t CtrRuntimeAddress;

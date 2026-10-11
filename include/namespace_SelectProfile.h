@@ -77,8 +77,8 @@ struct SelectProfileRuntimeState
 	s16 submitNameMode;
 };
 
-CTR_STATIC_ASSERT(sizeof(struct SelectProfileLoadSaveIcon) == 0xc);
-CTR_STATIC_ASSERT(sizeof(struct SelectProfileLoadSaveObj) == 0x8);
+CTR_STATIC_ASSERT(sizeof(struct SelectProfileLoadSaveIcon) == CTR_RUNTIME_ABI(0xc, 0x10));
+CTR_STATIC_ASSERT(sizeof(struct SelectProfileLoadSaveObj) == CTR_RUNTIME_ABI(0x8, 0x10));
 CTR_STATIC_ASSERT(sizeof(struct SelectProfileRuntimeState) == 0x10);
 CTR_STATIC_ASSERT(OFFSETOF(struct SelectProfileRuntimeState, mode) == 0x00);
 CTR_STATIC_ASSERT(OFFSETOF(struct SelectProfileRuntimeState, actionActive) == 0x02);

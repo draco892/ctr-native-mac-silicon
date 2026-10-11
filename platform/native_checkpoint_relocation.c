@@ -1,4 +1,19 @@
 #include <platform/native_checkpoint_relocation.h>
+
+int NativeCheckpointPointer_Rebase(const struct NativeCheckpointAddressRange *oldRanges, size_t oldCount,
+    const struct NativeCheckpointAddressRange *liveRanges, size_t liveCount, u64 address,
+    NativeCheckpointExternalRebase external, void *user, u64 *out)
+{
+    if (!out)
+        return 0;
+    if (NativeCheckpointRanges_Rebase(oldRanges, oldCount, liveRanges, liveCount, address, out))
+        return 1;
+    void *live = NULL;
+    if (!external || address > UINTPTR_MAX || !external(user, (uintptr_t)address, &live))
+        return 0;
+    *out = (u64)(uintptr_t)live;
+    return 1;
+}
 #include <string.h>
 #include <stdlib.h>
 int NativeCheckpointRanges_Validate(const struct NativeCheckpointAddressRange *ranges,size_t count)

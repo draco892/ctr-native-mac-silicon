@@ -684,11 +684,11 @@ int LOAD_TenStages(struct GameTracker *unusedGameTracker, int loadingStage, stru
 		{
 			LibraryOfModels_Store(GAME_TRACKER, GAME_TRACKER->level1->numModels, GAME_TRACKER->level1->ptrModelsPtrArray);
 
-			GAME_TRACKER->ptrCircle = (u32)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_circle));
-			GAME_TRACKER->ptrClod = (u32)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_clod));
-			GAME_TRACKER->ptrDustpuff = (u32)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_dustpuff));
-			GAME_TRACKER->ptrSmoking = (u32)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_smokering)); // "Smoke Ring"
-			GAME_TRACKER->ptrSparkle = (u32)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_sparkle));
+			GAME_TRACKER->ptrCircle = (CtrRuntimeAddress)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_circle));
+			GAME_TRACKER->ptrClod = (CtrRuntimeAddress)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_clod));
+			GAME_TRACKER->ptrDustpuff = (CtrRuntimeAddress)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_dustpuff));
+			GAME_TRACKER->ptrSmoking = (CtrRuntimeAddress)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_smokering)); // "Smoke Ring"
+			GAME_TRACKER->ptrSparkle = (CtrRuntimeAddress)DecalGlobal_FindInLEV(GAME_TRACKER->level1, GAME_RDATA_NAME(s_sparkle));
 		}
 
 		// if linked list of icons exists

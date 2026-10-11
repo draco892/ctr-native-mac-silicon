@@ -60,7 +60,7 @@ void howl_ParseHeader(struct HowlHeader *hh)
 {
 	u32 numSpuAddrs = hh->numSpuAddrs;
 	u32 numOtherFX = hh->numOtherFX;
-	u32 addr = (u32)hh + sizeof(struct HowlHeader);
+	CtrRuntimeAddress addr = (CtrRuntimeAddress)hh + sizeof(struct HowlHeader);
 	u32 numEngineFX;
 	u32 numBanks;
 	u32 numSequences;
@@ -88,14 +88,14 @@ void howl_ParseHeader(struct HowlHeader *hh)
 	addr += sizeof(s16) * numSequences;
 
 	// NOTE(aalhendi): Retail stores this before the return, not in its delay slot.
-	*(volatile u32 *)&sdata->howl_endOfHowl = addr;
+	*(volatile CtrRuntimeAddress *)&sdata->howl_endOfHowl = addr;
 }
 
 void howl_ParseCseqHeader(struct CseqHeader *ch)
 {
-	u32 addr = (u32)ch;
+	CtrRuntimeAddress addr = (CtrRuntimeAddress)ch;
 	u32 numSongs;
-	u32 alignedAddr;
+	CtrRuntimeAddress alignedAddr;
 
 	sdata->ptrCseqHeader = (struct CseqHeader *)addr;
 	addr += sizeof(struct CseqHeader);
@@ -116,7 +116,7 @@ void howl_ParseCseqHeader(struct CseqHeader *ch)
 	{
 		sdata->ptrCseqSongData = (char *)(addr + 1);
 	}
-	alignedAddr = (u32)sdata->ptrCseqSongData;
+	alignedAddr = (CtrRuntimeAddress)sdata->ptrCseqSongData;
 	if (alignedAddr & 2)
 	{
 		sdata->ptrCseqSongData = (char *)(alignedAddr + 2);
@@ -167,7 +167,7 @@ int howl_LoadHeader(char *filename)
 			MEMPACK_ReallocMem(numSector << 0xb);
 
 			// One sector suffices, or the remaining sectors must load successfully.
-			if (numSector < 2 || LOAD_HowlHeaderSectors(&GAME_HOWL_CD_FILE, (void *)((int)header + 0x800), 1, numSector - 1) != 0)
+			if (numSector < 2 || LOAD_HowlHeaderSectors(&GAME_HOWL_CD_FILE, (void *)((u8 *)header + 0x800), 1, numSector - 1) != 0)
 				goto headerLoaded;
 		}
 	}

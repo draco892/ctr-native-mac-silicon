@@ -1,12 +1,7 @@
 #include <common.h>
 #include "RB_Effect.h"
 
-struct Blowup
-{
-	struct Instance *shockwave;
-	struct Instance *explosion;
-	u32 reserved; // Retail allocates a third word; these behaviors leave it untouched.
-};
+
 
 void RB_Blowup_ProcessBucket(struct Thread *thread)
 {

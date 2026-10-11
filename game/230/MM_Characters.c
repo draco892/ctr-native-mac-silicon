@@ -70,7 +70,7 @@ enum
 // register choices GCC 2.8.1 cannot express through C alone. Native builds
 // retain the same game-state operations without the PSX scheduling controls.
 #if defined(CTR_NATIVE)
-#define MM_CHARACTERS_LOAD_OUTLINE_GAME_TRACKER(gameTracker)    ((gameTracker) = (u32)GAME_TRACKER)
+#define MM_CHARACTERS_LOAD_OUTLINE_GAME_TRACKER(gameTracker)    ((gameTracker) = (CtrRuntimeAddress)GAME_TRACKER)
 #define MM_CHARACTERS_LOAD_OUTER_LOOP_GAME_TRACKER(gameTracker) ((gameTracker) = GAME_TRACKER)
 #define MM_CHARACTERS_LOAD_COLLISION_GAME_TRACKER(gameTracker)  ((gameTracker) = GAME_TRACKER)
 #define MM_CHARACTERS_CAPTURE_FINAL_COLLISION_PAGE(gameTracker) ((gameTracker) = GAME_TRACKER)
@@ -127,11 +127,19 @@ void MM_Characters_AnimateColors(u8 *colorData, s16 playerID, s16 flag)
 	// see MM_Characters_MenuProc
 	if (flag == 0)
 	{
+#if defined(CTR_NATIVE)
+		trigApprox = 0;
+#else
 		trigApprox = (u32)MM_TRIG_APPROX;
+#endif
 		trigApproximationIndex = (s16)MM_FRAME_COUNTER * MM_CHARACTER_SELECT_COLOR_PHASE_FRAME_STEP + playerID * MM_CHARACTER_SELECT_COLOR_PHASE_PLAYER_STEP;
 
 		// approximate trigonometry
+#if defined(CTR_NATIVE)
+		trigApprox = (s32)CTR_ReadU32AlignedLE(&MM_TRIG_APPROX[trigApproximationIndex & MM_CHARACTER_SELECT_COLOR_TRIG_MASK]);
+#else
 		trigApprox = (s32)CTR_ReadU32AlignedLE(&((struct TrigTable *)trigApprox)[trigApproximationIndex & MM_CHARACTER_SELECT_COLOR_TRIG_MASK]);
+#endif
 
 		if ((trigApproximationIndex & MM_CHARACTER_SELECT_COLOR_TRIG_HIGH_HALF_BIT) == 0)
 		{
@@ -259,8 +267,8 @@ void MM_Characters_DrawWindows(b32 showDrivers)
 	register b32 boolShowDrivers CTR_PSX_REGISTER("$22");
 	register struct MetaDataCHAR *characterMetadata CTR_PSX_REGISTER("$23");
 	register s16 *desiredCharacterIDs CTR_PSX_REGISTER("$21");
-	register u32 dataPointer CTR_PSX_REGISTER("$2");
-	register u32 transitionOffsetOrPointer CTR_PSX_REGISTER("$3");
+	register CtrRuntimeAddress dataPointer CTR_PSX_REGISTER("$2");
+	register CtrRuntimeAddress transitionOffsetOrPointer CTR_PSX_REGISTER("$3");
 	register struct PushBuffer *pb CTR_PSX_REGISTER("$8");
 	struct Instance *driverInst;
 	struct InstanceWithIDPP *driverWithIDPP;
@@ -273,7 +281,7 @@ void MM_Characters_DrawWindows(b32 showDrivers)
 	s32 indexOrSlideFactor;
 	register s32 playerWindowIndex CTR_PSX_REGISTER("$4");
 	register s32 pushBufferOffset CTR_PSX_REGISTER("$5");
-	register u32 gameTrackerPage CTR_PSX_REGISTER("$6");
+	register CtrRuntimeAddress gameTrackerPage CTR_PSX_REGISTER("$6");
 	s16 playerIndex;
 	s16 moveFrames;
 	s16 nextMoveTimer;
@@ -305,9 +313,9 @@ LAB_Characters_DrawWindows_Loop:
 	transitionOffsetOrPointer = playerWindowIndex * sizeof(*windowPos);
 	CTR_PSX_LOAD_WORD_FROM_PAGE(windowPos, dataPointer, MM_ACTIVE_CHARACTER_SELECT_WINDOW_POS_ASM_NAME, MM_ACTIVE_CHARACTER_SELECT_WINDOW_POS);
 	CTR_PSX_LOAD_SYMBOL_PAGE(dataPointer, MM_CHARACTER_SELECT_TRANSITION_META_ASM_NAME);
-	CTR_PSX_LOAD_WORD_FROM_PAGE(dataPointer, dataPointer, MM_CHARACTER_SELECT_TRANSITION_META_ASM_NAME, (u32)MM_CHARACTER_SELECT_TRANSITION_META);
-	CTR_PSX_LOAD_WORD_FROM_PAGE(gameTrackerPage, gameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME, (u32)GAME_TRACKER);
-	windowPos = (SVec2 *)(transitionOffsetOrPointer + (u32)windowPos);
+	CTR_PSX_LOAD_WORD_FROM_PAGE(dataPointer, dataPointer, MM_CHARACTER_SELECT_TRANSITION_META_ASM_NAME, (CtrRuntimeAddress)MM_CHARACTER_SELECT_TRANSITION_META);
+	CTR_PSX_LOAD_WORD_FROM_PAGE(gameTrackerPage, gameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME, (CtrRuntimeAddress)GAME_TRACKER);
+	windowPos = (SVec2 *)(transitionOffsetOrPointer + (CtrRuntimeAddress)windowPos);
 	transitionOffsetOrPointer += playerWindowIndex;
 	transitionOffsetOrPointer <<= 1;
 	transitionOffsetOrPointer += dataPointer;
@@ -425,7 +433,7 @@ LAB_Characters_DrawWindows_Loop:
 	CTR_PSX_DEPEND_MEMORY(&pb->rot.z, dataPointer);
 
 	// player -> instance
-	dataPointer = (u32)loopGameTracker + dataPointer;
+	dataPointer = (CtrRuntimeAddress)loopGameTracker + dataPointer;
 	driverInst = ((struct GameTracker *)dataPointer)->drivers[0]->instSelf;
 
 	// Make Visible
@@ -453,7 +461,7 @@ LAB_Characters_DrawWindows_Loop:
 
 	CTR_PSX_CLOBBER("$2");
 	CTR_PSX_LOAD_SYMBOL_PAGE(dataPointer, MM_CHARACTER_SELECT_CURRENT_IDS_ASM_NAME);
-	CTR_PSX_ADD_SYMBOL_LOW(dataPointer, dataPointer, MM_CHARACTER_SELECT_CURRENT_IDS_ASM_NAME, (u32)MM_CHARACTER_SELECT_CURRENT_IDS);
+	CTR_PSX_ADD_SYMBOL_LOW(dataPointer, dataPointer, MM_CHARACTER_SELECT_CURRENT_IDS_ASM_NAME, (CtrRuntimeAddress)MM_CHARACTER_SELECT_CURRENT_IDS);
 	currCharacterID = (s16 *)(indexOrSlideFactor * sizeof(*currCharacterID) + dataPointer);
 
 	driverInst->animFrame = 0;
@@ -471,7 +479,7 @@ LAB_Characters_DrawWindows_Loop:
 	CTR_PSX_CLOBBER("$3");
 	CTR_PSX_LOAD_SYMBOL_PAGE(transitionOffsetOrPointer, MM_CHARACTER_SELECT_DRIVER_POS_ASM_NAME);
 	dataPointer = CTR_PSX_PAGE_LVALUE(s16, transitionOffsetOrPointer, MM_CHARACTER_SELECT_DRIVER_POS_PAGE_OFFSET, MM_CHARACTER_SELECT_DRIVER_POS.x);
-	CTR_PSX_ADD_SYMBOL_LOW(transitionOffsetOrPointer, transitionOffsetOrPointer, MM_CHARACTER_SELECT_DRIVER_POS_ASM_NAME, (u32)&MM_CHARACTER_SELECT_DRIVER_POS);
+	CTR_PSX_ADD_SYMBOL_LOW(transitionOffsetOrPointer, transitionOffsetOrPointer, MM_CHARACTER_SELECT_DRIVER_POS_ASM_NAME, (CtrRuntimeAddress)&MM_CHARACTER_SELECT_DRIVER_POS);
 	driverInst->matrix.t[0] = dataPointer;
 	dataPointer = ((s16 *)transitionOffsetOrPointer)[1];
 	driverInst->matrix.t[1] = dataPointer;
@@ -502,7 +510,7 @@ LAB_Characters_DrawWindows_Loop:
 			transitionOffsetOrPointer = (s16)MM_CHARACTER_SELECT_SLIDE_DISTANCE;
 			slideProduct = moveFrameScale * (s32)transitionOffsetOrPointer;
 			CTR_PSX_LOAD_SYMBOL_PAGE(dataPointer, MM_CHARACTER_SELECT_MOVE_DIR_ASM_NAME);
-			CTR_PSX_ADD_SYMBOL_LOW(dataPointer, dataPointer, MM_CHARACTER_SELECT_MOVE_DIR_ASM_NAME, (u32)MM_CHARACTER_SELECT_MOVE_DIR);
+			CTR_PSX_ADD_SYMBOL_LOW(dataPointer, dataPointer, MM_CHARACTER_SELECT_MOVE_DIR_ASM_NAME, (CtrRuntimeAddress)MM_CHARACTER_SELECT_MOVE_DIR);
 			dataPointer = (indexOrSlideFactor * (s32)sizeof(s16)) + dataPointer;
 			dataPointer = *(s16 *)dataPointer;
 			CTR_PSX_OBSERVE_VALUE(slideProduct);
@@ -525,7 +533,7 @@ LAB_Characters_DrawWindows_Loop:
 			moveFactor -= moveFrameScale;
 			slideProduct = moveFactor * (s32)transitionOffsetOrPointer;
 			CTR_PSX_LOAD_SYMBOL_PAGE(dataPointer, MM_CHARACTER_SELECT_MOVE_DIR_ASM_NAME);
-			CTR_PSX_ADD_SYMBOL_LOW(dataPointer, dataPointer, MM_CHARACTER_SELECT_MOVE_DIR_ASM_NAME, (u32)MM_CHARACTER_SELECT_MOVE_DIR);
+			CTR_PSX_ADD_SYMBOL_LOW(dataPointer, dataPointer, MM_CHARACTER_SELECT_MOVE_DIR_ASM_NAME, (CtrRuntimeAddress)MM_CHARACTER_SELECT_MOVE_DIR);
 			dataPointer = (indexOrSlideFactor * (s32)sizeof(s16)) + dataPointer;
 			CTR_PSX_OBSERVE_VALUE(slideProduct);
 			transitionOffsetOrPointer = *(s16 *)dataPointer;
@@ -554,14 +562,14 @@ LAB_Characters_DrawWindows_Loop:
 
 		// driver rotation
 		CTR_PSX_LOAD_SYMBOL_PAGE(dataPointer, MM_CHARACTER_SELECT_DRIVER_ROT_ASM_NAME);
-		CTR_PSX_ADD_SYMBOL_LOW(transitionOffsetOrPointer, dataPointer, MM_CHARACTER_SELECT_DRIVER_ROT_ASM_NAME, (u32)&MM_CHARACTER_SELECT_DRIVER_ROT);
+		CTR_PSX_ADD_SYMBOL_LOW(transitionOffsetOrPointer, dataPointer, MM_CHARACTER_SELECT_DRIVER_ROT_ASM_NAME, (CtrRuntimeAddress)&MM_CHARACTER_SELECT_DRIVER_ROT);
 		dataPointer = CTR_PSX_PAGE_LVALUE(u16, dataPointer, MM_CHARACTER_SELECT_DRIVER_ROT_PAGE_OFFSET, (u16)MM_CHARACTER_SELECT_DRIVER_ROT.x);
 		rotationY = ((u16 *)transitionOffsetOrPointer)[1];
 		transitionOffsetOrPointer = ((u16 *)transitionOffsetOrPointer)[2];
 		driverMatrix = &driverInst->matrix;
 		rot.z = transitionOffsetOrPointer;
 		CTR_PSX_LOAD_SYMBOL_PAGE(transitionOffsetOrPointer, MM_CHARACTER_SELECT_ANGLE_ASM_NAME);
-		CTR_PSX_ADD_SYMBOL_LOW(transitionOffsetOrPointer, transitionOffsetOrPointer, MM_CHARACTER_SELECT_ANGLE_ASM_NAME, (u32)MM_CHARACTER_SELECT_ANGLE);
+		CTR_PSX_ADD_SYMBOL_LOW(transitionOffsetOrPointer, transitionOffsetOrPointer, MM_CHARACTER_SELECT_ANGLE_ASM_NAME, (CtrRuntimeAddress)MM_CHARACTER_SELECT_ANGLE);
 		rot.x = dataPointer;
 		rot.y = rotationY;
 		dataPointer = ((u16 *)transitionOffsetOrPointer)[playerIndex];
@@ -572,7 +580,7 @@ LAB_Characters_DrawWindows_Loop:
 	}
 	playerIndex++;
 	CTR_PSX_LOAD_SYMBOL_PAGE(gameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME);
-	CTR_PSX_LOAD_WORD_FROM_PAGE(transitionOffsetOrPointer, gameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME, (u32)GAME_TRACKER);
+	CTR_PSX_LOAD_WORD_FROM_PAGE(transitionOffsetOrPointer, gameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME, (CtrRuntimeAddress)GAME_TRACKER);
 	if (playerIndex < ((struct GameTracker *)transitionOffsetOrPointer)->numPlyrNextGame)
 	{
 		goto LAB_Characters_DrawWindows_Loop;
@@ -606,7 +614,7 @@ void MM_Characters_SetMenuLayout(void)
 	for (; iconIndex < MM_CHARACTER_SELECT_ICON_COUNT; iconIndex++)
 	{
 		unlocked = meta1P2P[iconIndex].unlockFlags;
-		unlockWord = (u32 *)((u32)((unlocked >> 5) * sizeof(*unlockWord)) + (u32)progress);
+		unlockWord = (u32 *)((u32)((unlocked >> 5) * sizeof(*unlockWord)) + (CtrRuntimeAddress)progress);
 
 		if ((unlockWord[1] >> (unlocked & 0x1f)) & 1)
 		{
@@ -777,7 +785,7 @@ void MM_Characters_RestoreIDs(void)
 				s16 unlocked;
 
 				// Determine if this icon is unlocked (and drawing)
-				currID = (s16 *)((u32)(unlockPlayerIndex * sizeof(*currID)) + (u32)characterIDs);
+				currID = (s16 *)((u32)(unlockPlayerIndex * sizeof(*currID)) + (CtrRuntimeAddress)characterIDs);
 				unlocked = activeMeta[(s32)*currID].unlockFlags;
 
 				if (unlocked != unlockAlways)
@@ -785,7 +793,7 @@ void MM_Characters_RestoreIDs(void)
 					// NOTE(aalhendi): Keep the shared loop increment available to both
 					// retail branch delay slots without changing native control flow.
 					CTR_PSX_MEMORY_BARRIER();
-					if (!((((u32 *)((u32)((unlocked >> 5) * sizeof(u32)) + (u32)progress))[1] >> (unlocked & 0x1f)) & 1))
+					if (!((((u32 *)((u32)((unlocked >> 5) * sizeof(u32)) + (CtrRuntimeAddress)progress))[1] >> (unlocked & 0x1f)) & 1))
 					{
 						// If the character is locked, change it to Crash
 						*currID = CRASH_BANDICOOT;
@@ -1005,7 +1013,7 @@ dontDrawSelectCharacter:
 		s32 currentIconTransitionOffset;
 		b32 playerSelectedAfterInput;
 		const Color *outlineColor;
-		u32 outlineGameTrackerPage;
+		CtrRuntimeAddress outlineGameTrackerPage;
 		u32 candidateIcon;
 		s32 candidateIconIndex;
 		Color playerColor;
@@ -1096,7 +1104,7 @@ dontDrawSelectCharacter:
 							{
 								fallbackTable = MM_CHARACTER_SELECT_FALLBACK_1_REPEAT;
 								CTR_PSX_OBSERVE_VALUE(fallbackTable);
-								fallbackTable = (u8 *)((u32)direction + (u32)fallbackTable);
+								fallbackTable = (u8 *)((u32)direction + (CtrRuntimeAddress)fallbackTable);
 								stepIcon = (s16)MM_Characters_GetNextDriver(fallbackTable[0], *playerIconPtr);
 								candidateIcon = MM_Characters_GetNextDriver(direction, stepIcon);
 
@@ -1115,7 +1123,7 @@ dontDrawSelectCharacter:
 									{
 										fallbackTable = MM_CHARACTER_SELECT_FALLBACK_2_REPEAT;
 										CTR_PSX_OBSERVE_VALUE(fallbackTable);
-										fallbackTable = (u8 *)((u32)direction + (u32)fallbackTable);
+										fallbackTable = (u8 *)((u32)direction + (CtrRuntimeAddress)fallbackTable);
 										stepIcon = (s16)MM_Characters_GetNextDriver(fallbackTable[0], *playerIconPtr);
 										candidateIcon = MM_Characters_GetNextDriver(direction, stepIcon);
 
@@ -1190,7 +1198,7 @@ dontDrawSelectCharacter:
 						finalCollisionPlayerOffset = finalCollisionPlayerIndex * sizeof(*finalCollisionPlayerIcon);
 						CTR_PSX_OBSERVE_VALUE(finalCollisionPlayerOffset);
 						MM_CHARACTERS_CAPTURE_FINAL_COLLISION_PAGE(finalCollisionGameTracker);
-						finalCollisionPlayerIcon = (s16 *)((u32)navigationIconBase + finalCollisionPlayerOffset);
+						finalCollisionPlayerIcon = (s16 *)((CtrRuntimeAddress)navigationIconBase + finalCollisionPlayerOffset);
 						finalCollisionGameTracker =
 						    CTR_PSX_PAGE_LVALUE(struct GameTracker *volatile, finalCollisionGameTracker, MM_GAME_TRACKER_PAGE_OFFSET, GAME_TRACKER);
 						finalCollisionPlayerCount = finalCollisionGameTracker->numPlyrNextGame;
@@ -1264,7 +1272,7 @@ dontDrawSelectCharacter:
 		// transition of each icon
 		currentIconTransitionBase = MM_CHARACTER_SELECT_TRANSITION_META;
 		currentIconTransitionOffset = candidateIconIndex * sizeof(*currentIconTransition);
-		currentIconTransition = (struct TransitionMeta *)(currentIconTransitionOffset + (u32)currentIconTransitionBase);
+		currentIconTransition = (struct TransitionMeta *)(currentIconTransitionOffset + (CtrRuntimeAddress)currentIconTransitionBase);
 
 		// NOTE(aalhendi): Three observations retain GCC 2.8.1's retail pre-draw schedule.
 		CTR_PSX_OBSERVE_VALUE(preInputCharacterMeta);
@@ -1323,10 +1331,10 @@ outerPlayerLoopComplete:
 				register struct TransitionMeta *iconTransition CTR_PSX_REGISTER("$3");
 				register struct MetaDataCHAR *iconCharacterMetadata CTR_PSX_REGISTER("$4");
 				register u32 iconGameTrackerPage CTR_PSX_REGISTER("$7");
-				register u32 iconWork CTR_PSX_REGISTER("$2");
+				register CtrRuntimeAddress iconWork CTR_PSX_REGISTER("$2");
 				const Color *iconColor;
 				s32 iconTransitionIndex;
-				s32 iconTransitionByteOffset;
+				CtrCallbackArg iconTransitionByteOffset;
 				s16 selectedPlayerIndex;
 
 				iconColor = &MM_CHARACTER_SELECT_NEUTRAL_COLOR;
@@ -1349,7 +1357,7 @@ outerPlayerLoopComplete:
 				iconTransitionByteOffset = iconWork * sizeof(*iconTransition);
 				CTR_PSX_LOAD_SYMBOL_PAGE_AFTER(iconGameTrackerPage, RETAIL_GAME_TRACKER_ASM_NAME, iconTransitionByteOffset);
 				CTR_PSX_LOAD_WORD_FROM_PAGE(iconWork, iconCharacterMetadata, MM_CHARACTER_SELECT_TRANSITION_META_ASM_NAME,
-				                            (u32)MM_CHARACTER_SELECT_TRANSITION_META);
+				                            (CtrRuntimeAddress)MM_CHARACTER_SELECT_TRANSITION_META);
 				iconCharacterMetadata = (struct MetaDataCHAR *)MM_CHARACTER_METADATA_PAGE_VALUE;
 				CTR_PSX_FORGET_VALUE(iconCharacterMetadata);
 #if defined(CTR_NATIVE)
@@ -1487,7 +1495,7 @@ outerPlayerLoopComplete:
 				localizedStrings = GAME_LANGUAGE_STRINGS;
 				transitionWordOffset = menuPlayerIndex * (sizeof(*driverWindowTransition) / sizeof(s16));
 				characterNameOffset = GAME_CHARACTER_METADATA[preInputCharacterMeta->characterID].name_LNG_long * sizeof(*localizedStrings);
-				characterNameSlot = (char **)(characterNameOffset + (u32)localizedStrings);
+				characterNameSlot = (char **)(characterNameOffset + (CtrRuntimeAddress)localizedStrings);
 				transitionBase = MM_CHARACTER_SELECT_TRANSITION_META;
 				characterSelectWindowWidth = MM_CHARACTER_SELECT_WINDOW_WIDTH;
 				driverWindowTransition =
