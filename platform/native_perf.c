@@ -6,6 +6,7 @@
 #include "platform/native_audio.h"
 #include "platform/native_log.h"
 #include "platform/native_path.h"
+#include "platform/native_renderer.h"
 
 #include <SDL3/SDL.h>
 
@@ -83,6 +84,7 @@ global_variable const struct NativePerfBucketInfo s_bucketInfo[NATIVE_PERF_BUCKE
     {"swap_window_ms", 1},
     {"vsync_wait_ms", 0},
     {"audio_vblank_ms", 1},
+    {"render_wait_ms", 0},
 };
 
 global_variable FILE *s_csvFile;
@@ -251,7 +253,7 @@ internal void NativePerf_WriteCsvHeader(FILE *file)
 {
 	fprintf(file, "frame_index,total_ms,work_ms,over_budget_ms,work_over_budget_ms,dominant_bucket,dominant_ms,frameCounter,timer,level_id,game_mode1,"
 	              "loading_stage,bool_demo_mode,num_plyr,elapsed_time_ms,vsync_till_flip,vSync_between_drawSync,frameTimer_VsyncCallback,"
-	              "audio_underrun_delta,audio_overflow_delta,audio_queued_frames");
+	              "audio_underrun_delta,audio_overflow_delta,audio_queued_frames,presentation_index,presentation_delta_ms,presentation_elapsed_s");
 
 	for (s32 bucket = 0; bucket < NATIVE_PERF_BUCKET_COUNT; bucket++)
 	{
@@ -538,7 +540,7 @@ void NativePerf_EndFrame(const struct NativePerfFrameInfo *info)
 	}
 
 	f64 totalMs = NativePerf_CounterToMs(SDL_GetPerformanceCounter() - s_frameStartCounter);
-	f64 workMs = totalMs - s_frameBucketMs[NATIVE_PERF_BUCKET_VSYNC_WAIT];
+	f64 workMs = totalMs - s_frameBucketMs[NATIVE_PERF_BUCKET_VSYNC_WAIT] - s_frameBucketMs[NATIVE_PERF_BUCKET_RENDER_WAIT];
 	if (workMs < 0.0)
 	{
 		workMs = 0.0;
@@ -557,6 +559,9 @@ void NativePerf_EndFrame(const struct NativePerfFrameInfo *info)
 	        rowInfo->loadingStage, rowInfo->boolDemoMode, rowInfo->numPlyrCurrGame, rowInfo->elapsedTimeMS, rowInfo->vsyncTillFlip,
 	        rowInfo->vSync_between_drawSync, rowInfo->frameTimer_VsyncCallback, endUnderrunFrames - s_beginUnderrunFrames,
 	        endOverflowFrames - s_beginOverflowFrames, endQueuedFrames);
+	const struct NativeRenderTime *renderTime = NativeRenderer_GetTime();
+	fprintf(s_csvFile, ",%llu,%.6f,%.9f", (unsigned long long)renderTime->frameIndex,
+	        renderTime->deltaSeconds * 1000.0, renderTime->elapsedSeconds);
 
 	for (s32 bucket = 0; bucket < NATIVE_PERF_BUCKET_COUNT; bucket++)
 	{

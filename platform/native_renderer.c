@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 
 #include "platform/native_gpu.h"
+#include "platform/native_config.h"
 #include "platform/native_glad.h"
 #include "platform/native_log.h"
 #include "platform/native_perf.h"
@@ -16,6 +17,8 @@
 
 #include <assert.h>
 #include <string.h>
+
+static struct NativeRenderClock s_renderClock;
 
 #ifdef _WIN32
 #include "platform/native_win32.h"
@@ -240,8 +243,14 @@ internal int NativeRenderer_InitialiseGLExt(void)
 
 int NativeRenderer_InitialiseRender(char *windowName, int width, int height, int fullscreen)
 {
+	if (!NativeRenderClock_InitFPS(&s_renderClock, SDL_GetPerformanceFrequency(), (unsigned)gNativeConfig.maxFps))
+	{
+		NATIVE_RENDERER_ERROR("%s\n", "Failed to initialise presentation clock");
+		return 0;
+	}
 	g_windowWidth = width;
 	g_windowHeight = height;
+	g_cfg_bilinearFiltering = gNativeConfig.bilinearFiltering;
 	NativeRenderer_SetPresentationAspect(width, height);
 
 	// Due to debugging in fullscreen
@@ -2136,9 +2145,25 @@ void NativeRenderer_PresentVRAMDisplay(void)
 
 void NativeRenderer_SwapWindow(void)
 {
+	NativePerf_BeginScope(NATIVE_PERF_BUCKET_RENDER_WAIT);
+	/* Retail VSync normally already consumed this interval. Wait only for the
+	 * remaining time, including VRAM-only presentation paths that bypass it. */
+	uint64_t remaining;
+	while ((remaining = NativeRenderClock_WaitTicks(&s_renderClock, SDL_GetPerformanceCounter())) != 0)
+	{
+		uint64_t nanoseconds = (uint64_t)((double)remaining * 1000000000.0 / (double)s_renderClock.frequency);
+		SDL_DelayPrecise(nanoseconds > 0 ? nanoseconds : 1);
+	}
+	NativePerf_EndScope(NATIVE_PERF_BUCKET_RENDER_WAIT);
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_SWAP_WINDOW);
 	SDL_GL_SwapWindow(g_window);
+	NativeRenderClock_Presented(&s_renderClock, SDL_GetPerformanceCounter());
 	NativePerf_EndScope(NATIVE_PERF_BUCKET_SWAP_WINDOW);
+}
+
+const struct NativeRenderTime *NativeRenderer_GetTime(void)
+{
+	return &s_renderClock.time;
 }
 
 internal void NativeRenderer_EnableDepth(int enable)

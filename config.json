@@ -1,0 +1,29 @@
+{
+  "video": {
+    "width": 800,
+    "height": 600,
+    "fullscreen": false,
+    "max_fps": 30,
+    "bilinear_filtering": false
+  },
+  "input": {
+    "keyboard_slot": 0,
+    "axis_deadzone": 500,
+    "keyboard": {
+      "square": "X", "circle": "V", "triangle": "Z", "cross": "C",
+      "l1": "Left Shift", "l2": "Left Ctrl", "l3": "[",
+      "r1": "Right Shift", "r2": "Right Ctrl", "r3": "]",
+      "start": "Return", "select": "Space",
+      "left": "Left", "right": "Right", "up": "Up", "down": "Down"
+    },
+    "controller": {
+      "square": "x", "circle": "b", "triangle": "y", "cross": "a",
+      "l1": "leftshoulder", "l2": "axis:lefttrigger", "l3": "leftstick",
+      "r1": "rightshoulder", "r2": "axis:righttrigger", "r3": "rightstick",
+      "start": "start", "select": "back",
+      "left": "dpleft", "right": "dpright", "up": "dpup", "down": "dpdown",
+      "axis_left_x": "axis:leftx", "axis_left_y": "axis:lefty",
+      "axis_right_x": "axis:rightx", "axis_right_y": "axis:righty"
+    }
+  }
+}

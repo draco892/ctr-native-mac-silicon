@@ -610,7 +610,7 @@ static int MainFrame_VisMemHasQuad(const int *visFaceList, const struct QuadBloc
 {
 	int quadIndex = (int)(quad - mesh->ptrQuadBlockArray);
 
-	return (visFaceList[quadIndex >> 5] & (1 << (quadIndex & 0x1f))) != 0;
+	return ((u32)visFaceList[quadIndex >> 5] & (1u << (quadIndex & 0x1f))) != 0;
 }
 
 static void MainFrame_VisMemAddDriverPVS(struct GameTracker *gGT, int playerIndex)

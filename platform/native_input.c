@@ -1,4 +1,5 @@
 #include <platform/native_input.h>
+#include <platform/native_config.h>
 
 #include <macros.h>
 #include "psx/libpad.h"
@@ -16,7 +17,6 @@
 #define NATIVE_INPUT_PAD_ANALOG            0x73
 #define NATIVE_INPUT_PAD_MULTITAP          0x80
 #define NATIVE_INPUT_PAD_DISCONNECT        0xff
-#define NATIVE_INPUT_AXIS_DEADZONE         500
 #define NATIVE_INPUT_MAP_FLAG_AXIS         0x4000
 #define NATIVE_INPUT_MAP_FLAG_INVERSE      0x8000
 #define NATIVE_INPUT_DEFAULT_KEYBOARD_SLOT 0
@@ -253,57 +253,55 @@ internal void NativeInput_WriteInstalledSnapshots(void)
 
 internal void NativeInput_DefaultMappings(void)
 {
-	s_keyboardMapping.kc_square = SDL_SCANCODE_X;
-	s_keyboardMapping.kc_circle = SDL_SCANCODE_V;
-	s_keyboardMapping.kc_triangle = SDL_SCANCODE_Z;
-	s_keyboardMapping.kc_cross = SDL_SCANCODE_C;
-
-	s_keyboardMapping.kc_l1 = SDL_SCANCODE_LSHIFT;
-	s_keyboardMapping.kc_l2 = SDL_SCANCODE_LCTRL;
-	s_keyboardMapping.kc_l3 = SDL_SCANCODE_LEFTBRACKET;
-
-	s_keyboardMapping.kc_r1 = SDL_SCANCODE_RSHIFT;
-	s_keyboardMapping.kc_r2 = SDL_SCANCODE_RCTRL;
-	s_keyboardMapping.kc_r3 = SDL_SCANCODE_RIGHTBRACKET;
-
-	s_keyboardMapping.kc_dpad_up = SDL_SCANCODE_UP;
-	s_keyboardMapping.kc_dpad_down = SDL_SCANCODE_DOWN;
-	s_keyboardMapping.kc_dpad_left = SDL_SCANCODE_LEFT;
-	s_keyboardMapping.kc_dpad_right = SDL_SCANCODE_RIGHT;
-
-	s_keyboardMapping.kc_select = SDL_SCANCODE_SPACE;
-	s_keyboardMapping.kc_start = SDL_SCANCODE_RETURN;
-
-	s_controllerMapping.gc_square = SDL_GAMEPAD_BUTTON_WEST;
-	s_controllerMapping.gc_circle = SDL_GAMEPAD_BUTTON_EAST;
-	s_controllerMapping.gc_triangle = SDL_GAMEPAD_BUTTON_NORTH;
-	s_controllerMapping.gc_cross = SDL_GAMEPAD_BUTTON_SOUTH;
-
-	s_controllerMapping.gc_l1 = SDL_GAMEPAD_BUTTON_LEFT_SHOULDER;
-	s_controllerMapping.gc_l2 = SDL_GAMEPAD_AXIS_LEFT_TRIGGER | NATIVE_INPUT_MAP_FLAG_AXIS;
-	s_controllerMapping.gc_l3 = SDL_GAMEPAD_BUTTON_LEFT_STICK;
-
-	s_controllerMapping.gc_r1 = SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
-	s_controllerMapping.gc_r2 = SDL_GAMEPAD_AXIS_RIGHT_TRIGGER | NATIVE_INPUT_MAP_FLAG_AXIS;
-	s_controllerMapping.gc_r3 = SDL_GAMEPAD_BUTTON_RIGHT_STICK;
-
-	s_controllerMapping.gc_dpad_up = SDL_GAMEPAD_BUTTON_DPAD_UP;
-	s_controllerMapping.gc_dpad_down = SDL_GAMEPAD_BUTTON_DPAD_DOWN;
-	s_controllerMapping.gc_dpad_left = SDL_GAMEPAD_BUTTON_DPAD_LEFT;
-	s_controllerMapping.gc_dpad_right = SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
-
-	s_controllerMapping.gc_select = SDL_GAMEPAD_BUTTON_BACK;
-	s_controllerMapping.gc_start = SDL_GAMEPAD_BUTTON_START;
-
-	s_controllerMapping.gc_axis_left_x = SDL_GAMEPAD_AXIS_LEFTX | NATIVE_INPUT_MAP_FLAG_AXIS;
-	s_controllerMapping.gc_axis_left_y = SDL_GAMEPAD_AXIS_LEFTY | NATIVE_INPUT_MAP_FLAG_AXIS;
-	s_controllerMapping.gc_axis_right_x = SDL_GAMEPAD_AXIS_RIGHTX | NATIVE_INPUT_MAP_FLAG_AXIS;
-	s_controllerMapping.gc_axis_right_y = SDL_GAMEPAD_AXIS_RIGHTY | NATIVE_INPUT_MAP_FLAG_AXIS;
+	s32 *keys[NATIVE_CONFIG_KEYS] = {
+		&s_keyboardMapping.kc_square,
+		&s_keyboardMapping.kc_circle,
+		&s_keyboardMapping.kc_triangle,
+		&s_keyboardMapping.kc_cross,
+		&s_keyboardMapping.kc_l1,
+		&s_keyboardMapping.kc_l2,
+		&s_keyboardMapping.kc_l3,
+		&s_keyboardMapping.kc_r1,
+		&s_keyboardMapping.kc_r2,
+		&s_keyboardMapping.kc_r3,
+		&s_keyboardMapping.kc_start,
+		&s_keyboardMapping.kc_select,
+		&s_keyboardMapping.kc_dpad_left,
+		&s_keyboardMapping.kc_dpad_right,
+		&s_keyboardMapping.kc_dpad_up,
+		&s_keyboardMapping.kc_dpad_down
+	};
+	s32 *pads[NATIVE_CONFIG_CONTROLS] = {
+		&s_controllerMapping.gc_square,
+		&s_controllerMapping.gc_circle,
+		&s_controllerMapping.gc_triangle,
+		&s_controllerMapping.gc_cross,
+		&s_controllerMapping.gc_l1,
+		&s_controllerMapping.gc_l2,
+		&s_controllerMapping.gc_l3,
+		&s_controllerMapping.gc_r1,
+		&s_controllerMapping.gc_r2,
+		&s_controllerMapping.gc_r3,
+		&s_controllerMapping.gc_start,
+		&s_controllerMapping.gc_select,
+		&s_controllerMapping.gc_dpad_left,
+		&s_controllerMapping.gc_dpad_right,
+		&s_controllerMapping.gc_dpad_up,
+		&s_controllerMapping.gc_dpad_down,
+		&s_controllerMapping.gc_axis_left_x,
+		&s_controllerMapping.gc_axis_left_y,
+		&s_controllerMapping.gc_axis_right_x,
+		&s_controllerMapping.gc_axis_right_y
+	};
+	for (unsigned i = 0; i < NATIVE_CONFIG_KEYS; i++)
+		*keys[i] = SDL_GetScancodeFromName(gNativeConfig.keyboard[i]);
+	for (unsigned i = 0; i < NATIVE_CONFIG_CONTROLS; i++)
+		*pads[i] = NativeConfig_ControllerBinding(gNativeConfig.controller[i]);
 }
 
 internal s32 NativeInput_ControllerButtonState(SDL_Gamepad *controller, s32 buttonOrAxis)
 {
-	if (controller == NULL)
+	if (controller == NULL || buttonOrAxis < 0)
 	{
 		return 0;
 	}
@@ -313,17 +311,12 @@ internal s32 NativeInput_ControllerButtonState(SDL_Gamepad *controller, s32 butt
 		s32 axis = buttonOrAxis & ~(NATIVE_INPUT_MAP_FLAG_AXIS | NATIVE_INPUT_MAP_FLAG_INVERSE);
 		s32 value = SDL_GetGamepadAxis(controller, (SDL_GamepadAxis)axis);
 
-		if ((abs(value) > NATIVE_INPUT_AXIS_DEADZONE) && ((buttonOrAxis & NATIVE_INPUT_MAP_FLAG_INVERSE) != 0))
+		if ((abs(value) > gNativeConfig.axisDeadzone) && ((buttonOrAxis & NATIVE_INPUT_MAP_FLAG_INVERSE) != 0))
 		{
 			value *= -1;
 		}
 
 		return value;
-	}
-
-	if (buttonOrAxis < 0)
-	{
-		return 0;
 	}
 
 	return SDL_GetGamepadButton(controller, (SDL_GamepadButton)buttonOrAxis) * 32767;
@@ -348,7 +341,7 @@ internal u8 NativeInput_AxisToByte(s32 axis)
 
 internal s32 NativeInput_AxisIsActive(s32 axis)
 {
-	return abs(axis) > NATIVE_INPUT_AXIS_DEADZONE;
+	return abs(axis) > gNativeConfig.axisDeadzone;
 }
 
 internal void NativeInput_ApplyController(s32 slot)
@@ -728,7 +721,7 @@ int Platform_InputInit(void)
 	}
 
 	NativeInput_DefaultMappings();
-	s_keyboardControllerSlot = NATIVE_INPUT_DEFAULT_KEYBOARD_SLOT;
+	s_keyboardControllerSlot = gNativeConfig.keyboardSlot;
 	s_lastActiveControllerSlot = -1;
 	s_installedSnapshotsActive = 0;
 	s_keyboardState = SDL_GetKeyboardState(NULL);
@@ -760,7 +753,7 @@ void Platform_InputShutdown(void)
 
 	s_inputInitialized = 0;
 	s_installedSnapshotsActive = 0;
-	s_keyboardControllerSlot = NATIVE_INPUT_DEFAULT_KEYBOARD_SLOT;
+	s_keyboardControllerSlot = gNativeConfig.keyboardSlot;
 	s_lastActiveControllerSlot = -1;
 	memset(s_padSlotData, 0, sizeof(s_padSlotData));
 	s_keyboardState = NULL;
