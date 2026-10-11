@@ -21,7 +21,7 @@
 // primitive parser and GL backend live behind this native platform boundary.
 
 int g_dbg_emulatorPaused = 0;
-void (*drawsync_callback)(void) = NULL;
+extern void (*drawsync_callback)(void);
 
 int ClearImage(RECT16 *rect, uint8_t r, uint8_t g, uint8_t b)
 {
@@ -261,14 +261,6 @@ void SetDrawMove(DR_MOVE *p, RECT16 *rect, int x, int y)
 	p->code[4] = ((u32)(u16)rect->w) | ((u32)(u16)rect->h << 16);
 
 	setlen(p, len);
-}
-
-uint32_t DrawSyncCallback(void (*func)(void))
-{
-	uint32_t old = (uint32_t)(uintptr_t)drawsync_callback;
-
-	drawsync_callback = func;
-	return old;
 }
 
 void DrawOTag(void *p)

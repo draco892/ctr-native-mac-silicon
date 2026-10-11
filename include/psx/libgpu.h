@@ -737,7 +737,7 @@ extern u32 *ClearOTag(u32 *ot, int n);
 extern u32 *ClearOTagR(u32 *ot, int n);
 extern u32 *FntFlush();
 extern u32 *KanjiFntFlush(int id);
-extern u32 DrawSyncCallback(void (*func)(void));
+extern CtrRuntimeAddress DrawSyncCallback(void (*func)(void));
 extern u16 GetClut(int x, int y);
 extern u16 GetTPage(int tp, int abr, int x, int y);
 extern u16 LoadClut(u32 *clut, int x, int y);

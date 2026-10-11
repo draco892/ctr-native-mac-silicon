@@ -9,7 +9,7 @@
 #include <stdlib.h>
 
 // Exercise real aggregate declarations and production pool/list/audio logic.
-// Only the allocator and CD device boundary are substituted.
+// Allocation and audio/CD initialization boundaries are substituted.
 struct sData sdata_static;
 static struct GameTracker tracker;
 static _Alignas(max_align_t) u8 arena[16384];
@@ -57,9 +57,26 @@ CdlCB CdReadCallback(CdlCB callback)
 }
 
 #include "../game/LIST.c"
+void Bank_ResetAllocator(void) {}
+void Audio_SetDefaults(void) {}
+unsigned int SpuSetReverbVoice(int on, unsigned int voices)
+{ (void)on; (void)voices; return 0; }
+void SpuSetVoiceADSRAttr(int voice, unsigned short ar, unsigned short dr,
+    unsigned short sr, unsigned short rr, unsigned short sl, int armode,
+    int srmode, int rrmode)
+{
+    (void)voice; (void)ar; (void)dr; (void)sr; (void)rr; (void)sl;
+    (void)armode; (void)srmode; (void)rrmode;
+}
+#include "../game/HOWL/HOWL_Voiceline_PoolInit.c"
 #include "../game/JitPool.c"
 #include "../game/LOAD/LOAD_Howl.c"
 #include "../game/Vehicle/VehTurbo_ProcessBucket.c"
+static const u8 opcodeFlags[256] = {[CS_OPCODE_GOTO] = CS_OPCODE_META_HAS_ARG1};
+#define CS_OPCODE_META_TABLE opcodeFlags
+char *CS_OVR233_TranslateRetailOpcodePointer(char *p) { return p; }
+#include "../game/233/CS_ScriptCmd.c"
+#undef CS_OPCODE_META_TABLE
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "failed: %s at %d\n", #c, __LINE__); return 1; } } while (0)
 
@@ -196,6 +213,69 @@ static int CreditsAndGpu(void)
     return 0;
 }
 
+static int callbackCalls;
+static int ScriptArguments(void)
+{
+    struct CsOpcodeMeta meta;
+    memset(&meta, 0xa5, sizeof(meta));
+    char script[5] = {CS_OPCODE_GOTO};
+    CTR_WriteU32LE(script + 1, 0x800b3692);
+    struct CutsceneObj cs = {0};
+    cs.metadataMeta = &meta;
+    cs.currOpcode[0] = script;
+    CS_ScriptCmd_ReadOpcode_Main(&cs);
+    CHECK(meta.arg0.u == 0 && (CtrRuntimeAddress)meta.arg0.ptr == 0);
+    CHECK(meta.arg1.u == 0x800b3692);
+    CHECK((CtrRuntimeAddress)meta.arg1.ptr == 0x800b3692);
+    CHECK(cs.prevOpcode == script + sizeof(script));
+    return 0;
+}
+
+static int AudioChannels(void)
+{
+    Voiceline_PoolInit();
+    CHECK(sdata->channelFree.count == NUM_SFX_CHANNELS);
+    CHECK(sdata->channelTaken.count == 0);
+    for (int i = 0; i < NUM_SFX_CHANNELS; i++)
+    {
+        struct ChannelStats *stats = &sdata->channelStatsPrev[i];
+        CHECK(stats->channelID == i && stats->flags == 0);
+        CHECK(stats->link.links.prev == (i ? &sdata->channelStatsPrev[i - 1] : NULL));
+        CHECK(stats->link.links.next == (i + 1 < NUM_SFX_CHANNELS ? &sdata->channelStatsPrev[i + 1] : NULL));
+    }
+    for (int i = 0; i < NUM_SFX_CHANNELS; i++)
+    {
+        struct Item *item = LIST_RemoveFront(&sdata->channelFree);
+        CHECK(item == &sdata->channelStatsPrev[i].link.item);
+        LIST_AddBack(&sdata->channelTaken, item);
+    }
+    CHECK(sdata->channelFree.count == 0 && sdata->channelFree.first == NULL);
+    CHECK(sdata->channelTaken.count == NUM_SFX_CHANNELS);
+    Voiceline_PoolInit();
+    CHECK(sdata->channelTaken.count == 0 && sdata->channelFree.count == NUM_SFX_CHANNELS);
+    return 0;
+}
+
+static void CallbackFirst(void) { callbackCalls++; }
+static void CallbackSecond(void) { callbackCalls += 2; }
+
+static int GpuCallbacks(void)
+{
+    CHECK(DrawSyncCallback(CallbackFirst) == 0);
+    CtrRuntimeAddress first = DrawSyncCallback(CallbackSecond);
+    CHECK(first == (CtrRuntimeAddress)CallbackFirst);
+#if defined(CTR_NATIVE_HOST64)
+    CHECK(first > UINT32_MAX);
+#endif
+    ((void (*)(void))first)();
+    CtrRuntimeAddress second = DrawSyncCallback(NULL);
+    CHECK(second == (CtrRuntimeAddress)CallbackSecond);
+    ((void (*)(void))second)();
+    CHECK(callbackCalls == 3);
+    CHECK(DrawSyncCallback(NULL) == 0);
+    return 0;
+}
+
 int main(void)
 {
     sdata->gGT = &tracker;
@@ -203,6 +283,9 @@ int main(void)
     CHECK(AudioRetry() == 0);
     CHECK(Turbo() == 0);
     CHECK(CreditsAndGpu() == 0);
-    puts("native runtime globals: pools, audio retry, turbo, credits and GPU links passed");
+    CHECK(GpuCallbacks() == 0);
+    CHECK(AudioChannels() == 0);
+    CHECK(ScriptArguments() == 0);
+    puts("native runtime globals: pools, audio channels/retry, turbo, credits and GPU callbacks/links passed");
     return 0;
 }

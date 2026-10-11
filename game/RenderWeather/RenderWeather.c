@@ -235,7 +235,7 @@ void RenderWeather(struct PushBuffer *pb, struct PrimMem *primMem, struct RainBu
 	}
 
 	cameraDeltaXY = cameraXY - prevCameraXY;
-	cameraCorrectionXY = (u32)(((s32)cameraDeltaXY >> 20) << 17) | (u32)((((s32)(cameraDeltaXY << 16)) >> 19) & 0xffff);
+	cameraCorrectionXY = (u32)CTR_MipsSll((s32)cameraDeltaXY >> 20, 17) | (u32)((((s32)(cameraDeltaXY << 16)) >> 19) & 0xffff);
 	smoothedCameraXY = (cameraXY - cameraCorrectionXY) & RENDER_WEATHER_XY_MASK;
 	smoothedCameraZ = cameraZ - ((cameraZ - prevCameraZ) >> 3);
 

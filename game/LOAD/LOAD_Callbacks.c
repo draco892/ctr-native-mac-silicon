@@ -7,9 +7,10 @@
 static void *LOAD_ResidentRoot(const void *source, enum NativeResidentKind kind)
 {
 	void *root = NULL;
-	if (NativeSceneAssets_Materialize(&gNativeSceneAssets, source, kind, &root) != NATIVE_ASSET_OK)
+	enum NativeAssetResult result = NativeSceneAssets_Materialize(&gNativeSceneAssets, source, kind, &root);
+	if (result != NATIVE_ASSET_OK)
 	{
-		Platform_LogError("[CTR Native] Cannot publish resident asset graph\n");
+		Platform_LogError("[CTR Native] Cannot publish resident asset graph: kind=%d status=%d source=%p\n", (int)kind, (int)result, source);
 		CTR_TRAP();
 	}
 	return root;

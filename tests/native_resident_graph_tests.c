@@ -56,6 +56,36 @@ static int RebasePublishedGraph(void *user, uintptr_t saved, void **live)
     struct PublishedGraphRebase *ctx = user;
     return NativeSceneAssets_RebaseSavedPointer(ctx->blob, ctx->bytes, ctx->assets, saved, live);
 }
+static int EmptyAnimatedTextures(void)
+{
+    u8 wire[524] = {0}, ptr[12];
+    CTR_WriteU32LE(wire + 8, 512);
+    CTR_WriteU32LE(wire + 512, 512);
+    CTR_WriteU32LE(ptr, 8);
+    CTR_WriteU32LE(ptr + 4, 8);
+    CTR_WriteU32LE(ptr + 8, 512);
+    struct NativePtrMapEntry entries[2];
+    struct NativePtrMapView map;
+    CHECK(NativePtrMap_Decode(wire, sizeof(wire), ptr, sizeof(ptr), entries, 2, &map) == NATIVE_PTRMAP_OK);
+    struct NativeResidentGraph *g = NULL, *restored = NULL;
+    CHECK(NativeResidentGraph_Build(&map, NR_LEVEL, 0, &g, NULL) == NATIVE_ASSET_OK);
+    struct Level *level = NativeResidentGraph_Root(g);
+    CHECK(level->ptr_anim_tex != NULL);
+    CHECK(level->ptr_anim_tex->ptrActiveTex == level->ptr_anim_tex);
+    size_t bytes = NativeResidentGraph_CheckpointSize(g);
+    void *snapshot = malloc(bytes);
+    CHECK(snapshot != NULL && NativeResidentGraph_CaptureCheckpoint(g, snapshot, bytes));
+    CHECK(NativeResidentGraph_PrepareCheckpoint(snapshot, bytes, &restored));
+    CHECK(NativeResidentGraph_ApplyCheckpoint(snapshot, bytes, restored, NULL, NULL));
+    struct Level *copy = NativeResidentGraph_Root(restored);
+    CHECK(copy->ptr_anim_tex != level->ptr_anim_tex);
+    CHECK(copy->ptr_anim_tex->ptrActiveTex == copy->ptr_anim_tex);
+    NativeResidentGraph_Free(restored);
+    NativeResidentGraph_Free(g);
+    free(snapshot);
+    return 0;
+}
+
 static int EmptyHitboxes(void)
 {
 	// Retail termination occupies four bytes, not another whole BSP record.
@@ -280,7 +310,7 @@ int main(void)
 	NativeSceneAssets_Reset(&owners);
 	NativeSceneAssets_Reset(&restored);
 	free(blob);
-	if (EmptyHitboxes() || LoaderCallbacks())
+	if (EmptyAnimatedTextures() || EmptyHitboxes() || LoaderCallbacks())
 		return 1;
 	puts("Owned resident graphs: sharing, immutable sources, pending PTR, cross-owner checkpoints and rejection OK");
 	return 0;

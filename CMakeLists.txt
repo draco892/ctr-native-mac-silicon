@@ -4,10 +4,11 @@ include(CheckCCompilerFlag)
 
 set(CTR_NATIVE_VERSION "0.1.0-beta.7.1")
 
-option(CTR_BUILD_GAME "Build the game (currently requires 32-bit asset layouts)" ON)
-option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native porting tests" OFF)
+option(CTR_BUILD_GAME "Build the complete game executable" ON)
+option(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME "Build the host64 game for runtime integration (gameplay unverified)" OFF)
+option(CTR_ENABLE_SANITIZERS "Enable AddressSanitizer and UBSan for native tests and game" OFF)
 include(CTest)
-option(CTR_NATIVE_DECODED_TERRAIN "Use experimental decoded terrain in the 32-bit game" OFF)
+option(CTR_NATIVE_DECODED_TERRAIN "Use experimental decoded terrain in the game" OFF)
 
 # Build actual production memory modules independently of resident game layouts
 # and SDL. This is the ARM64 porting entry point until asset decoding is ready.
@@ -378,6 +379,7 @@ if(BUILD_TESTING)
     add_executable(ctr_native_resident_graph_tests tests/native_resident_graph_tests.c ${CTR_RESIDENT_TEST_SOURCES} platform/native_asset_loading.c platform/native_checkpoint_relocation.c)
     target_compile_definitions(ctr_native_resident_graph_tests PRIVATE CTR_NATIVE_GAME_SCENE)
     add_executable(ctr_native_runtime_globals_tests tests/native_runtime_globals_tests.c
+        platform/native_gpu_callbacks.c
         platform/native_credits.c platform/native_gpu_links.c)
     foreach(target ctr_native_render_bucket_tests ctr_native_terrain_renderer_tests ctr_native_resident_graph_tests ctr_native_runtime_globals_tests)
         set_target_properties(${target} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
@@ -422,13 +424,20 @@ if(NOT CTR_BUILD_GAME)
     return()
 endif()
 
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
     message(FATAL_ERROR
         "CTR Native currently requires a 32-bit target. "
         "Select Win32 for MSVC, an i686 MinGW compiler on Windows, or pass -m32 "
         "in the initial compiler and linker flags on Linux. "
-        "For ARM64 porting tests, use the macos-arm64-memory preset."
+        "For ARM64 tests use macos-arm64-memory; for experimental runtime integration "
+        "use macos-arm64-game."
     )
+endif()
+
+if(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+    if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CTR_NATIVE_DECODED_TERRAIN)
+        message(FATAL_ERROR "Experimental host64 game requires 64-bit pointers and CTR_NATIVE_DECODED_TERRAIN=ON.")
+    endif()
 endif()
 
 set(CTR_NATIVE_MSVC_FRONTEND OFF)
@@ -510,6 +519,9 @@ set_target_properties(ctr_native PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 target_include_directories(ctr_native PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+    target_compile_definitions(ctr_native PRIVATE CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
+endif()
 if(CTR_NATIVE_DECODED_TERRAIN)
     target_compile_definitions(ctr_native PRIVATE CTR_NATIVE_DECODED_TERRAIN)
 endif()
@@ -553,6 +565,10 @@ else()
     endif()
 endif()
 target_link_libraries(ctr_native SDL3::SDL3)
+if(CTR_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(ctr_native PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(ctr_native PRIVATE -fsanitize=address,undefined)
+endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_link_options(ctr_native PRIVATE -static-libgcc)
 endif()

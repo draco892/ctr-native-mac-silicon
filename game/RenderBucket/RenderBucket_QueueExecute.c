@@ -2482,7 +2482,7 @@ struct RenderBucketUncompressResult RenderBucket_UncompressAnimationFrame(struct
 		u8 xBits = (temporal >> 6) & 7;
 		u8 zBits = (temporal >> 3) & 7;
 		u8 yBits = temporal & 7;
-		int bx = RenderBucket_SignExtendBits(temporal >> 25, 7) << 1;
+		int bx = CTR_MipsSll(RenderBucket_SignExtendBits(temporal >> 25, 7), 1);
 		int bz = RenderBucket_SignExtendBits(temporal >> 17, 8);
 		int by = RenderBucket_SignExtendBits(temporal >> 9, 8);
 

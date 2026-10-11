@@ -310,7 +310,29 @@ static enum NativeAssetResult RGAnimTex(struct NativeResidentGraph *g, u32 first
 		nodes++;
 		at += 12 + (u32)n * 4;
 	}
-	if (!nodes || bytes > RG_MAX_BYTES - g->allocated)
+	// An empty retail list consists of its self-referencing end marker.
+	// Give it an owned host record so checkpoint rebasing includes the marker.
+	if (!nodes)
+	{
+		if (sizeof(struct AnimTex) > RG_MAX_BYTES - g->allocated)
+			return NATIVE_ASSET_OUTPUT_TOO_SMALL;
+		struct AnimTex *empty = calloc(1, sizeof(*empty));
+		if (!empty)
+			return NATIVE_ASSET_OUTPUT_TOO_SMALL;
+		enum NativeAssetResult r = RGAdd(g, NR_ANIMTEX, first, 1, empty, sizeof(*empty), 1);
+		if (r != NATIVE_ASSET_OK)
+		{
+			free(empty);
+			return r;
+		}
+		g->objects[g->count - 1].decoded = 1;
+		empty->ptrActiveTex = empty;
+		RGSlot(g, &empty->ptrActiveTex, sizeof(void *));
+		g->allocated += sizeof(*empty);
+		*out = empty;
+		return NATIVE_ASSET_OK;
+	}
+	if (bytes > RG_MAX_BYTES - g->allocated)
 		return NATIVE_ASSET_INVALID_DATA;
 	u8 *list = calloc(1, bytes);
 	if (!list)

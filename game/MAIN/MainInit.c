@@ -257,7 +257,10 @@ void MainInit_JitPoolsNew(struct GameTracker *gGT)
 	JitPool_Init(&gGT->JitPools.oscillator, numParticle, sizeof(struct ParticleOscillator), rdata.s_OscillatorPool);
 	JitPool_Init(&gGT->JitPools.rain, poolScale >> 9, sizeof(struct RainLocal), rdata.s_RainPool);
 
-#ifndef CTR_NATIVE
+#if defined(CTR_NATIVE_HOST64)
+	// Each queued entry stores two host pointers; reserve a full terminator.
+	gGT->ptrRenderBucketInstance = MEMPACK_AllocMem((renderBucketSize / 8 + 1) * 2 * sizeof(void *), NULL);
+#elif !defined(CTR_NATIVE)
 	gGT->ptrRenderBucketInstance = MEMPACK_AllocMem(renderBucketSize, NULL);
 #else
 	// NOTE(aalhendi): Native reuses static RDATA scratch for existing PC memory headroom.

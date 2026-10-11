@@ -564,7 +564,7 @@ void StateZero()
 
 	Timer_Init();
 	EnterCriticalSection();
-	sdata->MainDrawCb_DrawSyncPtr = (void *)(u32)DrawSyncCallback(&MainDrawCb_DrawSync);
+	sdata->MainDrawCb_DrawSyncPtr = (void *)DrawSyncCallback(&MainDrawCb_DrawSync);
 	ExitCriticalSection();
 
 	MEMCARD_InitCard();

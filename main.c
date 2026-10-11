@@ -29,8 +29,10 @@
 
 #include "game/game_unity.h"
 
-// Header ABI support alone does not make legacy consumers safe to execute.
+// The host64 executable is opt-in until real gameplay integration is verified.
+#if !defined(CTR_ENABLE_EXPERIMENTAL_HOST64_GAME)
 CTR_STATIC_ASSERT(sizeof(void *) == 4);
+#endif
 
 #include "game/zGlobal_RDATA.c"
 #include "game/zGlobal_DATA.c"
@@ -88,6 +90,7 @@ CTR_STATIC_ASSERT(sizeof(void *) == 4);
 #include "platform/native_libetc.c"
 #include "platform/native_libgte.c"
 #include "platform/native_libgpu.c"
+#include "platform/native_gpu_callbacks.c"
 #include "platform/native_libpad.c"
 #include "platform/native_libspu.c"
 #include "platform/native_log.c"

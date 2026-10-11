@@ -1894,3 +1894,77 @@ ctest --preset macos-arm64-memory-sanitized
 /usr/bin/clang -fsyntax-only -ferror-limit=0 -std=c17 -DCTR_NATIVE -DCTR_INTERNAL -DCTR_NATIVE_GAME_SCENE -DCTR_NATIVE_DECODED_TERRAIN -DCTR_NATIVE_BUILD_ID='"port-check"' -DCTR_NATIVE_VERSION='"port-check"' -Iinclude -I/opt/homebrew/include main.c > build-macos-arm64-memory/stage16-syntax.log 2>&1
 python3 tools/arm64_contract_audit.py --syntax-log build-macos-arm64-memory/stage16-syntax.log --output build-macos-arm64-memory/arm64-contract-audit.json
 ```
+
+## Stage 17 — complete experimental ARM64 executable
+
+The `macos-arm64-game` preset builds and links the complete `ctr_native` unity
+translation unit with bundled SDL3 as a Mach-O ARM64 executable. The companion
+`macos-arm64-game-sanitized` preset instruments both the game and native tests
+with ASan/UBSan. Both executables successfully run `--version`.
+
+Host64 execution remains explicitly experimental: the default CMake and source
+pointer-width guards still apply without `CTR_ENABLE_EXPERIMENTAL_HOST64_GAME`.
+The opt-in requires eight-byte pointers and `CTR_NATIVE_DECODED_TERRAIN=ON`.
+This supersedes the earlier statement that no complete ARM64 target can build;
+it does not certify menu, load/unload, race or complete checkpoint behavior.
+
+The real build exposed an additional callback truncation at the GPU SDK boundary:
+`DrawSyncCallback` returned a `u32`, and `StateZero` cast that return through another
+`u32`. The native implementation now returns `CtrRuntimeAddress`; the PS1 ABI
+remains four bytes. Callback exchange lives in `native_gpu_callbacks.c`, shared
+by the executable and the runtime globals test. The regression swaps two real
+callbacks, checks their full addresses, invokes each returned callback and clears
+the registration.
+
+Validation: **34/34 CTest entries pass normally and with ASan/UBSan**, including
+the retail assets and the complete executable's version smoke test. Existing
+compiler warnings remain, including scalar enum/conversion warnings and SPU
+device-address casts; this milestone is not a warning-free build or a game-loop test.
+
+```sh
+cmake --preset macos-arm64-game
+cmake --build --preset macos-arm64-game
+ctest --preset macos-arm64-game
+./build-macos-arm64-game/ctr_native --version
+
+cmake --preset macos-arm64-game-sanitized
+cmake --build --preset macos-arm64-game-sanitized
+ctest --preset macos-arm64-game-sanitized
+./build-macos-arm64-game-sanitized/ctr_native --version
+```
+
+## Stage 18 — startup crash fixes
+
+The first complete-game run exposed a corrupted HOWL channel list: its initializer
+still used a 32-byte retail stride for the 40-byte host64 `ChannelStats`. It now
+uses the actual record size and channel count. Production pool initialization is
+shared with the runtime globals test, which verifies every intrusive link,
+channel ID, exhaustion and reinitialization.
+
+Subsequent startup probes exposed additional runtime assumptions:
+
+- The initial LEV (NTSC-U BIGFILE entry 514) has an empty animated-texture list
+  represented by a self-referencing end marker. The graph decoder now materializes
+  an owned host marker and registers its pointer for checkpoint relocation.
+  Synthetic checkpoint tests and the real retail entry cover this case.
+- Vehicle birth cleared its callback table through retail offsets, overwriting
+  host fields. Host64 now clears the declared `funcPtrs` array.
+- Render-bucket entries need host pointer alignment and size. Host64 allocates
+  them in mempack, including terminator space, and the queue clears a full pointer
+  when terminating, avoiding a stale upper half from the previous frame.
+- Cutscene opcode arguments are four-byte wire values in pointer-sized unions.
+  Decoding now clears their upper halves before writing the new argument. A
+  production interpreter test starts with poisoned metadata to detect regressions.
+- Observed signed shifts in tire transforms, GTE translation, vector normalization,
+  highlights, weather and model deltas now use defined arithmetic with the same
+  retail bit results.
+
+Loader graph failures now report root kind, status and source address. Complete
+checkpoint traversal and gameplay beyond the startup/menu path remain unverified.
+
+Validation: 34/34 tests pass in both complete-game presets. Final timed startup
+probes ran each executable for 60 seconds, then stopped them deliberately.
+Frame telemetry recorded 1,353 normal and 1,335 sanitized frames, with the
+transition from intro level 41 to main-menu level 39. Neither probe reported a
+crash, ASan error or UBSan runtime diagnostic. This verifies startup progress;
+visual parity, menu interactions and racing require further validation.

@@ -427,7 +427,7 @@ void MenuHighlight()
 	fc = sdata->frameCounter << 7;
 	trig = MATH_Sin(fc);
 
-	trig = (trig << 6) >> 0xc;
+	trig = CTR_MipsSll(trig, 6) >> 0xc;
 
 	// sine curve of green, plus base color
 	ColorCode_SetPacked(&sdata->menuRowHighlight_Normal, ((trig + 0x40) * 0x100) | 0x80);
@@ -700,7 +700,11 @@ void RenderBucket_QueueAllInstances(struct GameTracker *gGT)
 	                                        gGT->gameMode1 & PAUSE_ALL);
 
 	// null terminator at end of list
+#ifdef CTR_NATIVE
+	memset(RBI, 0, sizeof(void *));
+#else
 	*RBI = 0;
+#endif
 }
 
 void RenderAllNormalParticles(struct GameTracker *gGT)

@@ -459,6 +459,10 @@ VehBirth_RotationReady:
 
 	if (driver->instSelf->thread->modelIndex == DYNAMIC_PLAYER)
 	{
+#if defined(CTR_NATIVE_HOST64)
+		for (int i = 0; i < DRIVER_FUNC_COUNT; i++)
+			driver->funcPtrs[i] = NULL;
+#else
 		register int funcIndex CTR_PSX_REGISTER("$6");
 		register u8 *funcCursor CTR_PSX_REGISTER("$2");
 
@@ -472,6 +476,7 @@ VehBirth_RotationReady:
 			funcIndex--;
 			funcCursor -= sizeof(DriverFunc);
 		} while (funcIndex >= 0);
+#endif
 
 		CAM_StartOfRace(&GAME_TRACKER->cameraDC[driver->driverID]);
 

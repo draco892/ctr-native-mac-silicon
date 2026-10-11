@@ -14,6 +14,8 @@ for arguments, expected in [
     (['disc-mpk', assets, '260'], 'MPK OK'),
     (['disc-lev', assets, '1'], 'LEV OK'),
     (['disc-lev', assets, '25'], 'LEV OK'),
+    # Startup level contains an empty animated-texture list with a self marker.
+    (['disc-lev', assets, '514'], 'LEV OK'),
     (['disc-lev-ptr', assets, '201', '202'], 'LEV OK'),
     (['disc-mpk-vram', assets, '259', '258'], 'MPK OK'),
     (['disc-mpk-vram', assets, '260', '258'], 'MPK OK'),

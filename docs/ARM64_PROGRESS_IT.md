@@ -1,6 +1,6 @@
 # Conversione C17 per Apple Silicon: attività completate
 
-Aggiornato alla tappa 16. Il progetto dispone di moduli e test nativi ARM64;
+Aggiornato alla tappa 18. Il progetto dispone di un eseguibile sperimentale e test nativi ARM64;
 non dispone ancora di una build completa giocabile. “Verificato” qui indica i
 percorsi coperti dai test, senza implicare equivalenza completa al gioco PS1.
 
@@ -44,14 +44,20 @@ percorsi coperti dai test, senza implicare equivalenza completa al gioco PS1.
     binarie. La coda nativa conserva tutto lo slot, inclusi i callback a 64 bit.
 16. **Snapshot degli asset:** rilocazione dei riferimenti dichiarati, ripristino
     di grafi con riferimenti reciproci, verifiche di ABI/dimensioni e rifiuto
-    transazionale dei dati invalidi. Il checkpoint dell'intero gioco resta da
-    integrare con questi nuovi oggetti heap.
+    transazionale dei dati invalidi. Il ponte verso il checkpoint globale è
+    integrato nei sorgenti; il ripristino durante una gara resta da verificare.
 17. **Globali e overlay residenti:** contratti separati per ABI PS1 e host,
     trasporti a larghezza host per menu/audio/icone, pool allineati e ritorni
     tipizzati, copia dei metadati turbo tramite IDPP, crediti con tabella host
     separata e ponte tra visitatori del checkpoint e grafi residenti.
-18. **Verifica continua:** 33 test CTest superati sia normalmente sia con
-    ASan/UBSan, inclusi gli asset reali; audit ARM64 riproducibile e documentazione.
+18. **Verifica continua:** 34 test CTest superati nei preset del gioco, sia normalmente
+    sia con ASan/UBSan, inclusi gli asset reali e lo smoke test `--version`.
+19. **Eseguibile completo ARM64:** compilazione e collegamento con SDL tramite
+    preset sperimentali, sanitizzatori sul target del gioco, ritorno del callback
+    DrawSync a larghezza host e test di scambio/richiamo dei callback reali.
+20. **Correzioni di avvio:** passo corretto del pool audio, liste di texture animate
+    vuote, pulizia tipizzata dei callback del pilota, coda di rendering allineata
+    con terminatore completo e argomenti delle cutscene senza bit alti residui.
 
 ## Cosa manca per giocare
 
@@ -60,9 +66,11 @@ percorsi coperti dai test, senza implicare equivalenza completa al gioco PS1.
   cast puntatore/intero e 39 siti scratchpad (inclusi rami PS1 e workspace
   scalari). I test non certificano tutti gli accessi tramite offset né un
   checkpoint completo durante una gara: serve la verifica nel loop reale.
-- **Compilare e avviare l'eseguibile ARM64 completo:** chiudere i contratti
-  precedenti, collegare i moduli e verificare il caricamento del menu e della gara.
-  I guardrail CMake e dell'eseguibile sono tuttora attivi.
+- **Verificare l'avvio del gioco nell'eseguibile ARM64 completo:** il preset
+  sperimentale `macos-arm64-game` compila e collega il target con SDL; `--version`
+  funziona. Le prove di avvio raggiungono il livello del menu principale;
+  interazione, parità visiva e gara devono ancora essere verificati. Le guardie predefinite
+  richiedono un'abilitazione esplicita tramite il preset sperimentale.
 - **Rendere la prima gara effettivamente giocabile:** controlli/input,
   simulazione, collisioni, camera, GPU e audio con gli asset reali; correggere
   crash e divergenze, verificare i cicli di caricamento/scaricamento.
