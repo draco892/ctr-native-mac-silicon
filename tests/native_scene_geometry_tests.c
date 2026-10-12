@@ -8,8 +8,8 @@ static int CheckOutput(const struct NativeDrawTriangle *tri,size_t n,const struc
         if(tri[i].signedArea<=0 || !tri[i].source.textured || tri[i].source.texture.tpage!=23 || tri[i].source.texture.clut!=47 || tri[i].orderingBias!=-7 || tri[i].source.textureBlend!=NATIVE_TEXTURE_BLEND_SEMI) return 0;
         for(unsigned k=0;k<3;k++) {
             if(tri[i].depth[k]<c->nearDepth || tri[i].depth[k]>c->farDepth ||
-               tri[i].screen[k][0]<0 || tri[i].screen[k][0]>=(s32)c->width ||
-               tri[i].screen[k][1]<0 || tri[i].screen[k][1]>=(s32)c->height) return 0;
+               tri[i].screen[k][0]<0 || tri[i].screen[k][0]>(s32)c->width ||
+               tri[i].screen[k][1]<0 || tri[i].screen[k][1]>(s32)c->height) return 0;
         }
     }
     return 1;
@@ -42,12 +42,37 @@ static int SharedProjection(const struct NativeSceneCamera *camera,const struct 
     CHECK(found);
     return 0;
 }
+static int NearFloorCoverage(void)
+{
+    const s32 pos[3]={0}; const s16 rot[3]={0};
+    struct NativeSceneCamera c;
+    CHECK(NativeSceneCamera_Init(pos,rot,512,216,256,65,65535,&c)==NATIVE_ASSET_OK);
+    struct NativeModelTriangle m={0};
+    struct NativeSceneClipVertex v[3]={{{-80,47,160},{0},{0}},{{80,47,160},{0},{0}},{{0,47,40},{0},{0}}};
+    struct NativeDrawTriangle out[NATIVE_SCENE_CLIP_MAX_TRIANGLES]; size_t n;
+    CHECK(NativeSceneGeometry_Clip(&c,&m,v,0,out,&n)==NATIVE_ASSET_OK && n>0);
+    int bottom=0;
+    for(size_t i=0;i<n;i++) for(unsigned k=0;k<3;k++)
+        if(out[i].screen[k][1]==216) bottom=1;
+    CHECK(bottom);
+    // All vertices are inside the frustum, but the direct GTE ratio would
+    // flatten their perspective at 2x and leave the lower screen uncovered.
+    v[0].view[0]=-20; v[1].view[0]=20; v[2].view[0]=0;
+    for(unsigned k=0;k<3;k++) { v[k].view[2]=100; v[k].view[1]=k==2 ? 10 : 30; }
+    CHECK(NativeSceneGeometry_NeedsClip(&c,v));
+    CHECK(NativeSceneGeometry_Clip(&c,&m,v,0,out,&n)==NATIVE_ASSET_OK && n==1);
+    int projected=0;
+    for(unsigned k=0;k<3;k++) if(out[0].screen[k][1]>=183) projected=1;
+    CHECK(projected);
+    return 0;
+}
 int main(void)
 {
     struct NativeSceneCamera c; const s32 pos[3]={0}; const s16 rot[3]={0};
     CHECK(NativeSceneCamera_Init(pos,rot,512,512,128,128,1024,&c)==NATIVE_ASSET_OK);
     struct NativeModelTriangle m={.textured=1,.textureBlend=NATIVE_TEXTURE_BLEND_SEMI,.colors={0xff000000,0xff000080,0xff000000},.texture={.u={0,64,128},.v={0,64,128},.tpage=23,.clut=47}};
     CHECK(SharedProjection(&c,&m)==0);
+    CHECK(NearFloorCoverage()==0);
     struct NativeSceneClipVertex v[3]={{{-32,-32,64},{0},{0}},{{32,-32,192},{0},{0}},{{0,32,192},{0},{0}}};
     for(unsigned k=0;k<3;k++) NativeSceneGeometry_Attributes(&m,k,&v[k]);
     struct NativeSceneClipVertex saved[3]; memcpy(saved,v,sizeof(v));

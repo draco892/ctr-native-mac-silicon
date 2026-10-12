@@ -13,6 +13,19 @@ option(CTR_NATIVE_DECODED_TERRAIN "Use experimental decoded terrain in the game"
 # Build actual production memory modules independently of resident game layouts
 # and SDL. This is the ARM64 porting entry point until asset decoding is ready.
 if(BUILD_TESTING)
+    add_executable(ctr_native_renderer_clip_tests tests/native_renderer_clip_tests.c)
+    set_target_properties(ctr_native_renderer_clip_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_renderer_clip_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_renderer_clip_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(ctr_native_renderer_clip_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_renderer_clip_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_renderer_clip_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_renderer_clip COMMAND ctr_native_renderer_clip_tests)
+
     add_executable(ctr_native_config_tests tests/native_config_tests.c platform/native_config.c)
     set_target_properties(ctr_native_config_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(ctr_native_config_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)

@@ -3252,7 +3252,9 @@ static int Ovr226_800aa790_TerminalPreamble(struct PushBuffer *pb, const u8 *cur
 		struct DrawLevelOvr1PScratchVertex *vertex = DrawLevelOvr1P_TerminalClipVertex(vertexIndex);
 
 		vertex->pos[2] = threshold;
-		vertex->clipNear = 0;
+		// The consumer reads a signed halfword at 0x12, not just the low byte.
+		// Clear both bytes so reused scratch cannot select the old doubled vector.
+		DrawLevelOvr1P_SetClipRecordSourceDelta(vertex, 0);
 	}
 	DrawLevelOvr1P_Scratch()->clipWindowPacked = DrawLevelOvr1P_ReadWord(&pb->rect, 4);
 
