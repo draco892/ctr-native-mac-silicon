@@ -283,7 +283,7 @@ void UI_CupStandings_InputAndDraw(void)
 	char text[24];
 
 	// TRACK 1/4, 2/4, 3/4, 4/4
-	sprintf(text, "%s %ld/4",
+	CTR_SNPRINTF(text, sizeof(text), "%s %ld/4",
 
 	        sdata->lngStrings[LNG_TRACK],
 
@@ -396,7 +396,7 @@ void UI_CupStandings_InputAndDraw(void)
 		UI_Lerp2D_Linear(CTR_VECTOR_DATA(&(drawPos)), iconStartX, iconTargetY, iconEndX, iconTargetY, animationFrame, UI_CUP_STANDINGS_LERP_FRAMES);
 
 		// %d
-		sprintf(text, (char *)&sdata->s_int, i + 1);
+		CTR_SNPRINTF(text, sizeof(text), (char *)&sdata->s_int, i + 1);
 
 		DecalFont_DrawLine(text, drawPos.x + UI_CUP_STANDINGS_PLACE_TEXT_X_OFFSET, drawPos.y + UI_CUP_STANDINGS_PLACE_TEXT_Y_OFFSET, FONT_SMALL, RED);
 
@@ -452,7 +452,7 @@ void UI_CupStandings_InputAndDraw(void)
 		else
 		{
 			// The amount of points that each player has, in a cup
-			sprintf(text, &sdata->s_longInt[0], gGT->cup.points[data.cupPositionPerPlayer[i]]);
+			CTR_SNPRINTF(text, sizeof(text), &sdata->s_longInt[0], gGT->cup.points[data.cupPositionPerPlayer[i]]);
 		}
 
 		vsCupIconOffsetX = vsCupIconOffsetX + UI_CUP_STANDINGS_ICON_SLOT_W;

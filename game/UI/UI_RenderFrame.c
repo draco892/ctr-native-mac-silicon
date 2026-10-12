@@ -339,7 +339,7 @@ void UI_RenderFrame_Racing()
 
 					// Make string with number of time crate
 					// print "-x" where x is the amount of seconds
-					sprintf(&string[0], &sdata->s_subtractLongInt[0], gGT->timeCrateTypeSmashed);
+					CTR_SNPRINTF(&string[0], sizeof(string), &sdata->s_subtractLongInt[0], gGT->timeCrateTypeSmashed);
 
 					// 4b4 and 4b6 are WindowStartPos(x,y) from PushBuffer, inside Driver
 					UI_Lerp2D_HUD(CTR_VECTOR_DATA(&(wumpaModelPos)), playerStruct->PickupTimeboxHUD.startX, playerStruct->PickupTimeboxHUD.startY, 0x14, 8,
@@ -399,7 +399,7 @@ void UI_RenderFrame_Racing()
 						fmt = &sdata->s_subtractLongInt[0];
 					}
 
-					sprintf((char *)&string[0], fmt, partTimeVariable1);
+					CTR_SNPRINTF((char *)&string[0], sizeof(string), fmt, partTimeVariable1);
 
 					UI_Lerp2D_HUD(CTR_VECTOR_DATA(&(wumpaModelPos)), (int)playerStruct->BattleHUD.startX, (int)playerStruct->BattleHUD.startY,
 					              (int)(hudStructPtr[UI_HUD_SLOT_BATTLE_SCORE].x + 0x20), (int)(hudStructPtr[UI_HUD_SLOT_BATTLE_SCORE].y + 8),
@@ -670,7 +670,7 @@ void UI_RenderFrame_Racing()
 					// %d
 
 					// build string for on-screen boost counter
-					sprintf((char *)&string[0], &sdata->s_intSpace[0], playerStruct->numTurbos);
+					CTR_SNPRINTF((char *)&string[0], sizeof(string), &sdata->s_intSpace[0], playerStruct->numTurbos);
 				}
 
 				// If you have more than 1000 boosts
@@ -680,7 +680,7 @@ void UI_RenderFrame_Racing()
 					// "999" <-- ascii string, not 2-u8 value
 
 					// Cap the on-screen counter at 999
-					sprintf((char *)&string[0], &sdata->s_999[0]);
+					CTR_SNPRINTF((char *)&string[0], sizeof(string), "%s", &sdata->s_999[0]);
 				}
 
 				i = DecalFont_GetLineWidth(sdata->lngStrings[LNG_TURBOS], 1);
@@ -690,7 +690,7 @@ void UI_RenderFrame_Racing()
 				                   (JUSTIFY_RIGHT | ORANGE_RED));
 
 
-				sprintf((char *)&string[0], &sdata->s_str[0], sdata->lngStrings[LNG_TURBOS]);
+				CTR_SNPRINTF((char *)&string[0], sizeof(string), &sdata->s_str[0], sdata->lngStrings[LNG_TURBOS]);
 
 				// Draw the string
 				DecalFont_DrawLine((char *)&string[0], (int)(s16)turboCountPos.x, (int)turboCountPos.y, FONT_BIG, (JUSTIFY_RIGHT | ORANGE));

@@ -12,7 +12,9 @@ int NativeSceneConsumer_Terrain(const void *legacyLevel,const struct PushBuffer 
     if(pb==NULL || memory==NULL || pb->rect.w<=0 || pb->rect.h<=0 || pb->distanceToScreen_PREV<=0 || pb->distanceToScreen_PREV>65535) return 0;
     struct NativeLevelView level; struct NativeMeshView mesh;
     if(NativeSceneAssets_GetLevel(&gNativeSceneAssets,legacyLevel,&level)!=NATIVE_ASSET_OK || NativeLevel_GetMesh(&level,&mesh)!=NATIVE_ASSET_OK) return 0;
-    struct NativeSceneCamera camera={.width=(u32)pb->rect.w,.height=(u32)pb->rect.h,.nearDepth=pb->distanceToScreen_PREV/2+1,.farDepth=65535};
+    // Retail near helpers double eye-space coordinates to extend the GTE
+    // division range; their effective near plane is H/4, rather than H/2.
+    struct NativeSceneCamera camera={.width=(u32)pb->rect.w,.height=(u32)pb->rect.h,.nearDepth=pb->distanceToScreen_PREV/4+1,.farDepth=65535};
     camera.transform.h=(u16)pb->distanceToScreen_PREV;
     for(unsigned row=0;row<3;row++) {
         camera.transform.position[row]=pb->matrix_Camera.t[row];

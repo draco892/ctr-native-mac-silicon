@@ -72,9 +72,9 @@ void CTR_Box_DrawSolidBox(RECT *r, const Color *color, u32 *ot, struct PrimMem *
 
 // decal
 u32 DecalFont_boolRacingWheel(void);
-void DecalFont_DrawLine(char *str, s16 posX, s16 posY, s16 fontType, s16 flags);
-void DecalFont_DrawLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 fontType, s16 flags);
-s32 DecalFont_DrawMultiLine(char *str, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, s16 flags);
+void DecalFont_DrawLine(char *str, s16 posX, s16 posY, s16 fontType, u16 flags);
+void DecalFont_DrawLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 fontType, u16 flags);
+s32 DecalFont_DrawMultiLine(char *str, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, u16 flags);
 void DecalGlobal_EmptyFunc_MainFrame_ResetDB(void);
 void DecalGlobal_Clear(struct GameTracker *gGT);
 void DecalGlobal_Store(struct GameTracker *gGT, struct LevTexLookup *LTL);
@@ -566,7 +566,7 @@ void MEMPACK_ClearLowMem(void);
 void MEMPACK_PopState(void);
 void MEMPACK_PopToState(s32 id);
 
-void RECTMENU_DrawQuip(char *comment, s16 startX, s16 startY, s16 sizeX, s16 fontType, s16 textFlag, s16 boxFlag);
+void RECTMENU_DrawQuip(char *comment, s16 startX, s16 startY, s16 sizeX, s16 fontType, u16 textFlag, s16 boxFlag);
 void RECTMENU_DrawInnerRect(RECT *r, s16 type, u32 *ot);
 void RECTMENU_DrawFullRect(struct RectMenu *menu, RECT *inner);
 void RECTMENU_DrawSelf(struct RectMenu *menu, s16 posX, s16 posY, s16 width);
@@ -1196,7 +1196,7 @@ b32 LOAD_IsOpen_RacingOrBattle(void);
 void GAMEPROG_NewProfile_InsideAdv(struct AdvProgress *adv);
 s32 RaceFlag_MoveModels(s32 frameIndex, s32 numFrames);
 void MainKillGame_LaunchSpyro2(void);
-void DecalFont_DrawLineOT(char *str, s16 posX, s16 posY, s16 fontType, s16 flags, u32 *ot);
+void DecalFont_DrawLineOT(char *str, s16 posX, s16 posY, s16 fontType, u16 flags, u32 *ot);
 void DecalHUD_Arrow2D(struct Icon *icon, s32 posX, s32 posY, struct PrimMem *primMem, u32 *ot, Color color0, Color color1, Color color2, Color color3,
                       u8 transparency, s16 scale, u16 rot);
 void RaceFlag_SetDrawOrder(b32 drawAfterFlag);
@@ -1250,7 +1250,7 @@ int MainDB_GetClipSize(u32 levelID, int numPlyrCurrGame);
 void MainFreeze_ConfigDrawArrows(s16 offsetX, s16 offsetY, char *str);
 void CAM_StartOfRace(struct CameraDC *cDC);
 void CAM_SkyboxGlow(struct SkyboxGlowGradient *grad, struct PushBuffer *pb, struct PrimMem *primMem, u32 *ptrOT);
-s32 DecalFont_DrawMultiLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, s16 flags);
+s32 DecalFont_DrawMultiLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, u16 flags);
 void GAMEPROG_ResetHighScores(struct GameProgress *gameProg);
 void GAMEPROG_NewProfile_OutsideAdv(struct GameSave *save);
 int LOAD_FindFile(char *filename, CdlFILE *cdlFile);

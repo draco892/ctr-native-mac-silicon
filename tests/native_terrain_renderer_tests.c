@@ -250,9 +250,44 @@ static int GeometryAndPackets(void)
 	CHECK(DrawLevelOvr1P_GetClipRecordCursor() == clips + 0x3c);
 	return 0;
 }
+static int ReusedNearClipVertices(void)
+{
+    NativeHostScratch_Reset();
+    struct PushBuffer pb = {0};
+    pb.rect.w = 512;
+    pb.rect.h = 216;
+    pb.distanceToScreen_PREV = 256;
+    for (int axis = 0; axis < 3; axis++)
+        pb.matrix_ViewProj.m[axis][axis] = 4096;
+    for (int i = 0; i < 3; i++)
+    {
+        struct DrawLevelOvr1PScratchVertex *v = DrawLevelOvr1P_TerminalClipVertex(i);
+        memset(v, 0xff, sizeof(*v));
+    }
+    u8 queue[2] = {0};
+    CHECK(Ovr226_800aa790_TerminalPreamble(&pb, queue, queue + 1));
+    struct DrawLevelOvr1PScratchVertex inside = {0}, outside = {0};
+    inside.posScreen[0] = 200;
+    inside.posScreen[1] = 100;
+    inside.depth = 400;
+    outside.posScreen[0] = 0;
+    outside.posScreen[1] = 100;
+    outside.depth = 0;
+    DrawLevelOvr1P_Scratch()->depthClipThreshold = 129;
+    for (int i = 0; i < 3; i++)
+    {
+        struct DrawLevelOvr1PScratchVertex *v = DrawLevelOvr1P_TerminalClipVertex(i);
+        CHECK(DrawLevelOvr1P_GetClipRecordSourceDelta(v) == 0);
+        Ovr226_800aab00_InterpolateClipRecordVertex(v, &inside, &outside);
+        SVECTOR source;
+        DrawLevelOvr1P_GetClipRecordSourceVector(v, &source);
+        CHECK(source.vx == v->pos[0] && source.vy == 100 && source.vz == 129);
+    }
+    return 0;
+}
 int main(void)
 {
-	if (WorkspaceAndViewports() || ResidentTextures() || GeometryAndPackets())
+	if (WorkspaceAndViewports() || ResidentTextures() || GeometryAndPackets() || ReusedNearClipVertices())
 		return 1;
 	puts("Retail terrain: four viewports, bounded recursive frames, ground/water midpoints, GT3/GT4 and clip OT tokens OK");
 	return 0;

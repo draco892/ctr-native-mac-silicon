@@ -166,7 +166,7 @@ CtrRuntimePointer LOAD_DriverMPK(struct BigHeader *bigfile, int levelLOD, void (
 			LOAD_AppendQueue(bigfile, LT_GETADDR, BI_RACERMODELHI + GAME_CHARACTER_IDS[0], &GAME_DRIVER_MODEL_EXTRAS[0].fileBase, LOAD_DriverMPK_SetPointer);
 
 			// pack of four AIs with bosses
-			LOAD_AppendQueue(bigfile, LT_GETADDR, BI_2PARCADEPACK + LOAD_PURPLE_GEM_CUP_AI_SET_INDEX, NULL, callback);
+			LOAD_AppendQueue(bigfile, LT_GETADDR, (int)BI_2PARCADEPACK + (int)LOAD_PURPLE_GEM_CUP_AI_SET_INDEX, NULL, callback);
 
 			GAME_CHARACTER_IDS[1] = RIPPER_ROO;
 			GAME_CHARACTER_IDS[2] = PAPU_PAPU;
@@ -347,7 +347,7 @@ int LOAD_GetBigfileIndex(u32 levelID, int lod, int fileIndexInGroup)
 
 	if (levelID == ADVENTURE_GARAGE)
 	{
-		return BI_MAINMENUFILE + LOAD_MAIN_MENU_GARAGE_FILE_OFFSET + fileIndexInGroup;
+		return (int)BI_MAINMENUFILE + (int)LOAD_MAIN_MENU_GARAGE_FILE_OFFSET + fileIndexInGroup;
 	}
 
 	if (levelID == NAUGHTY_DOG_CRATE)

@@ -117,7 +117,7 @@ void howl_InitChannelAttr_EngineFX(struct EngineFX *engineFX, struct ChannelAttr
 	attr->ad = 0x80ff;
 	attr->sr = 0x1fc2;
 
-	attr->spuStartAddr = (void *)(sdata->howl_spuAddrs[engineFX->spuIndex].spuAddr << 3);
+	attr->spuStartAddr = (void *)(uintptr_t)(sdata->howl_spuAddrs[engineFX->spuIndex].spuAddr << 3);
 }
 
 void howl_InitChannelAttr_OtherFX(struct OtherFX *otherFX, struct ChannelAttr *attr, int vol, int LR, int distort)
@@ -147,7 +147,7 @@ void howl_InitChannelAttr_OtherFX(struct OtherFX *otherFX, struct ChannelAttr *a
 	attr->ad = 0x80ff;
 	attr->sr = 0x1fc2;
 
-	attr->spuStartAddr = (void *)(sdata->howl_spuAddrs[otherFX->spuIndex].spuAddr << 3);
+	attr->spuStartAddr = (void *)(uintptr_t)(sdata->howl_spuAddrs[otherFX->spuIndex].spuAddr << 3);
 }
 
 void howl_PauseAudio()

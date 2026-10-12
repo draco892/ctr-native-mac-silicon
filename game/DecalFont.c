@@ -52,7 +52,7 @@ s32 DecalFont_GetLineWidth(char *str, s16 fontType)
 }
 
 
-void DecalFont_DrawLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 fontType, s16 flags)
+void DecalFont_DrawLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 fontType, u16 flags)
 {
 	s16 x = posX;
 	u8 *character;
@@ -145,13 +145,13 @@ void DecalFont_DrawLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 fontTy
 }
 
 
-void DecalFont_DrawLine(char *str, s16 posX, s16 posY, s16 fontType, s16 flags)
+void DecalFont_DrawLine(char *str, s16 posX, s16 posY, s16 fontType, u16 flags)
 {
-	DecalFont_DrawLineStrlen(str, -1, (s16)posX, (s16)posY, fontType, (s16)flags);
+	DecalFont_DrawLineStrlen(str, -1, (s16)posX, (s16)posY, fontType, (u16)flags);
 }
 
 
-void DecalFont_DrawLineOT(char *str, s16 posX, s16 posY, s16 fontType, s16 flags, u32 *ot)
+void DecalFont_DrawLineOT(char *str, s16 posX, s16 posY, s16 fontType, u16 flags, u32 *ot)
 {
 	struct GameTracker *gGT;
 	u32 *backupOT;
@@ -161,14 +161,14 @@ void DecalFont_DrawLineOT(char *str, s16 posX, s16 posY, s16 fontType, s16 flags
 	backupOT = gGT->pushBuffer_UI.ptrOT;
 	gGT->pushBuffer_UI.ptrOT = ot;
 
-	DecalFont_DrawLine(str, (s16)posX, (s16)posY, fontType, (s16)flags);
+	DecalFont_DrawLine(str, (s16)posX, (s16)posY, fontType, (u16)flags);
 
 	// NOTE(aalhendi): Reload the tracker after drawing before restoring its UI table.
 	GAME_TRACKER->pushBuffer_UI.ptrOT = backupOT;
 }
 
 
-s32 DecalFont_DrawMultiLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, s16 flags)
+s32 DecalFont_DrawMultiLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, u16 flags)
 {
 	s16 totalHeight = 0;
 	char *cursor;
@@ -252,7 +252,7 @@ s32 DecalFont_DrawMultiLineStrlen(char *str, s16 len, s16 posX, s16 posY, s16 ma
 }
 
 
-s32 DecalFont_DrawMultiLine(char *str, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, s16 flags)
+s32 DecalFont_DrawMultiLine(char *str, s16 posX, s16 posY, s16 maxPixLen, s16 fontType, u16 flags)
 {
-	return (s16)DecalFont_DrawMultiLineStrlen(str, -1, (s16)posX, (s16)posY, (s16)maxPixLen, fontType, (s16)flags);
+	return (s16)DecalFont_DrawMultiLineStrlen(str, -1, (s16)posX, (s16)posY, (s16)maxPixLen, fontType, (u16)flags);
 }

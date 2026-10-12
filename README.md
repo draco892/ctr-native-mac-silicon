@@ -8,6 +8,11 @@ The game and platform code build as C17 with SDL3. Windows and Linux use the
 Retail game assets are not included. Supply your own NTSC-U disc image to run
 the game or enable the retail-asset tests.
 
+Video settings and keyboard/controller bindings can be changed in
+[`config.json`](config.json) without rebuilding. Restart the game after editing
+the file; see [External Configuration](#external-configuration) for supported
+settings and validation commands.
+
 ## Current Status
 
 The ARM64 port now builds and links the complete game with bundled SDL3, both
@@ -16,8 +21,8 @@ Final startup probes ran both executables for 60 seconds and recorded over
 1,300 frames each, including the transition from intro level 41 to main-menu
 level 39, without crashes or sanitizer diagnostics.
 
-With the supplied retail disc, all **34 CTest tests** pass in each complete-game
-preset. The independent module presets contain **33 tests**. One retail test is
+With the supplied retail disc, all **37 CTest tests** pass in each complete-game
+preset. The independent module presets contain **35 tests**. One retail test is
 registered only when `assets/ctr-u.bin` is present at configuration time.
 
 Interactive ARM64 validation on October 11, 2026 exercised Arcade → Single →
@@ -36,8 +41,20 @@ BSP workspace bounds, shared clipped/unclipped vertex projection, and water
 material selection, UVs, blending, and invalid environment-map bounds.
 
 Frame pacing follows the original NTSC timing: roughly **29.9 FPS** with two
-VBlanks per game frame. Interactive sanitizer runs on the validation Mac reported
-approximately **29–31 FPS**; this is not a benchmark across all tracks or machines.
+VBlanks per game frame. The renderer has a separate monotonic presentation clock
+and enforces the configured `max_fps` cap (30 by default), waiting only for the
+time remaining after game work and VSync. It exposes elapsed time, the actual
+presentation delta, and a visual
+animation delta capped at 250 ms after stalls through `NativeRenderer_GetTime()`.
+The first presentation has a zero delta. Late presentations restart the deadline
+without catch-up bursts. This clock does not drive physics, audio, VBlank
+callbacks, or replay state; existing game animations still use retail timing.
+Profiling CSVs include presentation indices, deltas, elapsed time, and a separate
+`render_wait_ms` bucket; this wait is excluded from reported CPU work time.
+An interactive profiler run with sanitizers recorded 4,154 presentation intervals
+across the intro, main menu, and Crash Cove: none was shorter than 33.33 ms, and
+the median was 33.71 ms (about **29.7 FPS**). Loading and host stalls can reduce
+average FPS; this is not a benchmark across all tracks or machines.
 The runtime prints an FPS average every 2,000 rendered frames.
 
 These checks are smoke tests, not a completed playthrough. All tracks and game
@@ -82,7 +99,31 @@ audio, and windowing services.
 
 Use Xcode Command Line Tools, Apple Clang, CMake, Ninja, and Python 3. The macOS
 presets select `/usr/bin/clang`, C17, and the `arm64` architecture.
-Run these commands from the repository root:
+
+For a clean complete-game build, use the macOS script:
+
+```sh
+./build-macos.sh
+./build-macos-arm64-game/ctr_native
+```
+
+The script requires **CMake 3.24 or newer**. It resets the CMake cache with
+`--fresh`, cleans generated targets, rebuilds the game and bundled SDL3, runs
+CTest, and verifies the executable version and `config.json`. It stops on the
+first failure and preserves assets, configuration files, and saves. It can be
+invoked from any working directory using its full path.
+
+For a clean ASan/UBSan build, or to set build parallelism:
+
+```sh
+./build-macos.sh --sanitized
+./build-macos.sh --jobs 8
+```
+
+By default, parallelism uses `CMAKE_BUILD_PARALLEL_LEVEL` when set, otherwise
+the host CPU count. Use `./build-macos.sh --help` to list the options.
+
+For incremental builds, run these commands from the repository root:
 
 ```sh
 cmake --preset macos-arm64-game
@@ -204,11 +245,109 @@ removing the configuration, use `cmake --build --preset PRESET --clean-first`.
 
 ## Game Assets and Running
 
+### External Configuration
+
+Edit `config.json` and restart the game to change settings without recompiling.
+The default file belongs in the selected base directory, alongside `assets/`:
+the repository root for development builds, or beside the executable in a
+standalone distribution. The startup log prints the exact file path and settings
+used. A missing default file uses built-in defaults; an explicitly requested
+missing file, invalid JSON, unknown/duplicate settings, invalid bindings, or
+out-of-range values stop startup with an error. Files must be at most 16 KiB.
+Omitted settings always use built-in defaults. JSON comments are not supported.
+
+For example, this smaller file changes video settings and the accelerate/confirm
+key while retaining the other defaults:
+
+```json
+{
+  "video": {
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "max_fps": 30,
+    "bilinear_filtering": false
+  },
+  "input": {
+    "keyboard": { "cross": "Y" }
+  }
+}
+```
+
+Launch with another configuration, or validate it without opening the game:
+
+```sh
+./build-macos-arm64-game/ctr_native --config ./my-settings.json
+./build-macos-arm64-game/ctr_native --config ./my-settings.json --check-config
+./build-macos-arm64-game/ctr_native --check-config
+```
+
+Explicit relative paths are resolved from the directory where you launch the
+command. Checking configuration does not require the retail disc or a window.
+The complete default keyboard/controller mappings are provided in `config.json`.
+`--check-config` requires the selected file to exist, even when checking the
+default path; normal startup can fall back to built-in defaults when the default
+file is absent. The loader does not create or overwrite configuration files.
+
+To keep a separate local configuration, copy the supplied file and select it
+when launching:
+
+```sh
+cp config.json my-settings.json
+./build-macos-arm64-game/ctr_native --config ./my-settings.json --check-config
+./build-macos-arm64-game/ctr_native --config ./my-settings.json
+```
+
+| Setting | Accepted values / behavior |
+| --- | --- |
+| `video.width`, `video.height` | Window dimensions: width 320–7680, height 240–4320; defaults 800×600 (1280×720 in a widescreen build) |
+| `video.fullscreen` | `true` or `false`; default `false`. Fullscreen uses the desktop display mode; width/height set the window size when returning to windowed mode |
+| `video.max_fps` | Integer 1–240; default 30. Presentation ceiling, not a guaranteed frame rate |
+| `video.bilinear_filtering` | `true` or `false`; default `false` |
+| `input.keyboard_slot` | Initial keyboard player slot 0–3; default 0. Hot-plugged controllers may move the keyboard to a free slot |
+| `input.axis_deadzone` | SDL axis units 0–32766; default 500 |
+| `input.keyboard` | PS1 button names mapped to SDL keyboard scancode names |
+| `input.controller` | PS1 button and stick-axis names mapped to SDL gamepad bindings; shared by all controllers |
+
+Keyboard and controller button names are `cross`, `circle`, `square`, `triangle`,
+`l1`, `l2`, `l3`, `r1`, `r2`, `r3`, `start`, `select`, `left`, `right`, `up`, and
+`down`. Keyboard values include `C`, `Y`, `Return`, `Space`, `Left Shift`,
+`Left Ctrl`, and the arrow names. They describe physical keys, not typed
+characters; single bindings do not accept key combinations. Use `none` to unbind
+a key or controller input. Existing fullscreen/debug shortcuts remain active;
+avoid assigning them or Alt/Option to game buttons.
+
+SDL gamepad button values include `a` (south), `b` (east), `x` (west), `y` (north),
+`leftshoulder`, `rightshoulder`, `leftstick`, `rightstick`, `start`, `back`,
+`dpup`, `dpdown`, `dpleft`, and `dpright`. These are physical positions across
+controller families. Axis values use `axis:leftx`, `axis:lefty`, `axis:rightx`,
+`axis:righty`, `axis:lefttrigger`, or `axis:righttrigger`; a minus sign after the
+colon inverts an axis, e.g. `axis:-leftx`. Controller stick settings
+`axis_left_x`, `axis_left_y`, `axis_right_x`, and `axis_right_y` require an axis
+binding or `none`.
+
+Raising `max_fps` above 30 does not unlock 60 FPS gameplay: retail VBlank timing
+still governs the simulation and most game frames. A lower ceiling reduces the
+presentation rate. Resolution scales the output; it does not replace the game's
+internal render resolution or change the compiled 4:3/widescreen game layout.
+F11/fullscreen and F3/filter changes apply to the current session and do not
+rewrite the JSON file.
+
+Interactive configuration checks on the validation Mac exercised a 1024×768
+window, fullscreen startup, keyboard navigation with `S`, confirmation with `Y`,
+and Start with `P`. With a configured 20 FPS cap, measured presentation intervals
+were never shorter than 50 ms; median throughput was about 19.9 FPS. These checks
+ran with ASan/UBSan without diagnostics. Physical controller remapping still
+requires hardware validation.
+
+### Retail Assets
+
 Place a raw NTSC-U CTR disc image at `assets/ctr-u.bin`. For development builds,
 the asset directory belongs in the repository root:
 
 ```text
 ctr-native-mac-silicon/
+  config.json
   assets/
     ctr-u.bin
   build-macos-arm64-game/
@@ -220,6 +359,7 @@ For a standalone distribution, put `assets/` next to the executable:
 ```text
 CTR-Native/
   ctr_native.exe       # Windows; ctr_native on macOS/Linux
+  config.json
   assets/
     ctr-u.bin
 ```
@@ -316,8 +456,8 @@ fullscreen; on macOS, Alt is the Option key. Depending on macOS keyboard
 settings, F11 may require the Fn key. Release Option/Alt before using game
 controls, since holding it suppresses keyboard gamepad input.
 
-The default window is 800×600 (4:3). To change its initial size, edit the 4:3
-`Platform_Init` call in `main.c`, for example to `1600, 1200`, then rebuild.
+The default window is 800×600 (4:3). Change `video.width`, `video.height`, and
+`video.fullscreen` in `config.json`, then restart; no rebuild is needed.
 Window sizing scales presentation; it does not change the game-controlled
 internal render-target resolution.
 
@@ -339,6 +479,16 @@ Run one group while investigating a regression:
 
 ```sh
 ctest --preset macos-arm64-game-sanitized -R 'runtime_globals|resident_graph|asset_retail' --output-on-failure
+```
+
+Configuration and presentation timing have their own tests. They check partial
+configuration defaults, malformed/truncated JSON, duplicate and unknown settings,
+numeric bounds, SDL binding names, relative file paths, FPS caps, and recovery
+after host stalls:
+
+```sh
+ctest --preset macos-arm64-game -R 'config|render_timing' --output-on-failure
+ctest --preset macos-arm64-game-sanitized -R 'config|render_timing' --output-on-failure
 ```
 
 Rerun CMake configuration after adding the disc so the optional retail test is
@@ -369,9 +519,11 @@ full ARM64 checkpoint/replay behavior remains unverified.
 main.c                Process startup and platform/game unity includes
 CMakeLists.txt        Complete executable and independent test targets
 CMakePresets.json     Platform, module-only, and sanitizer configurations
+config.json           External video settings and keyboard/controller bindings
 build-msvc.bat        Windows MSVC x86 build/test script
 build.bat             Windows MinGW i686 build/test script
 build.sh              Linux GCC i686 build/test script
+build-macos.sh        macOS Apple Silicon clean build/test script
 game/                 Decompiled game code and native adaptations
   game_unity.h        Ordered game unity include chain
 include/              Game declarations, PS1 facade, and native interfaces

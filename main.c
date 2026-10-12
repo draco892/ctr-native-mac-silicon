@@ -42,6 +42,8 @@ CTR_STATIC_ASSERT(sizeof(void *) == 4);
 
 #include "platform/native_disc_image.c"
 #include "platform/native_assets.c"
+#include "platform/native_config.c"
+#include "platform/native_config_sdl.c"
 #include "platform/native_audio.c"
 #include "platform/native_host_scratch.c"
 #include "platform/native_terrain_work.c"
@@ -99,6 +101,7 @@ CTR_STATIC_ASSERT(sizeof(void *) == 4);
 #include "platform/native_perf.c"
 #include "platform/native_platform.c"
 #include "platform/native_replay_scheduler.c"
+#include "platform/native_render_timing.c"
 #include "platform/native_renderer.c"
 #include "platform/native_savestate.c"
 #include "platform/native_state.c"
@@ -184,6 +187,21 @@ int main(int argc, char *argv[])
 			return 0;
 		}
 	}
+	const char *configPath = NULL;
+	int checkConfig = 0;
+	for (int i = 1; i < argc; i++)
+	{
+		if (strcmp(argv[i], "--check-config") == 0) checkConfig = 1;
+		else if (strcmp(argv[i], "--config") == 0)
+		{
+			if (configPath != NULL || i + 1 == argc || strncmp(argv[i + 1], "--", 2) == 0)
+			{
+				fprintf(stderr, "[CTR Config] --config requires one file path.\n");
+				return 1;
+			}
+			configPath = argv[++i];
+		}
+	}
 
 	printf("[CTR Native] Starting...\n");
 	fflush(stdout);
@@ -197,6 +215,34 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "[CTR Native] Failed to initialize asset paths.\n");
 		return NativeConsole_Return(1);
 	}
+	/* Resolve explicit relative paths before switching to the assets base dir. */
+	char defaultConfigPath[1024], configError[256];
+	int explicitConfig = configPath != NULL;
+	if (configPath == NULL)
+	{
+		if (!NativePath_Join(defaultConfigPath, sizeof(defaultConfigPath), NativeStr8_FromCString(NativeAssets_GetBaseDir()), NATIVE_STR8_LIT("config.json")))
+		{
+			fprintf(stderr, "[CTR Config] Config path is too long.\n");
+			return 1;
+		}
+		configPath = defaultConfigPath;
+	}
+	NativeConfig_Defaults(&gNativeConfig);
+	int configLoaded = NativeConfig_Load(configPath, &gNativeConfig, configError, sizeof(configError));
+	if (configLoaded < 0 || (configLoaded == 0 && (explicitConfig || checkConfig)))
+	{
+		fprintf(stderr, "[CTR Config] %s: %s\n", configPath, configLoaded == 0 ? "File not found" : configError);
+		return 1;
+	}
+	if (!NativeConfig_ValidateBindings(&gNativeConfig, configError, sizeof(configError)))
+	{
+		fprintf(stderr, "[CTR Config] %s: %s\n", configPath, configError);
+		return 1;
+	}
+	printf("[CTR Config] %s: %s; %dx%d %s, max_fps=%d, keyboard.cross=%s\n", configPath,
+	       configLoaded ? "loaded" : "missing, using defaults", gNativeConfig.width, gNativeConfig.height,
+	       gNativeConfig.fullscreen ? "fullscreen" : "windowed", gNativeConfig.maxFps, gNativeConfig.keyboard[3]);
+	if (checkConfig) return 0;
 
 	printf("[CTR Native] Version: %s (%s)\n", CTR_NATIVE_VERSION, CTR_NATIVE_BUILD_ID);
 	printf("[CTR Native] Built with: " CC "\n");
@@ -224,11 +270,10 @@ int main(int argc, char *argv[])
 
 #ifdef USE_16BY9
 	printf("[CTR Native] Widescreen\n");
-	Platform_Init("Crash Team Racing", 1280, 720);
 #else
 	printf("[CTR Native] 4:3\n");
-	Platform_Init("Crash Team Racing", 800, 600);
 #endif
+	Platform_Init("Crash Team Racing", gNativeConfig.width, gNativeConfig.height);
 
 #if defined(CTR_INTERNAL)
 	if (NativePerf_ConfigureFromArgs(argc, argv) != 0)

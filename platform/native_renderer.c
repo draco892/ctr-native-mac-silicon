@@ -9,13 +9,17 @@
 #include <SDL3/SDL.h>
 
 #include "platform/native_gpu.h"
+#include "platform/native_config.h"
 #include "platform/native_glad.h"
 #include "platform/native_log.h"
 #include "platform/native_perf.h"
 #include "platform/native_renderer.h"
+#include "platform/native_renderer_clip.h"
 
 #include <assert.h>
 #include <string.h>
+
+static struct NativeRenderClock s_renderClock;
 
 #ifdef _WIN32
 #include "platform/native_win32.h"
@@ -240,8 +244,14 @@ internal int NativeRenderer_InitialiseGLExt(void)
 
 int NativeRenderer_InitialiseRender(char *windowName, int width, int height, int fullscreen)
 {
+	if (!NativeRenderClock_InitFPS(&s_renderClock, SDL_GetPerformanceFrequency(), (unsigned)gNativeConfig.maxFps))
+	{
+		NATIVE_RENDERER_ERROR("%s\n", "Failed to initialise presentation clock");
+		return 0;
+	}
 	g_windowWidth = width;
 	g_windowHeight = height;
+	g_cfg_bilinearFiltering = gNativeConfig.bilinearFiltering;
 	NativeRenderer_SetPresentationAspect(width, height);
 
 	// Due to debugging in fullscreen
@@ -344,14 +354,12 @@ void NativeRenderer_BeginScene(void)
 	NativeRenderer_ClearPresentationBars();
 	NativeRenderer_BindMainRenderTarget();
 
+	// Clear the complete stencil, including rows outside the previous split.
+	NativeRenderer_ResetFrameClip(&s_previousScissorState);
 	NativeRenderer_UpdateVRAM();
 	if (!activeDrawEnv.isbg)
 	{
 		NativeRenderer_LoadRenderTargetFromVRAM(&s_mainRenderTarget, activeDispEnv.disp.x, activeDispEnv.disp.y);
-	}
-	else
-	{
-		glClear(GL_STENCIL_BUFFER_BIT);
 	}
 	NativeRenderer_SetViewPort(0, 0, s_mainRenderTarget.width, s_mainRenderTarget.height);
 
@@ -1302,40 +1310,10 @@ void NativeRenderer_SetupClipMode(const RECT16 *rect, const DISPENV *displayEnv,
 		return;
 	}
 
-	const float emuScreenAspect = 1.0f;
-
-	const float psxScreenWInv = 1.0f / (float)displayEnv->disp.w;
-	const float psxScreenHInv = 1.0f / (float)displayEnv->disp.h;
-
-	// first map to 0..1
-	float clipRectX = (float)(rect->x - displayEnv->disp.x) * psxScreenWInv;
-	float clipRectY = (float)(rect->y - displayEnv->disp.y) * psxScreenHInv;
-	float clipRectW = (float)(rect->w) * psxScreenWInv;
-	float clipRectH = (float)(rect->h) * psxScreenHInv;
-
-	// then map to screen
-	{
-		clipRectX -= 0.5f;
-
-		clipRectX *= emuScreenAspect;
-		clipRectW *= emuScreenAspect;
-
-		clipRectX += 0.5f;
-	}
-
-	// Normal game draws target the PSX-sized main framebuffer. Host-window
-	// coordinates are introduced only by the final presentation pass.
-	const float viewportX = 0.0f;
-	const float viewportY = 0.0f;
-	const float viewportW = (float)displayEnv->disp.w;
-	const float viewportH = (float)displayEnv->disp.h;
-	const float flipOffset = viewportY + viewportH - clipRectH * viewportH;
-	const float crx = viewportX + clipRectX * viewportW;
-	const float cry = clipRectY * viewportH;
-	const float crw = clipRectW * viewportW;
-	const float crh = clipRectH * viewportH;
-
-	glScissor(crx, flipOffset - cry, crw, crh);
+	// The target uses PSX pixels: integer coordinates avoid truncating a row
+	// after a float divide/multiply round trip, especially at odd clip sizes.
+	const struct NativeRendererClipRect clip = NativeRenderer_ClipScissorRect(rect, displayEnv);
+	glScissor(clip.x, clip.y, clip.w, clip.h);
 }
 
 internal void NativeRenderer_SetShader(const ShaderID shader)
@@ -2118,7 +2096,11 @@ void NativeRenderer_PresentVRAMRect(int displayX, int displayY, int displayW, in
 	NativeRenderer_EnableDepth(0);
 	NativeRenderer_SetBlendMode(BM_NONE);
 
+	// PSX draw masks belong to the emulated target, never the host backbuffer.
+	// Its independent stencil can otherwise reject parts of the presentation.
+	glDisable(GL_STENCIL_TEST);
 	NativeRenderer_DrawVRAMRegion(displayX, displayY, displayW, displayH);
+	glEnable(GL_STENCIL_TEST);
 	glBindVertexArray(0);
 
 	s_previousShader = (ShaderID)-1;
@@ -2136,9 +2118,25 @@ void NativeRenderer_PresentVRAMDisplay(void)
 
 void NativeRenderer_SwapWindow(void)
 {
+	NativePerf_BeginScope(NATIVE_PERF_BUCKET_RENDER_WAIT);
+	/* Retail VSync normally already consumed this interval. Wait only for the
+	 * remaining time, including VRAM-only presentation paths that bypass it. */
+	uint64_t remaining;
+	while ((remaining = NativeRenderClock_WaitTicks(&s_renderClock, SDL_GetPerformanceCounter())) != 0)
+	{
+		uint64_t nanoseconds = (uint64_t)((double)remaining * 1000000000.0 / (double)s_renderClock.frequency);
+		SDL_DelayPrecise(nanoseconds > 0 ? nanoseconds : 1);
+	}
+	NativePerf_EndScope(NATIVE_PERF_BUCKET_RENDER_WAIT);
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_SWAP_WINDOW);
 	SDL_GL_SwapWindow(g_window);
+	NativeRenderClock_Presented(&s_renderClock, SDL_GetPerformanceCounter());
 	NativePerf_EndScope(NATIVE_PERF_BUCKET_SWAP_WINDOW);
+}
+
+const struct NativeRenderTime *NativeRenderer_GetTime(void)
+{
+	return &s_renderClock.time;
 }
 
 internal void NativeRenderer_EnableDepth(int enable)

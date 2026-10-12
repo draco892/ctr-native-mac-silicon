@@ -178,7 +178,7 @@ void RR_EndEvent_DrawHighScore(s16 startX, s32 startY, s16 scoreMode)
 	// This is different from High Score in Main Menu because Main Menu
 	// does not show the rank icons '1', '2', '3', '4', '5'
 	char *timeString;
-	s16 timeColor;
+	u16 timeColor;
 	u32 timeColorSource;
 	SVec2 pos;
 	RECT box;
@@ -337,7 +337,7 @@ void RR_EndEvent_DrawMenu(void)
 	SVec2 pos;
 	s32 rewardBit;
 
-	register s16 textColor CTR_PSX_REGISTER("$19");
+	register u16 textColor CTR_PSX_REGISTER("$19");
 	char crateCountText[16];
 	char countdownText[24];
 
@@ -500,7 +500,7 @@ draw_relic_done:
 		RR_TIMEBOX1->matrix.t[1] = UI_ConvertY_2(pos.y, RR_SCREEN_DEPTH);
 
 		DecalFont_DrawLine((char *)&s_timeCrateXString223, pos.x + 0x14, pos.y - 10, 2, 0);
-		sprintf(crateCountText, s_crateCountFormat223, driver->numTimeCrates, CTR_PRINTF_PSX_LONG(GAME_TRACKER->timeCratesInLEV));
+		CTR_SNPRINTF(crateCountText, sizeof(crateCountText), s_crateCountFormat223, driver->numTimeCrates, CTR_PRINTF_PSX_LONG(GAME_TRACKER->timeCratesInLEV));
 		DecalFont_DrawLine(crateCountText, pos.x + 0x21, pos.y - 0xe, 1, 0);
 	}
 
@@ -508,7 +508,7 @@ draw_relic_done:
 	// if collected all time boxes in level
 	if (GAME_TRACKER->drivers[0]->numTimeCrates == GAME_TRACKER->timeCratesInLEV)
 	{
-		sprintf(countdownText, s_countdownStartFormat223);
+		CTR_SNPRINTF(countdownText, sizeof(countdownText), "%s", s_countdownStartFormat223);
 
 		{
 			s32 elapsedFrames;
@@ -570,7 +570,7 @@ draw_relic_done:
 						OtherFX_Play(RR_COUNTDOWN_TICK_SFX, 1);
 					}
 
-					sprintf(countdownText, s_countdownFormat223, minusSeconds);
+					CTR_SNPRINTF(countdownText, sizeof(countdownText), s_countdownFormat223, minusSeconds);
 				}
 
 				UI_Lerp2D_Linear(CTR_VECTOR_DATA(&(pos)), 0x296, 0x2a, 0x199, 0x2a, GAME_FRAMES_SINCE_RACE_ENDED - RR_COUNTDOWN_START_FRAME, RR_LERP_FRAMES);

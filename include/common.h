@@ -128,6 +128,9 @@ static inline void *CTR_PsyqMemmove(void *dest, const void *src, s32 count)
 	return memmove(dest, src, (u32)count);
 }
 
+#ifdef memmove
+#undef memmove
+#endif
 #define memmove(dest, src, count) CTR_PsyqMemmove((dest), (src), (s32)(count))
 #endif
 

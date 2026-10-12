@@ -54,7 +54,7 @@ char *RECTMENU_DrawTime(s32 ticks)
 	char *str = &RECTMENU_TIME_BUFFER[0];
 	// NOTE(aalhendi): The timer runs at 960 ticks/second. Unsigned products retain
 	// MIPS word wrapping before the signed divisions, including long races.
-	sprintf(str, RECTMENU_TIME_FORMAT, CTR_PRINTF_PSX_LONG(ticks / 0xe100), CTR_PRINTF_PSX_LONG((ticks / 0x2580) % 6),
+	CTR_SNPRINTF(str, sizeof(RECTMENU_TIME_BUFFER), RECTMENU_TIME_FORMAT, CTR_PRINTF_PSX_LONG(ticks / 0xe100), CTR_PRINTF_PSX_LONG((ticks / 0x2580) % 6),
 	        CTR_PRINTF_PSX_LONG((ticks / 0x3c0) % 10), CTR_PRINTF_PSX_LONG(((s32)((u32)ticks * 10) / 0x3c0) % 10),
 	        CTR_PRINTF_PSX_LONG(((s32)((u32)ticks * 100) / 0x3c0) % 10));
 
@@ -199,7 +199,7 @@ void RECTMENU_DrawOuterRect_HighLevel(RECT *r, const Color *color, s16 param_3, 
 }
 
 
-void RECTMENU_DrawQuip(char *comment, s16 startX, s16 startY, s16 sizeX, s16 fontType, s16 textFlag, s16 boxFlag)
+void RECTMENU_DrawQuip(char *comment, s16 startX, s16 startY, s16 sizeX, s16 fontType, u16 textFlag, s16 boxFlag)
 {
 	s32 width;
 

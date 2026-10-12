@@ -5,6 +5,7 @@
 #include <string.h>
 // Bounded work queue: allocation precedes conversion, so shared references and
 // graph cycles resolve without recursive calls or temporary wire publications.
+
 enum
 {
 	RG_MAX_BYTES = 64 * 1024 * 1024,
@@ -148,6 +149,36 @@ static enum NativeAssetResult RGMaterializeInner(void *owner, u32 at, enum Nativ
 			return NATIVE_ASSET_INVALID_DATA;
 		*out = g->map.origin + at;
 		return NATIVE_ASSET_OK;
+	case NR_MODEL:
+	case NR_MODEL_HEADER:
+	case NR_MODEL_ANIM:
+	case NR_INSTDEF:
+	case NR_MESH:
+	case NR_QUAD:
+	case NR_BSP:
+	case NR_WATER:
+	case NR_SC:
+	case NR_SKYBOX:
+	case NR_NAV:
+	case NR_SPAWN1:
+	case NR_PVS:
+	case NR_SPAWN2:
+	case NR_ANIMTEX:
+	case NR_VISMEM:
+	case NR_TEXLOOKUP:
+	case NR_MODELS:
+	case NR_INSTDEFS:
+	case NR_ANIMATIONS:
+	case NR_TEXTURES:
+	case NR_NAVS:
+	case NR_MPK:
+	case NR_LEVEL:
+	case NR_HITBOX:
+	case NR_SPAWN2_ROT:
+	case NR_ICONGROUP:
+	case NR_ICONGROUPS:
+	case NR_BSPLINK:
+	case NR_KIND_COUNT:
 	default:
 		break;
 	}
@@ -611,6 +642,22 @@ static enum NativeAssetResult RGDecode(struct NativeResidentGraph *g, struct RGO
 			RGSlot(g, &link->bsp, sizeof(void *));
 			break;
 		}
+		case NR_BYTES:
+		case NR_WORDS:
+		case NR_VERTEX:
+		case NR_ICONGROUP4:
+		case NR_TEXTURE_LAYOUT:
+		case NR_ICON:
+		case NR_NAVFRAME:
+		case NR_FRAME:
+		case NR_SHORT_VERTEX:
+		case NR_FACE:
+		case NR_OVERT:
+		case NR_POS:
+		case NR_POSROT:
+		case NR_CHECKPOINT:
+		case NR_ANIMTEX:
+		case NR_KIND_COUNT:
 		default:
 			return NATIVE_ASSET_NOT_FOUND;
 		}
@@ -715,13 +762,14 @@ int NativeResidentGraph_WireOffset(const struct NativeResidentGraph *g, const vo
 // Host ABI checkpoint. Every pointer slot is declared during materialization;
 // serialization encodes owner/offset pairs, never searches scalar payloads for
 // pointer-shaped values. Restoring builds and validates a pending graph first.
+#define RGCP_NULL (UINT32_MAX)
+#define RGCP_EXTERNAL (UINT32_MAX - 1)
+
 enum
 {
 	RGCP_HEADER = 48,
 	RGCP_OBJECT = 24,
 	RGCP_SLOT = 24,
-	RGCP_NULL = UINT32_MAX,
-	RGCP_EXTERNAL = UINT32_MAX - 1
 };
 static u32 RGAbi(void)
 {
@@ -977,6 +1025,37 @@ static int RGShapeValid(struct RGObject o, const u8 *saved)
 			RG_SAME(ModelAnim, numFrames);
 			RG_SAME(ModelAnim, frameSize);
 			break;
+		case NR_BYTES:
+		case NR_WORDS:
+		case NR_INSTDEF:
+		case NR_QUAD:
+		case NR_BSP:
+		case NR_VERTEX:
+		case NR_WATER:
+		case NR_SC:
+		case NR_ICONGROUP4:
+		case NR_TEXTURE_LAYOUT:
+		case NR_ICON:
+		case NR_NAVFRAME:
+		case NR_FRAME:
+		case NR_SHORT_VERTEX:
+		case NR_FACE:
+		case NR_OVERT:
+		case NR_POS:
+		case NR_POSROT:
+		case NR_PVS:
+		case NR_CHECKPOINT:
+		case NR_VISMEM:
+		case NR_MODELS:
+		case NR_INSTDEFS:
+		case NR_ANIMATIONS:
+		case NR_TEXTURES:
+		case NR_NAVS:
+		case NR_MPK:
+		case NR_HITBOX:
+		case NR_ICONGROUPS:
+		case NR_BSPLINK:
+		case NR_KIND_COUNT:
 		default:
 			break;
 		}

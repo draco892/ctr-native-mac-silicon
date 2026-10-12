@@ -3,6 +3,7 @@
 #include <macros.h>
 
 #include "platform/native_audio.h"
+#include "platform/native_config.h"
 #include "platform/native_glad.h"
 #include "platform/native_gpu.h"
 #include "platform/native_input.h"
@@ -249,7 +250,7 @@ void Platform_Init(const char *title, int width, int height)
 
 	s_platformInitialized = 1;
 
-	if (!NativeRenderer_InitialiseRender(windowName, width, height, 0))
+	if (!NativeRenderer_InitialiseRender(windowName, width, height, gNativeConfig.fullscreen))
 	{
 		Platform_LogError("[CTR Native] Failed to initialise window\n");
 		Platform_Shutdown();
@@ -311,9 +312,9 @@ int Platform_BeginScene(void)
 	}
 
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_PLATFORM_BEGIN_SCENE);
-	// NOTE(aalhendi): CTR already throttles through the retail VSync/draw-sync
-	// path. Do not add a second SDL swap wait; some GL drivers charge that wait
-	// to the next frame's first clear instead of SDL_GL_SwapWindow.
+	// Retail VSync paces game time; the renderer independently enforces its
+	// presentation deadline. Keep driver swap waits off so neither clock is
+	// quantized to the host monitor's refresh rate.
 	NativeRenderer_UpdateSwapIntervalState(0);
 
 	NativeRenderer_BeginScene();
@@ -378,8 +379,8 @@ void Platform_EndScene(void)
 	NativePerf_EndScope(NATIVE_PERF_BUCKET_PLATFORM_END_SCENE);
 }
 
-// NOTE(aalhendi): Frame timing is handled by VSync() in the platform layer,
-// matching PS1 hardware behavior. Platform_EndFrame only does buffer swap + FPS.
+// VSync owns game timing. NativeRenderer_SwapWindow owns presentation timing;
+// Platform_EndFrame finishes the scene and reports FPS without ticking gameplay.
 void Platform_EndFrame(void)
 {
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_PLATFORM_END_FRAME);

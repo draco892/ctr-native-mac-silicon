@@ -1,5 +1,7 @@
 #include <common.h>
 
+#define UI_RACE_START_BAR_ALPHA_MASK (0xff000000u)
+
 enum UIRaceEndMenuOption
 {
 	UI_RACE_END_OPTION_QUIT = 3,
@@ -25,7 +27,6 @@ enum UIRaceFlowConstants
 	UI_RACE_START_DIVIDER_BOTTOM_Y_OFFSET = -0x1e,
 	UI_RACE_START_DIVIDER_HEIGHT = 2,
 	UI_RACE_START_BAR_HEIGHT = 0x1e,
-	UI_RACE_START_BAR_ALPHA_MASK = 0xff000000,
 	UI_RACE_END_DRIVER_COUNT = 8,
 	UI_RACE_END_AVG_SPEED_SCALE = 100,
 	UI_RACE_END_MIN_MISSILES_FOR_RATIO = 4,
@@ -251,7 +252,7 @@ LAB_80055930:
 			                   (JUSTIFY_CENTER | ORANGE));
 
 			// Track 1/4, 2/4, 3/4, 4/4 in cup
-			sprintf(trackText, "%s %ld/4",
+			CTR_SNPRINTF(trackText, sizeof(trackText), "%s %ld/4",
 
 			        sdata->lngStrings[LNG_TRACK],
 

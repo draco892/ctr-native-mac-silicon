@@ -27,15 +27,17 @@ static s64 SceneGeometry_Distance(const struct NativeSceneCamera *c,const struct
     case 0: return z-c->nearDepth;
     case 1: return c->farDepth-z;
     case 2: return (s64)v->view[0]*c->transform.h+x*z;
-    case 3: return ((s64)c->width-1-x)*z-(s64)v->view[0]*c->transform.h;
+    case 3: return ((s64)c->width-x)*z-(s64)v->view[0]*c->transform.h;
     case 4: return (s64)v->view[1]*c->transform.h+y*z;
-    default: return ((s64)c->height-1-y)*z-(s64)v->view[1]*c->transform.h;
+    default: return ((s64)c->height-y)*z-(s64)v->view[1]*c->transform.h;
     }
 }
 int NativeSceneGeometry_NeedsClip(const struct NativeSceneCamera *c,const struct NativeSceneClipVertex v[3])
 {
     if(!NativeSceneCamera_IsValid(c) || v==NULL) return 1;
     for(unsigned i=0;i<3;i++) for(unsigned k=0;k<3;k++) if(v[i].view[k]<-(1<<24) || v[i].view[k]>(1<<24)) return 1;
+    // Near vertices need the extended projection even inside all six planes.
+    for(unsigned i=0;i<3;i++) if((s64)v[i].view[2]*2<=c->transform.h) return 1;
     for(unsigned i=0;i<3;i++) for(unsigned plane=0;plane<6;plane++)
         if(SceneGeometry_Distance(c,&v[i],plane)<0) return 1;
     return 0;
@@ -97,6 +99,10 @@ enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *
             // Exact division here leaves one-pixel cracks on shared edges.
             struct NativeProjectionConfig projection={.h=c->transform.h};
             memcpy(projection.translation,v->view,sizeof(projection.translation));
+            // Keep the GTE's division/rounding, but avoid its 2x ratio clamp
+            // for near terrain, matching the retail doubled-coordinate path.
+            if((s64)v->view[2]*2<=c->transform.h)
+                for(unsigned axis=0;axis<3;axis++) projection.translation[axis]*=2;
             memcpy(projection.offset,c->transform.offset,sizeof(projection.offset));
             struct NativePackedModelVertex origin={0};
             struct NativeProjectionState state={0};
@@ -105,7 +111,9 @@ enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *
             if(status!=NATIVE_ASSET_OK) return status;
             for(unsigned axis=0;axis<2;axis++) {
                 s64 coordinate=state.screen[2][axis];
-                s64 limit=axis==0 ? c->width-1 : c->height-1;
+                // Triangle edges end at the viewport boundary, beyond the
+                // last pixel center; width-1/height-1 leave a blank edge row.
+                s64 limit=axis==0 ? c->width : c->height;
                 // Integer intersection rounding can move a boundary by one unit.
                 if(coordinate<0) coordinate=0; if(coordinate>limit) coordinate=limit;
                 tri.screen[k][axis]=(s16)coordinate;

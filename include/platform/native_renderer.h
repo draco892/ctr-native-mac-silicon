@@ -2,6 +2,7 @@
 #define NATIVE_RENDERER_H
 
 #include <platform/native_renderer_types.h>
+#include <platform/native_render_timing.h>
 
 int NativeRenderer_InitialiseRender(char *windowName, int width, int height, int fullscreen);
 int NativeRenderer_InitialisePSX(void);
@@ -13,6 +14,8 @@ void NativeRenderer_EndGpuFrame(void);
 void NativeRenderer_FinishGpuMeasurements(void);
 void NativeRenderer_UpdateSwapIntervalState(int swapInterval);
 void NativeRenderer_SwapWindow(void);
+/* Snapshot of the last completed presentation; independent of game time. */
+const struct NativeRenderTime *NativeRenderer_GetTime(void);
 void NativeRenderer_StoreFrameBuffer(int x, int y, int w, int h);
 void NativeRenderer_PresentVRAMDisplay(void);
 void NativeRenderer_PresentVRAMRect(int x, int y, int w, int h);
