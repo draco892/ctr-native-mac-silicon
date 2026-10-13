@@ -25,6 +25,7 @@ struct NativeReplaySchedulerFrameInfo
 };
 
 int NativeReplayScheduler_PrepareReportFromArgs(int argc, char **argv);
+int NativeReplayScheduler_UsesRetailTiming(void);
 int NativeReplayScheduler_ConfigureFromArgs(int argc, char **argv);
 void NativeReplayScheduler_Shutdown(void);
 int NativeReplayScheduler_RequestStart(void);

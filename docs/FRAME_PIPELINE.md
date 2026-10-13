@@ -1,12 +1,15 @@
 # Preparing configurable presentation rates
 
 The native frame pipeline now separates tick-owned preparation from execution of
-prepared GPU packets. Timing still follows retail NTSC (two VBlanks per update,
-about 29.9 updates/s). This change does not unlock 60/120 FPS or interpolate motion.
+prepared GPU packets. Simulation follows retail NTSC (two VBlanks per update,
+about 29.9 updates/s), while presentation can independently target 1–240 FPS.
+Repeated presentations display the same prepared pose; motion is not interpolated.
 
 ## Ownership and order
 
-The native main loop runs these operations once per existing game frame:
+In normal native state 3, the scheduler waits for a simulation tick before these
+operations. Between ticks it emits VBlanks and presents the cached frame when the
+renderer deadline is due. Each update runs:
 
 1. `MainFrame_BeginUpdate`: hub loading hook and retail frame bookkeeping.
 2. `MainFrame_ResetDB`: select/reset graphical buffers, OT and GPU link ranges.
@@ -14,10 +17,13 @@ The native main loop runs these operations once per existing game frame:
 4. `MainFrame_PrepareFrame`: build the frame's GPU packets. This owns the retail
    mixed update/draw routines, including menu input, HUD transitions, weather,
    texture animation, pause capture, fades, memory-card servicing, and race flag.
-5. `RenderVSYNC` and `RenderPrepareSubmit`: preserve the existing VBlank wait,
-   stall measurement, flip countdown and draw/display environment selection.
-6. `MainFrame_RenderFrame`: execute the prepared OT through `RenderSubmit`.
-7. Existing end-of-frame work, including presentation, adventure hints and replay.
+5. `DrawSync` and `RenderPrepareSubmit`: finish GPU bookkeeping, reset the flip
+   countdown and select draw/display environments. The scheduler already owns
+   VBlank waits. Synchronous compatibility paths retain `RenderVSYNC` instead.
+6. `Platform_CommitPreparedFrame`: cache the prepared OT and present it if due.
+   Presentation executes `MainFrame_RenderFrame` / `RenderSubmit` and ends the
+   host frame without waiting for the FPS cap.
+7. Existing end-of-update work, including adventure hints and replay.
 
 `MainFrame_UpdateLate` owns pickup AI and lap statistics. Preparation calls it at
 the original post-geometry position, preserving its loading, pause and geometry
@@ -36,9 +42,48 @@ belong to `MainFrame_BeginUpdate`. The PSX path retains the original sequence.
 This is a packet preparation/execution boundary, not yet a pure scene builder.
 Future interpolation must split the remaining mixed update/draw helpers before
 regenerating packets for intermediate poses. Extra presentations can currently
-reuse prepared packets, but those display the same pose. The scheduler, input
-latching across independent ticks, snapshot interpolation and animation smoothing
-remain later roadmap work.
+reuse prepared packets, but those display the same pose. Snapshot interpolation
+and animation smoothing remain later roadmap work.
+
+## Independent scheduler
+
+`native_frame_scheduler.c` accumulates absolute host deadlines using the NTSC
+ratio 897619 / 53693175 seconds per VBlank, retaining fractional counter ticks.
+Every pair of VBlanks releases one update. `native_frame_loop.c` pumps host events,
+emits the production VBlank callback (root counters, pad sampling and audio), and
+services presentation deadlines separately. It wakes at least every 5 ms for
+host events. `MainFrame_GameLogic` integrates one `ELAPSED_MS` (32 retail units)
+step regardless of host elapsed time or presentation rate.
+
+Short delays catch up at most eight due VBlanks, with updates interleaved after
+each pair. Longer stalls or clock rollback discard overdue host time and rebase
+the deadline, preserving an unfinished VBlank pair. This deliberately slows
+simulation through a pathological stall instead of producing an unbounded burst.
+Slow GPU submission can still delay both clocks; the scheduler separates timing
+ownership on one host thread, rather than running simulation on another thread.
+
+Cached packets are invalidated before every update, on checkpoint restore and
+before explicit synchronous VSync calls. State changes, synchronous loading and
+scrapbook use the existing retail wait path. Internal recording, armed recording
+and playback also use that path to preserve version-2 VSync packet/input ordering.
+Their frame presentation is capped but is not repeated between updates. The PSX
+path remains unchanged. Scheduler deadlines are host-only and are not serialized.
+
+Profiler `presentations.csv` contains one row per actual swap, associated with its
+prepared simulation frame. `frame_times.csv` adds `simulation_elapsed_s` to
+measure update cadence without using the latest swap timestamp. Tick CPU scopes
+exclude the scheduler wait and cached presentations between updates. Boot/VRAM
+presentations precede the first simulation frame and have frame index zero.
+Internal `--perf-frames N` stops cleanly after N captured simulation frames.
+
+For example, use a configuration containing `{"video":{"max_fps":120}}`:
+
+```sh
+build-macos-arm64-game/ctr_native --config /absolute/path/fps-120.json --perf-dir /absolute/path/perf-120 --perf-frames 450
+```
+
+This checks live scheduler timing. It does not certify replay parity or motion
+interpolation.
 
 ## Gameplay baseline
 
@@ -77,6 +122,13 @@ format version changes are required.
 
 ## Automated checks
 
+- `ctr_native_frame_scheduler`: identical 598 VBlanks and 299 updates over ten
+  simulated seconds at caps of 1, 10, 20, 30, 60, 75, 120, 144 and 240 FPS;
+  fractional deadlines, short catch-up, long-stall rebasing and clock rollback.
+- `ctr_native_frame_loop`: production wait/present code and VBlank callback,
+  with substituted host clock/GPU boundaries. At 10/30/60/120 FPS, 150 ticks keep
+  identical root counters, input/audio callbacks and fixture simulation state
+  while presentation counts differ. Also checks invalidation and replay fallback.
 - `ctr_native_frame_present`: submits the same prepared frame 120 times and
   verifies that tracker state (except the draw flag), global game data, pads and
   OT packets remain byte-for-byte unchanged, using the production presentation
@@ -88,6 +140,28 @@ format version changes are required.
 
 These checks do not certify all tracks, split screen, complete laps, every turbo
 mechanic or audio parity. Actual replay validation results are recorded separately.
+
+## Scheduler validation on 2026-10-14
+
+Both complete-game presets pass **43/43 CTest entries**, including ASan/UBSan.
+Four separate live intro runs capture 450 simulation frames each with copied
+assets and isolated save storage. Excluding the first 100 frames and boot swaps:
+
+| Configured ceiling | Simulation updates/s | Actual presentations/s | Minimum swap interval |
+| --- | --- | --- | --- |
+| 10 FPS | 29.909 | 9.779 | 101.147 ms |
+| 30 FPS | 29.908 | 28.275 | 34.029 ms |
+| 60 FPS | 29.919 | 53.182 | 17.290 ms |
+| 120 FPS | 29.910 | 98.858 | 8.838 ms |
+
+Every steady-state update records `elapsed_time_ms=32` and exactly two VBlank
+callbacks, including the 10 FPS run. No swap exceeds its configured ceiling.
+These are short local intro smoke measurements, not race gameplay equivalence
+or guaranteed throughput on other hardware. The production-loop fixture covers
+input/audio callback counts; no complete-track or replay parity claim follows.
+Captures are retained locally in `debug/fps-scheduler/fps-{10,30,60,120}`.
+An additional 450-frame intro run at a 120 FPS ceiling with ASan/UBSan exits
+cleanly without sanitizer diagnostics (`debug/fps-scheduler/sanitized-120`).
 
 ## Validation on 2026-10-13
 

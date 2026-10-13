@@ -40,28 +40,30 @@ textured water after this correction. Regression tests cover host arena capacity
 BSP workspace bounds, shared clipped/unclipped vertex projection, and water
 material selection, UVs, blending, and invalid environment-map bounds.
 
-Frame pacing follows the original NTSC timing: roughly **29.9 FPS** with two
-VBlanks per game frame. The renderer has a separate monotonic presentation clock
-and enforces the configured `max_fps` cap (30 by default), waiting only for the
-time remaining after game work and VSync. It exposes elapsed time, the actual
-presentation delta, and a visual
-animation delta capped at 250 ms after stalls through `NativeRenderer_GetTime()`.
-The first presentation has a zero delta. Late presentations restart the deadline
-without catch-up bursts. This clock does not drive physics, audio, VBlank
-callbacks, or replay state; existing game animations still use retail timing.
-Profiling CSVs include presentation indices, deltas, elapsed time, and a separate
-`render_wait_ms` bucket; this wait is excluded from reported CPU work time.
-An interactive profiler run with sanitizers recorded 4,154 presentation intervals
-across the intro, main menu, and Crash Cove: none was shorter than 33.33 ms, and
-the median was 33.71 ms (about **29.7 FPS**). Loading and host stalls can reduce
-average FPS; this is not a benchmark across all tracks or machines.
+Native simulation follows original NTSC timing: roughly **29.9 updates/s**, with
+two VBlanks and a fixed 32-unit retail timestep per update. An independent host
+scheduler emits VBlank callbacks for input, audio and timers, and runs simulation
+even when `video.max_fps` is below 30. The renderer presents prepared GPU packets
+at the configured ceiling (1–240, default 30), repeating the latest pose between
+updates at higher rates. Motion interpolation remains future work. Loading,
+scrapbook and internal recording/replay retain their synchronous retail timing.
+
+The renderer's monotonic clock exposes elapsed time, presentation delta and a
+visual animation delta capped at 250 ms after stalls through
+`NativeRenderer_GetTime()`. The first presentation has a zero delta; late
+presentations restart the deadline without catch-up bursts. Profiling writes
+every swap to `presentations.csv` and measures simulation time separately in
+`frame_times.csv`. Short intro runs at ceilings of 10, 30, 60 and 120 FPS preserve
+about 29.9 updates/s; achieved presentation rates depend on GPU work and host
+stalls. See the [scheduler checks](docs/FRAME_PIPELINE.md#independent-scheduler)
+for measurements and compatibility limits.
 The runtime prints an FPS average every 2,000 rendered frames.
 
 Native frame preparation now runs once per game update; presentation executes its
 prepared GPU packets without ticking gameplay. Profiling also records player/bot
 simulation observations in `drivers.csv` for exact before/after replay comparisons.
 See [frame pipeline and baseline checks](docs/FRAME_PIPELINE.md) for ownership,
-validation commands, and the remaining work before 60/120 FPS rendering.
+validation commands, and the remaining work for interpolated motion.
 
 These checks are smoke tests, not a completed playthrough. All tracks and game
 modes, physical controllers, multiplayer, visual parity, and whole-game
@@ -332,9 +334,10 @@ colon inverts an axis, e.g. `axis:-leftx`. Controller stick settings
 `axis_left_x`, `axis_left_y`, `axis_right_x`, and `axis_right_y` require an axis
 binding or `none`.
 
-Raising `max_fps` above 30 does not unlock 60 FPS gameplay: retail VBlank timing
-still governs the simulation and most game frames. A lower ceiling reduces the
-presentation rate. Resolution scales the output; it does not replace the game's
+Raising `max_fps` above 30 enables additional presentations of the latest prepared
+pose. Simulation and existing animations remain at their original NTSC cadence;
+there is no interpolation yet. A lower ceiling reduces presentation rate while
+simulation continues independently. Resolution scales the output; it does not replace the game's
 internal render resolution or change the compiled 4:3/widescreen game layout.
 F11/fullscreen and F3/filter changes apply to the current session and do not
 rewrite the JSON file.

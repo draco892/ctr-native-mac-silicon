@@ -106,6 +106,9 @@ u32 main(void)
 
 	do
 	{
+#ifdef CTR_NATIVE
+		Platform_WaitForGameTick(gGT, gGS, sdata->mainGameState == 3 && gGT->levelID != SCRAPBOOK);
+#endif
 #ifndef CTR_NATIVE
 		// wont happen under normal conditions
 		if (sdata->mainGameState == 5)
@@ -459,21 +462,28 @@ u32 main(void)
 #ifdef CTR_INTERNAL
 			NativePerf_BeginScope(NATIVE_PERF_BUCKET_MAINFRAME_RENDER_VSYNC);
 #endif
-			RenderVSYNC(gGT);
+			if (Platform_UsesIndependentFrameTiming())
+			{
+				gGT->clockDurationStall = Timer_GetTime_Total();
+				DrawSync(0);
+			}
+			else
+			{
+				RenderVSYNC(gGT);
+			}
 #ifdef CTR_INTERNAL
 			NativePerf_EndScope(NATIVE_PERF_BUCKET_MAINFRAME_RENDER_VSYNC);
 #endif
 			RenderPrepareSubmit(gGT);
 #endif
-			MainFrame_RenderFrame(gGT, gGS);
 #ifdef CTR_NATIVE
+			Platform_CommitPreparedFrame(gGT, gGS);
 			gGT->frameTimer_notPaused = gGT->frameTimer_VsyncCallback;
+#else
+			MainFrame_RenderFrame(gGT, gGS);
 #endif
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
 			NativePerf_EndScope(NATIVE_PERF_BUCKET_RENDER_FRAME);
-#endif
-#ifdef CTR_NATIVE
-			Platform_EndFrame();
 #endif
 
 
@@ -496,6 +506,7 @@ u32 main(void)
 
 				MainPerf_RecordDrivers(gGT);
 				NativePerf_EndFrame(&perfFrameInfo);
+				if (NativePerf_ShouldStop()) return 0;
 			}
 #endif
 			break;

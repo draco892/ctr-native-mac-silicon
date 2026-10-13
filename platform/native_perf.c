@@ -12,6 +12,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(_WIN32)
@@ -90,10 +91,13 @@ global_variable const struct NativePerfBucketInfo s_bucketInfo[NATIVE_PERF_BUCKE
 global_variable FILE *s_csvFile;
 global_variable FILE *s_gpuCsvFile;
 global_variable FILE *s_driverCsvFile;
+global_variable FILE *s_presentationCsvFile;
 global_variable s32 s_enabled;
 global_variable s32 s_frameOpen;
 global_variable s32 s_rowsSinceFlush;
 global_variable u32 s_frameIndex;
+global_variable u32 s_frameLimit;
+global_variable u64 s_perfOrigin;
 global_variable u32 s_framesOverBudget;
 global_variable u32 s_workFramesOverBudget;
 global_variable u32 s_framesOver40;
@@ -254,7 +258,7 @@ internal void NativePerf_WriteCsvHeader(FILE *file)
 {
 	fprintf(file, "frame_index,total_ms,work_ms,over_budget_ms,work_over_budget_ms,dominant_bucket,dominant_ms,frameCounter,timer,level_id,game_mode1,"
 	              "loading_stage,bool_demo_mode,num_plyr,elapsed_time_ms,vsync_till_flip,vSync_between_drawSync,frameTimer_VsyncCallback,"
-	              "audio_underrun_delta,audio_overflow_delta,audio_queued_frames,presentation_index,presentation_delta_ms,presentation_elapsed_s");
+	              "audio_underrun_delta,audio_overflow_delta,audio_queued_frames,presentation_index,presentation_delta_ms,presentation_elapsed_s,simulation_elapsed_s");
 
 	for (s32 bucket = 0; bucket < NATIVE_PERF_BUCKET_COUNT; bucket++)
 	{
@@ -388,7 +392,21 @@ internal s32 NativePerf_ArgPresent(int argc, char **argv, const char *name)
 int NativePerf_ConfigureFromArgs(int argc, char **argv)
 {
 	const char *outputDir = NativePerf_ArgValue(argc, argv, "--perf-dir");
-	const s32 perfEnabled = NativePerf_ArgPresent(argc, argv, "--perf") || (outputDir != NULL);
+	const char *frameLimit = NativePerf_ArgValue(argc, argv, "--perf-frames");
+	if (NativePerf_ArgPresent(argc, argv, "--perf-frames"))
+	{
+		char *end = NULL;
+		errno = 0;
+		unsigned long value = frameLimit != NULL ? strtoul(frameLimit, &end, 10) : 0;
+		if (frameLimit == NULL || frameLimit[0] < '0' || frameLimit[0] > '9' || errno != 0 ||
+		    end == frameLimit || *end != '\0' || value == 0 || value > 1000000000ul)
+		{
+			fprintf(stderr, "[CTR Perf] --perf-frames requires an integer from 1 to 1000000000.\n");
+			return 1;
+		}
+		s_frameLimit = (u32)value;
+	}
+	const s32 perfEnabled = NativePerf_ArgPresent(argc, argv, "--perf") || (outputDir != NULL) || s_frameLimit != 0;
 
 	if (!perfEnabled)
 	{
@@ -447,6 +465,17 @@ int NativePerf_ConfigureFromArgs(int argc, char **argv)
 	        "pos_x,pos_y,pos_z,velocity_x,velocity_y,velocity_z,speed,reserves,fire_speed,num_turbos,"
 	        "jump_height,jump_cooldown,lap_index,lap_time,actions,collision_flags\n");
 	fflush(s_driverCsvFile);
+	char presentationPath[NATIVE_PERF_PATH_MAX];
+	if (!NativePath_Join(presentationPath, sizeof(presentationPath), NativeStr8_FromCString(s_outputDir), NATIVE_STR8_LIT("presentations.csv")) ||
+	    (s_presentationCsvFile = fopen(presentationPath, "wb")) == NULL)
+	{
+		fprintf(stderr, "[CTR Perf] failed to open presentation CSV in: %s\n", s_outputDir);
+		fclose(s_csvFile); fclose(s_gpuCsvFile); fclose(s_driverCsvFile);
+		s_csvFile = s_gpuCsvFile = s_driverCsvFile = NULL;
+		return 1;
+	}
+	fprintf(s_presentationCsvFile, "presentation_index,simulation_frame_index,delta_ms,elapsed_s\n");
+	fflush(s_presentationCsvFile);
 	s_enabled = 1;
 
 	Platform_Log("[CTR Perf] capturing frame times: %s\n", s_csvPath);
@@ -457,6 +486,11 @@ int NativePerf_ConfigureFromArgs(int argc, char **argv)
 int NativePerf_IsEnabled(void)
 {
 	return s_enabled;
+}
+
+int NativePerf_ShouldStop(void)
+{
+	return s_enabled && s_frameLimit != 0 && s_frameIndex >= s_frameLimit;
 }
 
 void NativePerf_Shutdown(void)
@@ -488,6 +522,11 @@ void NativePerf_Shutdown(void)
 	{
 		fclose(s_driverCsvFile);
 		s_driverCsvFile = NULL;
+	}
+	if (s_presentationCsvFile != NULL)
+	{
+		fclose(s_presentationCsvFile);
+		s_presentationCsvFile = NULL;
 	}
 
 	FILE *summaryFile = fopen(s_summaryPath, "wb");
@@ -537,6 +576,16 @@ void NativePerf_RecordDriver(const struct NativePerfFrameInfo *frame, const stru
 	        driver->actions, driver->collisionFlags);
 }
 
+void NativePerf_RecordPresentation(const struct NativeRenderTime *time)
+{
+	if (!s_enabled || s_presentationCsvFile == NULL || time == NULL) return;
+	fprintf(s_presentationCsvFile, "%llu,%u,%.6f,%.9f\n", (unsigned long long)time->frameIndex,
+	        s_frameOpen || s_frameIndex == 0 ? s_frameIndex : s_frameIndex - 1,
+	        time->deltaSeconds * 1000.0, time->elapsedSeconds);
+	if ((time->frameIndex % NATIVE_PERF_FLUSH_INTERVAL) == 0)
+		fflush(s_presentationCsvFile);
+}
+
 void NativePerf_BeginFrame(const struct NativePerfFrameInfo *info)
 {
 	if (!s_enabled || (info == NULL))
@@ -556,6 +605,7 @@ void NativePerf_BeginFrame(const struct NativePerfFrameInfo *info)
 	s_frameBeginInfo = *info;
 	NativeAudio_GetOutputStats(&s_beginUnderrunFrames, &s_beginOverflowFrames, &s_beginQueuedFrames);
 	s_frameStartCounter = SDL_GetPerformanceCounter();
+	if (s_frameIndex == 0) s_perfOrigin = s_frameStartCounter;
 	s_frameOpen = 1;
 }
 
@@ -595,6 +645,7 @@ void NativePerf_EndFrame(const struct NativePerfFrameInfo *info)
 	const struct NativeRenderTime *renderTime = NativeRenderer_GetTime();
 	fprintf(s_csvFile, ",%llu,%.6f,%.9f", (unsigned long long)renderTime->frameIndex,
 	        renderTime->deltaSeconds * 1000.0, renderTime->elapsedSeconds);
+	fprintf(s_csvFile, ",%.9f", (double)(SDL_GetPerformanceCounter() - s_perfOrigin) / (double)SDL_GetPerformanceFrequency());
 
 	for (s32 bucket = 0; bucket < NATIVE_PERF_BUCKET_COUNT; bucket++)
 	{

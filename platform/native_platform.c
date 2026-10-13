@@ -312,7 +312,7 @@ int Platform_BeginScene(void)
 	}
 
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_PLATFORM_BEGIN_SCENE);
-	// Retail VSync paces game time; the renderer independently enforces its
+	// The scheduler (or synchronous retail VSync) paces game time; the renderer enforces its
 	// presentation deadline. Keep driver swap waits off so neither clock is
 	// quantized to the host monitor's refresh rate.
 	NativeRenderer_UpdateSwapIntervalState(0);
@@ -379,7 +379,7 @@ void Platform_EndScene(void)
 	NativePerf_EndScope(NATIVE_PERF_BUCKET_PLATFORM_END_SCENE);
 }
 
-// VSync owns game timing. NativeRenderer_SwapWindow owns presentation timing;
+// The scheduler or synchronous VSync owns game timing. SwapWindow records presentation timing;
 // Platform_EndFrame finishes the scene and reports FPS without ticking gameplay.
 void Platform_EndFrame(void)
 {
@@ -706,6 +706,11 @@ int VSync(int mode)
 	{
 		return s_nativeVBlankCount;
 	}
+	if (Platform_FrameSchedulerExternalVSync())
+	{
+		s_nextVBlankCounter = 0;
+		s_vblankRemainder = 0;
+	}
 
 	int requestedVBlanks = (mode == 0) ? 1 : mode;
 	emittedVBlanks = 0;
@@ -750,6 +755,11 @@ void Platform_WaitUntilVBlank(int targetVBlank)
 	if (requestedVBlanks <= 0)
 	{
 		return;
+	}
+	if (Platform_FrameSchedulerExternalVSync())
+	{
+		s_nextVBlankCounter = 0;
+		s_vblankRemainder = 0;
 	}
 
 #if defined(CTR_INTERNAL)

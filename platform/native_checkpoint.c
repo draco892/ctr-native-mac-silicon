@@ -2281,6 +2281,7 @@ int NativeCheckpoint_Restore(const void *src, int srcSize)
 
     memset(&s_checkpointSceneRebase, 0, sizeof(s_checkpointSceneRebase));
     NativeSceneAssets_Reset(&gNativeSceneAssets); gNativeSceneAssets=stagedScene;
+    Platform_ResetFrameScheduler();
     return 1;
 failed:
     memset(&s_checkpointSceneRebase, 0, sizeof(s_checkpointSceneRebase));

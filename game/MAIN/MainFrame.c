@@ -216,6 +216,12 @@ void MainFrame_GameLogic(struct GameTracker *gGT, struct GamepadSystem *gGamepad
 
 		iVar4 = Timer_GetTime_Elapsed(gGT->clockFrameStart, &gGT->clockFrameStart);
 		iVar4 = (iVar4 << 5) / 100;
+#ifdef CTR_NATIVE
+		// Retail milliseconds are fixed-point game units, not host milliseconds.
+		// Catch-up updates each integrate one 32-unit step, regardless of FPS.
+		if (Platform_UsesIndependentFrameTiming())
+			iVar4 = ELAPSED_MS;
+#endif
 
 		gGT->elapsedTimeMS = iVar4;
 		if (iVar4 < 0)

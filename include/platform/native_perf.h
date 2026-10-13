@@ -63,14 +63,18 @@ struct NativePerfDriverInfo
 	u32 actions, collisionFlags;
 };
 
+struct NativeRenderTime;
+
 #if defined(CTR_INTERNAL)
 int NativePerf_ConfigureFromArgs(int argc, char **argv);
 int NativePerf_IsEnabled(void);
+int NativePerf_ShouldStop(void);
 void NativePerf_Shutdown(void);
 void NativePerf_BeginFrame(const struct NativePerfFrameInfo *info);
 void NativePerf_EndFrame(const struct NativePerfFrameInfo *info);
 void NativePerf_RecordGpuFrame(u32 frameIndex, f64 gpuMs);
 void NativePerf_RecordDriver(const struct NativePerfFrameInfo *frame, const struct NativePerfDriverInfo *driver);
+void NativePerf_RecordPresentation(const struct NativeRenderTime *time);
 void NativePerf_BeginScope(enum NativePerfBucket bucket);
 void NativePerf_EndScope(enum NativePerfBucket bucket);
 #else
@@ -89,6 +93,8 @@ static inline int NativePerf_IsEnabled(void)
 {
 	return 0;
 }
+
+static inline int NativePerf_ShouldStop(void) { return 0; }
 
 static inline void NativePerf_BeginFrame(const struct NativePerfFrameInfo *info)
 {
@@ -110,6 +116,11 @@ static inline void NativePerf_RecordDriver(const struct NativePerfFrameInfo *fra
 {
 	(void)frame;
 	(void)driver;
+}
+
+static inline void NativePerf_RecordPresentation(const struct NativeRenderTime *time)
+{
+	(void)time;
 }
 
 static inline void NativePerf_BeginScope(enum NativePerfBucket bucket)

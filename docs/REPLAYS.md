@@ -18,6 +18,14 @@ payload. Full ARM64 gameplay/replay validation still requires complete executabl
 integration; the portable relocation/container tests run independently on ARM64.
 See [ARM64 progress](ARM64_PORT.md) for supported tests and remaining work.
 
+Internal recording, armed recording and playback retain synchronous retail VSync
+timing to preserve the existing packet/input order. The independent presentation
+scheduler is used by live play; recording/playback do not repeat frames between
+updates. Checkpoint restore invalidates cached render packets and host deadlines.
+The existing ARM64 driver-pointer restore failure remains unresolved; see
+[frame pipeline validation](FRAME_PIPELINE.md#validation-on-2026-10-13). Passing
+scheduler tests do not establish whole-game replay equivalence.
+
 ## Quick State
 
 - `F5`: save `debug/states/quick.ctrstates`

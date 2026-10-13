@@ -14,6 +14,8 @@ void NativeRenderer_EndGpuFrame(void);
 void NativeRenderer_FinishGpuMeasurements(void);
 void NativeRenderer_UpdateSwapIntervalState(int swapInterval);
 void NativeRenderer_SwapWindow(void);
+uint64_t NativeRenderer_PresentationWaitTicks(uint64_t now);
+void NativeRenderer_SetScheduledPresentation(int scheduled);
 /* Snapshot of the last completed presentation; independent of game time. */
 const struct NativeRenderTime *NativeRenderer_GetTime(void);
 void NativeRenderer_StoreFrameBuffer(int x, int y, int w, int h);

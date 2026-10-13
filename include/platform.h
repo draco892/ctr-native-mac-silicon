@@ -28,6 +28,13 @@ void Platform_PollHostEvents(void);
 int Platform_PollInput(void);
 
 #if defined(CTR_NATIVE)
+struct GameTracker;
+struct GamepadSystem;
+void Platform_WaitForGameTick(struct GameTracker *tracker, struct GamepadSystem *pads, int allowIndependentTiming);
+void Platform_CommitPreparedFrame(struct GameTracker *tracker, struct GamepadSystem *pads);
+int Platform_UsesIndependentFrameTiming(void);
+int Platform_FrameSchedulerExternalVSync(void);
+void Platform_ResetFrameScheduler(void);
 int NikoGetEnterKey(void);
 #endif
 

@@ -20,6 +20,7 @@
 #include <string.h>
 
 static struct NativeRenderClock s_renderClock;
+static int s_scheduledPresentation;
 
 #ifdef _WIN32
 #include "platform/native_win32.h"
@@ -2119,10 +2120,10 @@ void NativeRenderer_PresentVRAMDisplay(void)
 void NativeRenderer_SwapWindow(void)
 {
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_RENDER_WAIT);
-	/* Retail VSync normally already consumed this interval. Wait only for the
-	 * remaining time, including VRAM-only presentation paths that bypass it. */
+	/* Scheduled frames were checked before GPU submission. Synchronous boot/video
+	 * paths still wait here for the remaining presentation interval. */
 	uint64_t remaining;
-	while ((remaining = NativeRenderClock_WaitTicks(&s_renderClock, SDL_GetPerformanceCounter())) != 0)
+	while (!s_scheduledPresentation && (remaining = NativeRenderClock_WaitTicks(&s_renderClock, SDL_GetPerformanceCounter())) != 0)
 	{
 		uint64_t nanoseconds = (uint64_t)((double)remaining * 1000000000.0 / (double)s_renderClock.frequency);
 		SDL_DelayPrecise(nanoseconds > 0 ? nanoseconds : 1);
@@ -2131,7 +2132,18 @@ void NativeRenderer_SwapWindow(void)
 	NativePerf_BeginScope(NATIVE_PERF_BUCKET_SWAP_WINDOW);
 	SDL_GL_SwapWindow(g_window);
 	NativeRenderClock_Presented(&s_renderClock, SDL_GetPerformanceCounter());
+	NativePerf_RecordPresentation(&s_renderClock.time);
 	NativePerf_EndScope(NATIVE_PERF_BUCKET_SWAP_WINDOW);
+}
+
+uint64_t NativeRenderer_PresentationWaitTicks(uint64_t now)
+{
+	return NativeRenderClock_WaitTicks(&s_renderClock, now);
+}
+
+void NativeRenderer_SetScheduledPresentation(int scheduled)
+{
+	s_scheduledPresentation = scheduled;
 }
 
 const struct NativeRenderTime *NativeRenderer_GetTime(void)

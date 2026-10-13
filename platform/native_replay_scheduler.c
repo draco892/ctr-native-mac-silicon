@@ -1395,6 +1395,12 @@ int NativeReplayScheduler_ConfigureFromArgs(int argc, char **argv)
 	return 0;
 }
 
+int NativeReplayScheduler_UsesRetailTiming(void)
+{
+	// Preserve version-2 VSync packet/input ordering, including an armed report.
+	return s_mode != NATIVE_REPLAY_MODE_NONE;
+}
+
 void NativeReplayScheduler_Shutdown(void)
 {
 	NativeReplayScheduler_CloseFiles();
