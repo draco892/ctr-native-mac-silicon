@@ -50,6 +50,32 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ctr_native_render_timing COMMAND ctr_native_render_timing_tests)
 
+    add_executable(ctr_native_frame_present_tests tests/native_frame_present_tests.c)
+    set_target_properties(ctr_native_frame_present_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_frame_present_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_frame_present_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_frame_present_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_frame_present_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_frame_present_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_frame_present COMMAND ctr_native_frame_present_tests)
+
+    add_executable(ctr_native_state_alignment_tests tests/native_state_alignment_tests.c platform/native_state.c)
+    set_target_properties(ctr_native_state_alignment_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_state_alignment_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_state_alignment_tests PRIVATE CTR_NATIVE CTR_INTERNAL)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_state_alignment_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_state_alignment_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_state_alignment_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME ctr_native_state_alignment COMMAND ctr_native_state_alignment_tests)
+
     add_executable(ctr_native_memory_tests
         tests/native_memory_tests.c
         game/MEMPACK.c
@@ -433,6 +459,8 @@ if(BUILD_TESTING)
     endforeach()
 
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME ctr_native_gameplay_baseline
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native_gameplay_baseline_tests.py)
     add_test(NAME ctr_native_asset_validate
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native_asset_validate_tests.py
             $<TARGET_FILE:ctr_native_asset_validate>)

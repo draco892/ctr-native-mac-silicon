@@ -89,6 +89,7 @@ global_variable const struct NativePerfBucketInfo s_bucketInfo[NATIVE_PERF_BUCKE
 
 global_variable FILE *s_csvFile;
 global_variable FILE *s_gpuCsvFile;
+global_variable FILE *s_driverCsvFile;
 global_variable s32 s_enabled;
 global_variable s32 s_frameOpen;
 global_variable s32 s_rowsSinceFlush;
@@ -431,6 +432,21 @@ int NativePerf_ConfigureFromArgs(int argc, char **argv)
 	}
 	fprintf(s_gpuCsvFile, "renderer_frame_index,gpu_ms\n");
 	fflush(s_gpuCsvFile);
+	char driverPath[NATIVE_PERF_PATH_MAX];
+	if (!NativePath_Join(driverPath, sizeof(driverPath), NativeStr8_FromCString(s_outputDir), NATIVE_STR8_LIT("drivers.csv")) ||
+	    (s_driverCsvFile = fopen(driverPath, "wb")) == NULL)
+	{
+		fprintf(stderr, "[CTR Perf] failed to open driver CSV in: %s\n", s_outputDir);
+		fclose(s_csvFile);
+		fclose(s_gpuCsvFile);
+		s_csvFile = NULL;
+		s_gpuCsvFile = NULL;
+		return 1;
+	}
+	fprintf(s_driverCsvFile, "frame_index,frame_counter,timer,level_id,game_mode,loading_stage,elapsed_time,bucket,driver_id,"
+	        "pos_x,pos_y,pos_z,velocity_x,velocity_y,velocity_z,speed,reserves,fire_speed,num_turbos,"
+	        "jump_height,jump_cooldown,lap_index,lap_time,actions,collision_flags\n");
+	fflush(s_driverCsvFile);
 	s_enabled = 1;
 
 	Platform_Log("[CTR Perf] capturing frame times: %s\n", s_csvPath);
@@ -468,6 +484,11 @@ void NativePerf_Shutdown(void)
 		fclose(s_gpuCsvFile);
 		s_gpuCsvFile = NULL;
 	}
+	if (s_driverCsvFile != NULL)
+	{
+		fclose(s_driverCsvFile);
+		s_driverCsvFile = NULL;
+	}
 
 	FILE *summaryFile = fopen(s_summaryPath, "wb");
 	if (summaryFile != NULL)
@@ -502,6 +523,18 @@ void NativePerf_RecordGpuFrame(u32 frameIndex, f64 gpuMs)
 	{
 		s_maxGpuFrameMs = gpuMs;
 	}
+}
+
+void NativePerf_RecordDriver(const struct NativePerfFrameInfo *frame, const struct NativePerfDriverInfo *driver)
+{
+	if (!s_enabled || !s_frameOpen || s_driverCsvFile == NULL || frame == NULL || driver == NULL)
+		return;
+	fprintf(s_driverCsvFile, "%u,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,%u\n",
+	        s_frameIndex, frame->frameCounter, frame->timer, frame->levelID, frame->gameMode1, frame->loadingStage, frame->elapsedTimeMS,
+	        driver->bucket, driver->driverID, driver->pos[0], driver->pos[1], driver->pos[2],
+	        driver->velocity[0], driver->velocity[1], driver->velocity[2], driver->speed, driver->reserves,
+	        driver->fireSpeed, driver->numTurbos, driver->jumpHeight, driver->jumpCooldown, driver->lapIndex, driver->lapTime,
+	        driver->actions, driver->collisionFlags);
 }
 
 void NativePerf_BeginFrame(const struct NativePerfFrameInfo *info)
@@ -574,6 +607,7 @@ void NativePerf_EndFrame(const struct NativePerfFrameInfo *info)
 	if (s_rowsSinceFlush >= NATIVE_PERF_FLUSH_INTERVAL)
 	{
 		fflush(s_csvFile);
+		fflush(s_driverCsvFile);
 		s_rowsSinceFlush = 0;
 	}
 

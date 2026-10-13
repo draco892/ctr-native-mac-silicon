@@ -380,6 +380,13 @@ void MainDrawCb_DrawSync(void);
 
 void MainFrame_GameLogic(struct GameTracker *gGT, struct GamepadSystem *gGamepads);
 void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamepads);
+#ifdef CTR_NATIVE
+/* Tick-owned preparation; never call these for an extra presentation. */
+void MainFrame_BeginUpdate(struct GameTracker *gGT);
+void MainFrame_PrepareFrame(struct GameTracker *gGT, struct GamepadSystem *gGamepads);
+void MainFrame_UpdateLate(struct GameTracker *gGT);
+void RenderPrepareSubmit(struct GameTracker *gGT);
+#endif
 void DrawUnpluggedMsg(struct GameTracker *gGT, struct GamepadSystem *gGamepads);
 void DrawFinalLap(struct GameTracker *gGT);
 void RainLogic(struct GameTracker *gGT);

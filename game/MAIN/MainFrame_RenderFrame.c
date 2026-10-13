@@ -16,7 +16,14 @@
 volatile int gCtrDebugSkipLevelGeometry = 0;
 #endif
 
+#ifdef CTR_NATIVE
+// This retail packet builder includes mixed update/draw routines (menus, HUD,
+// weather, pause capture). Run it exactly once per simulation update. The native
+// presentation entry point below only executes its already prepared packets.
+void MainFrame_PrepareFrame(struct GameTracker *gGT, struct GamepadSystem *gGamepads)
+#else
 void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamepads)
+#endif
 {
 	struct Level *lev = gGT->level1;
 	struct mesh_info *ptr_mesh_info = 0;
@@ -165,6 +172,9 @@ void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamep
 			WindowDivsionLines(gGT);
 		}
 
+#ifdef CTR_NATIVE
+		MainFrame_UpdateLate(gGT);
+#else
 		// if game is not loading
 		if (sdata->Loading.stage == LOAD_IDLE)
 		{
@@ -174,18 +184,9 @@ void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamep
 				PickupBots_Update();
 			}
 
-#if defined(CTR_NATIVE)
-			// NOTE(aalhendi): Native menu/adventure-hub LEVs may publish no
-			// restart table. Retail lap stats assume the table exists whenever
-			// this caller reaches them; keep the retail lap path intact.
-			if ((gGT->level1 != NULL) && (gGT->level1->ptr_restart_points != NULL) && (gGT->level1->cnt_restart_points != 0))
-			{
-				PlayLevel_UpdateLapStats();
-			}
-#else
 			PlayLevel_UpdateLapStats();
-#endif
 		}
+#endif
 		MAINFRAME_PERF_END(NATIVE_PERF_BUCKET_MAINFRAME_POST_LEVEL);
 	}
 
@@ -215,15 +216,15 @@ void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamep
 	RenderDispEnv_UI(gGT);
 	MAINFRAME_PERF_END(NATIVE_PERF_BUCKET_MAINFRAME_UI);
 
+#ifndef CTR_NATIVE
 	MAINFRAME_PERF_BEGIN(NATIVE_PERF_BUCKET_MAINFRAME_RENDER_VSYNC);
 	RenderVSYNC(gGT);
 	MAINFRAME_PERF_END(NATIVE_PERF_BUCKET_MAINFRAME_RENDER_VSYNC);
 
-#ifndef CTR_NATIVE
 	RenderFMV();
-#endif
 
 	RenderSubmit(gGT);
+#endif
 }
 
 void DrawUnpluggedMsg(struct GameTracker *gGT, struct GamepadSystem *gGamepads)
@@ -1284,7 +1285,11 @@ void RenderFMV()
 }
 #endif
 
+#ifdef CTR_NATIVE
+void RenderPrepareSubmit(struct GameTracker *gGT)
+#else
 void RenderSubmit(struct GameTracker *gGT)
+#endif
 {
 	// 1 VSYNC = 60fps
 	// 2 VSYNCs = 30fps
@@ -1326,15 +1331,12 @@ void RenderSubmit(struct GameTracker *gGT)
 	gGT->frontBuffer = &gGT->db[1 - gGT->swapchainIndex];
 #endif
 
+#ifdef CTR_NATIVE
+	MAINFRAME_PERF_END(NATIVE_PERF_BUCKET_RENDER_SUBMIT);
+#else
 	gGT->bool_DrawOTag_InProgress = 1;
-
 	void *ot = &gGT->pushBuffer[0].ptrOT[0x3ff];
-
 	DrawOTag(ot);
-
 	gGT->frameTimer_notPaused = gGT->frameTimer_VsyncCallback;
-
-#if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
-	NativePerf_EndScope(NATIVE_PERF_BUCKET_RENDER_SUBMIT);
 #endif
 }

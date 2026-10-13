@@ -124,6 +124,7 @@
 
 #include "MAIN/MainFrame.c"
 #include "MAIN/MainFrame_RenderFrame.c"
+#include "MAIN/MainFrame_Present.c"
 
 #include "MAIN/MainFreeze.c"
 

@@ -49,6 +49,32 @@ static struct NativeReplaySchedulerFrameInfo MainReplayScheduler_FrameInfo(struc
 
 	return info;
 }
+
+static void MainPerf_RecordDrivers(struct GameTracker *gGT)
+{
+	// Thread buckets are reused by cutscenes and contain transitional objects
+	// during loading. The race's canonical driver table owns the typed entries.
+	if (!NativePerf_IsEnabled() || sdata->Loading.stage != LOAD_IDLE ||
+	    !LOAD_IsOpen_RacingOrBattle() || (gGT->gameMode1 & (LOADING | GAME_CUTSCENE | MAIN_MENU | ADVENTURE_ARENA)) != 0)
+		return;
+	const struct NativePerfFrameInfo frame = MainPerf_FrameInfo(gGT);
+	for (int i = 0; i < 8; i++)
+	{
+		const struct Driver *d = gGT->drivers[i];
+		if (d == NULL)
+			continue;
+		struct NativePerfDriverInfo info = {
+		    .bucket = i < gGT->numPlyrCurrGame ? PLAYER : ROBOT, .driverID = d->driverID,
+		    .pos = {d->posCurr.x, d->posCurr.y, d->posCurr.z},
+		    .velocity = {d->velocity.x, d->velocity.y, d->velocity.z},
+		    .speed = d->speed, .reserves = d->reserves, .fireSpeed = d->fireSpeed, .numTurbos = d->numTurbos,
+		    .jumpHeight = d->jumpHeightCurr, .jumpCooldown = d->jump_CooldownMS, .lapIndex = d->lapIndex,
+		    .lapTime = d->lapTime, .actions = d->actionsFlagSet, .collisionFlags = d->collisionFlags,
+		};
+		NativePerf_RecordDriver(&frame, &info);
+	}
+}
+
 #endif
 
 #ifdef CTR_NATIVE
@@ -336,6 +362,9 @@ u32 main(void)
 			GAMEPAD_ProcessAnyoneVars(gGS);
 
 			// Start new frame (ClearOTagR)
+#ifdef CTR_NATIVE
+			MainFrame_BeginUpdate(gGT);
+#endif
 			MainFrame_ResetDB(gGT);
 
 			if (
@@ -423,7 +452,23 @@ u32 main(void)
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
 			NativePerf_BeginScope(NATIVE_PERF_BUCKET_RENDER_FRAME);
 #endif
+#ifdef CTR_NATIVE
+			MainFrame_PrepareFrame(gGT, gGS);
+			// Retail timing still belongs to the update loop. Drawing prepared
+			// packets again must not emit VBlank callbacks (input/audio/timers).
+#ifdef CTR_INTERNAL
+			NativePerf_BeginScope(NATIVE_PERF_BUCKET_MAINFRAME_RENDER_VSYNC);
+#endif
+			RenderVSYNC(gGT);
+#ifdef CTR_INTERNAL
+			NativePerf_EndScope(NATIVE_PERF_BUCKET_MAINFRAME_RENDER_VSYNC);
+#endif
+			RenderPrepareSubmit(gGT);
+#endif
 			MainFrame_RenderFrame(gGT, gGS);
+#ifdef CTR_NATIVE
+			gGT->frameTimer_notPaused = gGT->frameTimer_VsyncCallback;
+#endif
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
 			NativePerf_EndScope(NATIVE_PERF_BUCKET_RENDER_FRAME);
 #endif
@@ -449,6 +494,7 @@ u32 main(void)
 			{
 				struct NativePerfFrameInfo perfFrameInfo = MainPerf_FrameInfo(gGT);
 
+				MainPerf_RecordDrivers(gGT);
 				NativePerf_EndFrame(&perfFrameInfo);
 			}
 #endif

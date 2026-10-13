@@ -69,6 +69,29 @@ void SpuSetVoiceADSRAttr(int voice, unsigned short ar, unsigned short dr,
     (void)armode; (void)srmode; (void)rrmode;
 }
 #include "../game/HOWL/HOWL_Voiceline_PoolInit.c"
+struct Data data;
+static int resumedMusicIndex = -1;
+void Smart_EnterCriticalSection(void) { sdata->criticalSectionCount++; }
+void Smart_ExitCriticalSection(void) { sdata->criticalSectionCount--; }
+void CDSYS_XAPauseRequest(void) {}
+void CseqMusic_Pause(void) {}
+void CseqMusic_Resume(void) {}
+void CseqMusic_StopAll(void) {}
+s32 howl_VolumeGet(s32 type) { (void)type; return 255; }
+void howl_VolumeSet(s32 type, u8 vol) { (void)type; (void)vol; }
+void Channel_ParseSongToChannels(void) {}
+void Channel_UpdateChannels(void) {}
+void Channel_DestroyAll_LowLevel(int opt, b32 keep, u8 type) { (void)opt; (void)keep; (void)type; }
+void Channel_SetVolume(struct ChannelAttr *attr, int volume, int lr)
+{ (void)volume; (void)lr; memset(attr, 0, sizeof(*attr)); }
+void howl_InitChannelAttr_Music(struct SongSeq *seq, struct ChannelAttr *attr, int index, int volume)
+{
+    (void)index; (void)volume;
+    if (seq != &sdata->songSeq[7]) abort();
+    resumedMusicIndex = 7;
+    memset(attr, 0, sizeof(*attr));
+}
+#include "../game/HOWL/HOWL_Playback.c"
 #include "../game/JitPool.c"
 #include "../game/LOAD/LOAD_Howl.c"
 #include "../game/Vehicle/VehTurbo_ProcessBucket.c"
@@ -256,6 +279,39 @@ static int AudioChannels(void)
     return 0;
 }
 
+static int AudioPauseResume(void)
+{
+    Voiceline_PoolInit();
+    struct ChannelStats *playing = (struct ChannelStats *)LIST_RemoveFront(&sdata->channelFree);
+    playing->type = HOWL_CHANNEL_TYPE_MUSIC;
+    playing->soundID = 7;
+    playing->startFrame = 123456;
+    playing->timeLeft = 321;
+    playing->vol = 240;
+    playing->drumIndex_pitchIndex = 12;
+    LIST_AddBack(&sdata->channelTaken, &playing->link.item);
+    howl_PauseAudio();
+    CHECK(sdata->numBackup_ChannelStats == 1 && sdata->channelTaken.count == 0);
+    CHECK(sdata->channelStatsCurr[0].soundID == 7);
+    CHECK(sdata->channelStatsCurr[0].startFrame == 123456);
+    struct ChannelStats *destination = (struct ChannelStats *)sdata->channelFree.first;
+    const u8 channelID = destination->channelID;
+    // The final eight bytes must come from the backup, not the free channel.
+    destination->soundID = 133;
+    destination->startFrame = -99;
+    howl_UnPauseAudio();
+    CHECK(resumedMusicIndex == 7);
+    CHECK(sdata->numBackup_ChannelStats == 0 && sdata->channelTaken.count == 1);
+    CHECK(sdata->channelTaken.first == &destination->link.item);
+    CHECK(destination->channelID == channelID && destination->soundID == 7);
+    CHECK(destination->startFrame == 123456 && destination->timeLeft == 321);
+    CHECK(destination->vol == 240 && destination->drumIndex_pitchIndex == 12);
+    CHECK(destination->link.links.next == NULL && destination->link.links.prev == NULL);
+    CHECK(sdata->criticalSectionCount == 0);
+    Voiceline_PoolInit();
+    return 0;
+}
+
 static void CallbackFirst(void) { callbackCalls++; }
 static void CallbackSecond(void) { callbackCalls += 2; }
 
@@ -285,6 +341,7 @@ int main(void)
     CHECK(CreditsAndGpu() == 0);
     CHECK(GpuCallbacks() == 0);
     CHECK(AudioChannels() == 0);
+    CHECK(AudioPauseResume() == 0);
     CHECK(ScriptArguments() == 0);
     puts("native runtime globals: pools, audio channels/retry, turbo, credits and GPU callbacks/links passed");
     return 0;

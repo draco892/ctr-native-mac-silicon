@@ -63,7 +63,11 @@ static s32 CAM_SkyboxGlow_CalcTilt(struct PushBuffer *pb)
 		cosine = 1;
 	}
 
+#ifdef CTR_NATIVE
+	s32 ratio = CTR_MipsSll(MATH_Sin(pb->rot.z), 12) / cosine;
+#else
 	s32 ratio = (MATH_Sin(pb->rot.z) << 12) / cosine;
+#endif
 	s32 shifted = (s32)((u32)ratio << 8);
 	shifted >>= 12;
 

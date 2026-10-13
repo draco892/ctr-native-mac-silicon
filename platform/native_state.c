@@ -7,6 +7,7 @@
 #include "platform/native_input.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 #define NATIVE_STATE_FOURCC(a, b, c, d) ((u32)(a) | ((u32)(b) << 8) | ((u32)(c) << 16) | ((u32)(d) << 24))
 
@@ -154,8 +155,16 @@ int NativeState_Capture(void *dst, int dstSize)
 	for (u32 i = 0; i < header.regionCount; i++)
 	{
 		struct NativeStateRegion *region = &header.regions[i];
-
-		if (!NativeState_CaptureRegion(region->kind, &bytes[region->offset], (int)region->size))
+		// The file format aligns regions to four bytes; native snapshots can
+		// contain eight-byte fields. Keep the format and use aligned storage.
+		void *aligned = malloc(region->size);
+		if (aligned == NULL)
+			return 0;
+		const int captured = NativeState_CaptureRegion(region->kind, aligned, (int)region->size);
+		if (captured)
+			memcpy(&bytes[region->offset], aligned, region->size);
+		free(aligned);
+		if (!captured)
 		{
 			return 0;
 		}
@@ -166,7 +175,8 @@ int NativeState_Capture(void *dst, int dstSize)
 
 int NativeState_Restore(const void *src, int srcSize)
 {
-	const struct NativeStateHeader *header = (const struct NativeStateHeader *)src;
+	struct NativeStateHeader localHeader;
+	const struct NativeStateHeader *header = &localHeader;
 	const u8 *bytes = (const u8 *)src;
 	u32 i;
 
@@ -174,6 +184,7 @@ int NativeState_Restore(const void *src, int srcSize)
 	{
 		return 0;
 	}
+	memcpy(&localHeader, src, sizeof(localHeader));
 	if ((header->magic != NATIVE_STATE_MAGIC) || (header->version != NATIVE_STATE_VERSION))
 	{
 		return 0;
@@ -209,8 +220,13 @@ int NativeState_Restore(const void *src, int srcSize)
 	for (i = 0; i < header->regionCount; i++)
 	{
 		const struct NativeStateRegion *region = &header->regions[i];
-
-		if (!NativeState_RestoreRegion(region->kind, &bytes[region->offset], (int)region->size))
+		void *aligned = malloc(region->size);
+		if (aligned == NULL)
+			return 0;
+		memcpy(aligned, &bytes[region->offset], region->size);
+		const int restored = NativeState_RestoreRegion(region->kind, aligned, (int)region->size);
+		free(aligned);
+		if (!restored)
 		{
 			return 0;
 		}

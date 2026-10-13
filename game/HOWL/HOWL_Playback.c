@@ -171,8 +171,10 @@ void howl_PauseAudio()
 	Smart_EnterCriticalSection();
 	for (curr = (struct ChannelStats *)sdata->channelTaken.first; curr != NULL; curr = backupNext)
 	{
+#ifndef CTR_NATIVE
 		int *dest;
 		int *src;
+#endif
 
 		backupNext = curr->link.links.next;
 
@@ -180,6 +182,11 @@ void howl_PauseAudio()
 		*ptrFlag |= 1;
 		*ptrFlag &= ~(2);
 
+#ifdef CTR_NATIVE
+		// Native links widen ChannelStats to 40 bytes on ARM64. A retail
+		// eight-word copy drops soundID/startFrame and corrupts resume state.
+		*pausedStats++ = *curr;
+#else
 		dest = (int *)pausedStats++;
 		src = (int *)curr;
 
@@ -192,6 +199,7 @@ void howl_PauseAudio()
 		dest[5] = src[5];
 		dest[6] = src[6];
 		dest[7] = src[7];
+#endif
 
 		LIST_RemoveMember(&sdata->channelTaken, (struct Item *)curr);
 		LIST_AddBack(&sdata->channelFree, (struct Item *)curr);
@@ -254,8 +262,10 @@ void howl_UnPauseAudio()
 	Smart_EnterCriticalSection();
 	for (i = 0, curr = (struct ChannelStats *)sdata->channelFree.first; i < sdata->numBackup_ChannelStats; i++, curr = backupNext)
 	{
+#ifndef CTR_NATIVE
 		int *src;
 		int *dest;
+#endif
 
 		if (curr == NULL)
 		{
@@ -266,6 +276,9 @@ void howl_UnPauseAudio()
 		backupPrev = curr->link.links.prev;
 		backupNext = curr->link.links.next;
 
+#ifdef CTR_NATIVE
+		*curr = *pausedStats++;
+#else
 		src = (int *)pausedStats++;
 		dest = (int *)curr;
 
@@ -278,6 +291,7 @@ void howl_UnPauseAudio()
 		dest[5] = src[5];
 		dest[6] = src[6];
 		dest[7] = src[7];
+#endif
 
 		curr->link.links.next = backupNext;
 		curr->link.links.prev = backupPrev;

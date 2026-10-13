@@ -53,6 +53,16 @@ struct NativePerfFrameInfo
 	s32 frameTimer_VsyncCallback;
 };
 
+/* Pointer-free simulation observations for before/after replay comparisons. */
+struct NativePerfDriverInfo
+{
+	s32 bucket, driverID;
+	s32 pos[3], velocity[3];
+	s32 speed, reserves, fireSpeed, numTurbos;
+	s32 jumpHeight, jumpCooldown, lapIndex, lapTime;
+	u32 actions, collisionFlags;
+};
+
 #if defined(CTR_INTERNAL)
 int NativePerf_ConfigureFromArgs(int argc, char **argv);
 int NativePerf_IsEnabled(void);
@@ -60,6 +70,7 @@ void NativePerf_Shutdown(void);
 void NativePerf_BeginFrame(const struct NativePerfFrameInfo *info);
 void NativePerf_EndFrame(const struct NativePerfFrameInfo *info);
 void NativePerf_RecordGpuFrame(u32 frameIndex, f64 gpuMs);
+void NativePerf_RecordDriver(const struct NativePerfFrameInfo *frame, const struct NativePerfDriverInfo *driver);
 void NativePerf_BeginScope(enum NativePerfBucket bucket);
 void NativePerf_EndScope(enum NativePerfBucket bucket);
 #else
@@ -93,6 +104,12 @@ static inline void NativePerf_RecordGpuFrame(u32 frameIndex, f64 gpuMs)
 {
 	(void)frameIndex;
 	(void)gpuMs;
+}
+
+static inline void NativePerf_RecordDriver(const struct NativePerfFrameInfo *frame, const struct NativePerfDriverInfo *driver)
+{
+	(void)frame;
+	(void)driver;
 }
 
 static inline void NativePerf_BeginScope(enum NativePerfBucket bucket)

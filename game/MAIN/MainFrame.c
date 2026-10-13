@@ -47,6 +47,29 @@ void MainFrame_TogglePauseAudio(b32 bool_pause)
 	return;
 }
 
+#ifdef CTR_NATIVE
+void MainFrame_BeginUpdate(struct GameTracker *gGT)
+{
+	// Preserve the retail tick boundary, independently of graphical buffer resets.
+	LOAD_Hub_Main(sdata->ptrBigfile1);
+	gGT->frameTimer_MainFrame_ResetDB++;
+	CTR_EmptyFunc_MainFrame_ResetDB();
+	DecalGlobal_EmptyFunc_MainFrame_ResetDB();
+}
+
+void MainFrame_UpdateLate(struct GameTracker *gGT)
+{
+	// These ran after geometry generation in retail. Keep that ordering: pickups
+	// and lap events must not be triggered again by drawing the prepared frame.
+	if (sdata->Loading.stage != LOAD_IDLE)
+		return;
+	if ((gGT->gameMode1 & PAUSE_ALL) == 0)
+		PickupBots_Update();
+	if (gGT->level1 != NULL && gGT->level1->ptr_restart_points != NULL && gGT->level1->cnt_restart_points != 0)
+		PlayLevel_UpdateLapStats();
+}
+#endif
+
 void MainFrame_ResetDB(struct GameTracker *gGT)
 {
 	u32 *puVar3;
@@ -56,12 +79,16 @@ void MainFrame_ResetDB(struct GameTracker *gGT)
 
 	// check if new adv hub should be loaded,
 	// this was a random place for ND to put it
+#ifndef CTR_NATIVE
 	LOAD_Hub_Main(sdata->ptrBigfile1);
+#endif
 
 	gGT->swapchainIndex = 1 - gGT->swapchainIndex;
 
 	gGT->backBuffer = &gGT->db[gGT->swapchainIndex];
+#ifndef CTR_NATIVE
 	gGT->frameTimer_MainFrame_ResetDB++;
+#endif
 
 	otSwapchainDB = (CtrRuntimeAddress)gGT->otSwapchainDB[gGT->swapchainIndex];
 
@@ -75,8 +102,10 @@ void MainFrame_ResetDB(struct GameTracker *gGT)
 	MainFrame_RegisterGpuLinkRanges(gGT);
 #endif
 
+#ifndef CTR_NATIVE
 	CTR_EmptyFunc_MainFrame_ResetDB();
 	DecalGlobal_EmptyFunc_MainFrame_ResetDB();
+#endif
 
 	ClearOTagR((u32 *)otSwapchainDB, sdata->gGT->numPlyrCurrGame << 10 | 6);
 

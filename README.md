@@ -57,6 +57,12 @@ the median was 33.71 ms (about **29.7 FPS**). Loading and host stalls can reduce
 average FPS; this is not a benchmark across all tracks or machines.
 The runtime prints an FPS average every 2,000 rendered frames.
 
+Native frame preparation now runs once per game update; presentation executes its
+prepared GPU packets without ticking gameplay. Profiling also records player/bot
+simulation observations in `drivers.csv` for exact before/after replay comparisons.
+See [frame pipeline and baseline checks](docs/FRAME_PIPELINE.md) for ownership,
+validation commands, and the remaining work before 60/120 FPS rendering.
+
 These checks are smoke tests, not a completed playthrough. All tracks and game
 modes, physical controllers, multiplayer, visual parity, and whole-game
 checkpoint/replay behavior still require validation. The ARM64 game remains an
