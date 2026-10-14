@@ -10,7 +10,7 @@
 
 struct NativeConfig
 {
-    int width, height, fullscreen, maxFps, bilinearFiltering;
+    int width, height, fullscreen, maxFps, bilinearFiltering, interpolation;
     int keyboardSlot, axisDeadzone;
     char keyboard[NATIVE_CONFIG_KEYS][NATIVE_CONFIG_NAME_BYTES];
     char controller[NATIVE_CONFIG_CONTROLS][NATIVE_CONFIG_NAME_BYTES];

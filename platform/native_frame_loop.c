@@ -9,6 +9,52 @@
 
 static struct NativeFrameScheduler s_frameScheduler;
 static int s_independentFrameTiming, s_preparedFrameValid;
+static uint64_t s_visualTickCounter;
+
+void Platform_BeginVisualCapture(struct GameTracker *tracker)
+{
+#ifdef CTR_NATIVE_VISUAL_INTERPOLATION
+    static struct { SVec3 pos,rot; } previousCamera[4];
+    static int previousPlayers;
+    int enabled=s_independentFrameTiming && gNativeConfig.maxFps>30 && gNativeConfig.interpolation &&
+        sdata->Loading.stage==LOAD_IDLE && !(tracker->gameMode1 & LOADING);
+    uint64_t signature=(uint64_t)(uintptr_t)tracker->level1 ^ ((uint64_t)(unsigned)tracker->levelID<<32) ^
+        (unsigned)tracker->gameMode1 ^ ((uint64_t)(unsigned)tracker->numPlyrCurrGame<<56) ^ (uint64_t)(uintptr_t)sdata->ptrActiveMenu;
+    for(int i=0;i<tracker->numPlyrCurrGame && i<4;i++) {
+        const struct PushBuffer *camera=&tracker->pushBuffer[i];
+        signature=signature*UINT64_C(1099511628211) ^ tracker->cameraDC[i].mode ^
+            ((uint64_t)tracker->cameraDC[i].nearOrFar<<32) ^ (uint64_t)(uintptr_t)tracker->cameraDC[i].driverToFollow ^
+            ((uint64_t)(unsigned short)camera->rect.w<<16) ^ (unsigned short)camera->rect.h;
+        if(previousPlayers==tracker->numPlyrCurrGame) {
+            const short *now=&camera->pos.x,*last=&previousCamera[i].pos.x;
+            const short *rot=&camera->rot.x,*lastRot=&previousCamera[i].rot.x;
+            for(int axis=0;axis<3;axis++) {
+                int angle=((rot[axis]-lastRot[axis]+2048)&4095)-2048;
+                if(abs(now[axis]-last[axis])>1024 || abs(angle)>512) NativeVisual_Reset();
+            }
+        }
+        previousCamera[i].pos=camera->pos; previousCamera[i].rot=camera->rot;
+    }
+    previousPlayers=tracker->numPlyrCurrGame;
+    NativeVisual_BeginCapture(enabled,signature);
+    for(int i=0;i<tracker->numPlyrCurrGame && i<4;i++) {
+        const struct PushBuffer *pb=&tracker->pushBuffer[i];
+        struct NativeVisualProjection camera={.h=(float)pb->distanceToScreen_PREV,.maxRatio=4,
+            .offset={(float)(pb->rect.w/2),(float)(pb->rect.h/2)}};
+        for(unsigned row=0;row<3;row++) {
+            float translation=0;
+            for(unsigned col=0;col<3;col++) {
+                camera.matrix[row][col]=pb->matrix_ViewProj.m[row][col]/4096.0f;
+                translation-=camera.matrix[row][col]*(float)pb->matrix_Camera.t[col];
+            }
+            camera.translation[row]=floorf(translation);
+        }
+        NativeVisual_Camera((unsigned)i,&camera);
+    }
+#else
+    (void)tracker;
+#endif
+}
 
 int Platform_UsesIndependentFrameTiming(void)
 {
@@ -19,6 +65,7 @@ void Platform_ResetFrameScheduler(void)
 {
     s_preparedFrameValid = 0;
     s_frameScheduler.frequency = 0;
+    NativeVisual_Reset();
 }
 
 int Platform_FrameSchedulerExternalVSync(void)
@@ -35,15 +82,22 @@ static void NativeFrameLoop_Present(struct GameTracker *tracker, struct GamepadS
     if (!s_preparedFrameValid || NativeRenderer_PresentationWaitTicks(SDL_GetPerformanceCounter()) != 0)
         return;
     NativeRenderer_SetScheduledPresentation(1);
+    float alpha=1;
+    if(s_independentFrameTiming && s_frameScheduler.frequency && SDL_GetPerformanceCounter()>=s_visualTickCounter)
+        alpha=(float)((double)(SDL_GetPerformanceCounter()-s_visualTickCounter)*NATIVE_FRAME_GPU_HZ /
+            ((double)s_frameScheduler.frequency*NATIVE_FRAME_VBLANK_CYCLES*2));
+    NativeVisual_BeginPresentation(alpha);
     Platform_BeginFrame();
     MainFrame_RenderFrame(tracker, pads);
     Platform_EndFrame();
+    NativeVisual_EndPresentation();
     NativeRenderer_SetScheduledPresentation(0);
 }
 
 void Platform_CommitPreparedFrame(struct GameTracker *tracker, struct GamepadSystem *pads)
 {
     s_preparedFrameValid = 1;
+    NativeVisual_EndCapture();
     NativeFrameLoop_Present(tracker, pads);
 }
 
@@ -79,11 +133,14 @@ void Platform_WaitForGameTick(struct GameTracker *tracker, struct GamepadSystem 
             }
         }
         uint64_t now = SDL_GetPerformanceCounter();
+        uint64_t deadline=s_frameScheduler.nextVBlank, rebases=s_frameScheduler.rebases;
         unsigned event = NativeFrameScheduler_Poll(&s_frameScheduler, now);
+        if(s_frameScheduler.rebases!=rebases) NativeVisual_Reset();
         if (event & NATIVE_FRAME_EVENT_VBLANK)
             Native_EmitVBlank();
         if (event & NATIVE_FRAME_EVENT_UPDATE)
         {
+            s_visualTickCounter=deadline;
             // The update can reset buffers, switch levels or restore a state.
             s_preparedFrameValid = 0;
             return;

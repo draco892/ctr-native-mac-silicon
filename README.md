@@ -45,7 +45,8 @@ two VBlanks and a fixed 32-unit retail timestep per update. An independent host
 scheduler emits VBlank callbacks for input, audio and timers, and runs simulation
 even when `video.max_fps` is below 30. The renderer presents prepared GPU packets
 at the configured ceiling (1–240, default 30), repeating the latest pose between
-updates at higher rates. Motion interpolation remains future work. Loading,
+updates at higher rates. Experimental visual interpolation is opt-in and remains
+disabled by default following graphical regressions. Loading,
 scrapbook and internal recording/replay retain their synchronous retail timing.
 
 The renderer's monotonic clock exposes elapsed time, presentation delta and a
@@ -274,6 +275,7 @@ key while retaining the other defaults:
     "height": 720,
     "fullscreen": false,
     "max_fps": 30,
+    "interpolation": false,
     "bilinear_filtering": false
   },
   "input": {
@@ -311,6 +313,7 @@ cp config.json my-settings.json
 | `video.width`, `video.height` | Window dimensions: width 320–7680, height 240–4320; defaults 800×600 (1280×720 in a widescreen build) |
 | `video.fullscreen` | `true` or `false`; default `false`. Fullscreen uses the desktop display mode; width/height set the window size when returning to windowed mode |
 | `video.max_fps` | Integer 1–240; default 30. Presentation ceiling, not a guaranteed frame rate |
+| `video.interpolation` | `true` or `false`; default `false`. Experimental visual smoothing above 30 FPS; keep disabled for the stable prepared-packet path |
 | `video.bilinear_filtering` | `true` or `false`; default `false` |
 | `input.keyboard_slot` | Initial keyboard player slot 0–3; default 0. Hot-plugged controllers may move the keyboard to a free slot |
 | `input.axis_deadzone` | SDL axis units 0–32766; default 500 |
@@ -336,10 +339,11 @@ binding or `none`.
 
 Raising `max_fps` above 30 enables additional presentations of the latest prepared
 pose. Simulation and existing animations remain at their original NTSC cadence;
-there is no interpolation yet. A lower ceiling reduces presentation rate while
+visual interpolation is disabled unless explicitly enabled. A lower ceiling reduces presentation rate while
 simulation continues independently. Resolution scales the output; it does not replace the game's
 internal render resolution or change the compiled 4:3/widescreen game layout.
-F11/fullscreen and F3/filter changes apply to the current session and do not
+Alt/Option+F3 toggles experimental interpolation for comparison and resets its
+history. F11/fullscreen and F3/filter changes apply to the current session and do not
 rewrite the JSON file.
 
 Interactive configuration checks on the validation Mac exercised a 1024×768

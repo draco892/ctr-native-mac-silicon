@@ -3,7 +3,8 @@
     "width": 800,
     "height": 600,
     "fullscreen": false,
-    "max_fps": 30,
+    "max_fps": 120,
+    "interpolation": false,
     "bilinear_filtering": false
   },
   "input": {

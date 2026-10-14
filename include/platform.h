@@ -32,6 +32,7 @@ struct GameTracker;
 struct GamepadSystem;
 void Platform_WaitForGameTick(struct GameTracker *tracker, struct GamepadSystem *pads, int allowIndependentTiming);
 void Platform_CommitPreparedFrame(struct GameTracker *tracker, struct GamepadSystem *pads);
+void Platform_BeginVisualCapture(struct GameTracker *tracker);
 int Platform_UsesIndependentFrameTiming(void);
 int Platform_FrameSchedulerExternalVSync(void);
 void Platform_ResetFrameScheduler(void);

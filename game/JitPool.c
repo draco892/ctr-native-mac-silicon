@@ -56,6 +56,9 @@ CtrRuntimePointer JitPool_Add(struct JitPool *AP)
 		LIST_RemoveMember(&AP->free, item);
 		LIST_AddFront(&AP->taken, item);
 		result = (CtrRuntimePointer)item;
+#ifdef CTR_NATIVE
+		NativeVisual_NewObject(item);
+#endif
 	}
 
 	return result;

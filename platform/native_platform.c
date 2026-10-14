@@ -454,6 +454,16 @@ void Platform_PollHostEvents(void)
 			char down = (event.type == SDL_EVENT_KEY_UP) ? 0 : 1;
 
 			Platform_UpdateHostAltKeyState(key, down);
+			if (key == SDL_SCANCODE_F3 && s_hostAltKeyState != 0)
+			{
+				if (down == 0)
+				{
+					gNativeConfig.interpolation ^= 1;
+					NativeVisual_Reset();
+					Platform_Log("[CTR Native] visual interpolation: %d\n",gNativeConfig.interpolation);
+				}
+				break;
+			}
 
 			if (key == SDL_SCANCODE_F11)
 			{

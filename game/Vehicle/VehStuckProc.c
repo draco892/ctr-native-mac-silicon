@@ -285,6 +285,9 @@ void VehStuckProc_MaskGrab_FindDestPos(struct Driver *d, struct QuadBlock *quad)
 			nextRespawn = (struct CheckpointNode *)((u8 *)restartPoints + restartOffset);
 		}
 
+#ifdef CTR_NATIVE
+		NativeVisual_Reset();
+#endif
 		driver->posCurr.x = CTR_MipsSll(respawn->pos.x, FRACTIONAL_BITS_8);
 		driver->posCurr.y = CTR_MipsSll(CTR_MipsAddLo(respawn->pos.y, VEH_STUCK_RESPAWN_Y_OFFSET), FRACTIONAL_BITS_8);
 		driver->posCurr.z = CTR_MipsSll(respawn->pos.z, FRACTIONAL_BITS_8);

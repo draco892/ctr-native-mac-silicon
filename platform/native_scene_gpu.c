@@ -1,4 +1,5 @@
 #include <platform/native_scene_gpu.h>
+#include <platform/native_visual.h>
 #include <platform/native_gpu_links.h>
 #include <string.h>
 enum NativeAssetResult NativeSceneGpu_Init(struct NativeSceneGpuPacket *packets,size_t capacity,u32 *ot,size_t otCount,struct NativeSceneGpuSink *out)
@@ -36,5 +37,10 @@ enum NativeAssetResult NativeSceneGpu_Emit(void *user,const struct NativeDrawTri
     if(token==NATIVE_GPU_LINK_TERMINATOR) return NATIVE_ASSET_INVALID_ARGUMENT;
     packet.words[0]=(sink->ot[at]&0xffffffu)|((triangle->source.textured ? 9u : 6u)<<24);
     *destination=packet; sink->ot[at]=token; sink->count++;
+    NativeVisual_RecordPacket(destination,triangle->source.textured ? 9u : 6u);
+    for(unsigned k=0;k<3;k++) {
+        unsigned xyWord=triangle->source.textured ? 2+k*3 : 2+k*2;
+        if(triangle->visual[k].terrainViewport) NativeVisual_BindProjection(&destination->words[xyWord],&triangle->visual[k]);
+    }
     return NATIVE_ASSET_OK;
 }

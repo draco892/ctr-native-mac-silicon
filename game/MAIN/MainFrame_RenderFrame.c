@@ -5,7 +5,7 @@
 
 #if defined(CTR_NATIVE) && defined(CTR_INTERNAL)
 #include <platform/native_perf.h>
-#define MAINFRAME_PERF_BEGIN(bucket) NativePerf_BeginScope(bucket)
+#define MAINFRAME_PERF_BEGIN(bucket) (NativeVisual_Section(__LINE__), NativePerf_BeginScope(bucket))
 #define MAINFRAME_PERF_END(bucket)   NativePerf_EndScope(bucket)
 #else
 #define MAINFRAME_PERF_BEGIN(bucket) ((void)0)
@@ -137,7 +137,13 @@ void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamep
 #endif
 		{
 			MAINFRAME_PERF_BEGIN(NATIVE_PERF_BUCKET_MAINFRAME_LEVEL_GEOMETRY);
+#ifdef CTR_NATIVE
+			NativeVisual_Push(4,lev,0,1);
+#endif
 			RenderAllLevelGeometry(gGT, lev, ptr_mesh_info);
+#ifdef CTR_NATIVE
+			NativeVisual_Pop();
+#endif
 			MAINFRAME_PERF_END(NATIVE_PERF_BUCKET_MAINFRAME_LEVEL_GEOMETRY);
 		}
 

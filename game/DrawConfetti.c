@@ -270,6 +270,9 @@ void DrawConfetti(struct PushBuffer *pb, struct PrimMem *primMem, struct GameTra
 		}
 
 		particleCount--;
+#ifdef CTR_NATIVE
+		NativeVisual_Push(9,confetti,((uint64_t)(unsigned)pb->cameraID<<32)|particleCount,1);
+#endif
 		scratch->remainingParticles = particleCount;
 
 		x = (((s32)rng.x >> 21) + baseX) & 0x7ff;
@@ -348,12 +351,18 @@ void DrawConfetti(struct PushBuffer *pb, struct PrimMem *primMem, struct GameTra
 					DrawConfetti_LinkPrimitive(prim, ot);
 					particleCount = scratch->remainingParticles;
 					prim++;
+#ifdef CTR_NATIVE
+					NativeVisual_Pop();
+#endif
 					continue;
 				}
 			}
 		}
 
 		particleCount = scratch->remainingParticles;
+#ifdef CTR_NATIVE
+		NativeVisual_Pop();
+#endif
 	}
 
 	primMem->cursor = prim;

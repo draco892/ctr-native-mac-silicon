@@ -2,6 +2,9 @@
 #define CTR_GTE_H
 
 #include <ctr_math.h>
+#ifdef CTR_NATIVE
+#include <platform/native_visual.h>
+#endif
 #include <psx/inline_c.h>
 #include <psx/libgte.h>
 
@@ -133,16 +136,25 @@ static inline void CTR_GteLoadLVL(const s32 *v)
 static inline void CTR_GteStoreSXY(void *xy)
 {
 	CTR_GteStoreU32(xy, MFC2(14));
+#ifdef CTR_NATIVE
+	NativeVisual_GteStore(xy, 2, MFC2(14));
+#endif
 }
 
 static inline void CTR_GteStoreSXY0(void *xy)
 {
 	CTR_GteStoreU32(xy, MFC2(12));
+#ifdef CTR_NATIVE
+	NativeVisual_GteStore(xy, 0, MFC2(12));
+#endif
 }
 
 static inline void CTR_GteStoreSXY1(void *xy)
 {
 	CTR_GteStoreU32(xy, MFC2(13));
+#ifdef CTR_NATIVE
+	NativeVisual_GteStore(xy, 1, MFC2(13));
+#endif
 }
 
 static inline void CTR_GteStoreSXY2(void *xy)
@@ -153,8 +165,17 @@ static inline void CTR_GteStoreSXY2(void *xy)
 static inline void CTR_GteStoreSXY3(void *xy0, void *xy1, void *xy2)
 {
 	CTR_GteStoreU32(xy0, MFC2(12));
+#ifdef CTR_NATIVE
+	NativeVisual_GteStore(xy0, 0, MFC2(12));
+#endif
 	CTR_GteStoreU32(xy1, MFC2(13));
+#ifdef CTR_NATIVE
+	NativeVisual_GteStore(xy1, 1, MFC2(13));
+#endif
 	CTR_GteStoreU32(xy2, MFC2(14));
+#ifdef CTR_NATIVE
+	NativeVisual_GteStore(xy2, 2, MFC2(14));
+#endif
 }
 
 static inline s32 CTR_GteReadMAC1(void)

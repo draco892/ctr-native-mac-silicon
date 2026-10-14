@@ -498,6 +498,9 @@ static void DrawTiresSolid_LinkPrimitive(struct DrawTiresScratch *scratch, POLY_
 
 	u32 *otSlot = (u32 *)(CtrRuntimeAddress)selectedOTSlot;
 	p->tag = CtrGpu_PackOTTag(*otSlot, 0x09000000);
+#ifdef CTR_NATIVE
+	NativeVisual_RecordPacket(p,9);
+#endif
 	*otSlot = (u32)CtrGpu_PrimToOTLink24(p);
 }
 
@@ -543,6 +546,9 @@ static int DrawTiresSolid_ProjectWheelQuads(struct DrawTiresScratch *scratch, st
 	// depth-bias scratch updates, UV copy, and OT linking.
 	for (int wheelIndex = 3; wheelIndex >= 0; wheelIndex--)
 	{
+#ifdef CTR_NATIVE
+		NativeVisual_Primitive((unsigned)wheelIndex);
+#endif
 		DrawTiresSolid_LoadCorner(scratch, 0, wheelIndex, -1, -1);
 		DrawTiresSolid_LoadCorner(scratch, 1, wheelIndex, 1, -1);
 		DrawTiresSolid_LoadCorner(scratch, 2, wheelIndex, -1, 1);
@@ -646,7 +652,14 @@ void DrawTires_Solid(struct Thread *thread, struct PrimMem *primMem, u8 numPlyr)
 
 		for (int playerIndex = 0; playerIndex < (int)(u8)numPlyr; playerIndex++)
 		{
-			if (DrawTiresSolid_StagePlayer(&scratch, driver, inst, playerIndex, primMem, &primCount) == 0)
+#ifdef CTR_NATIVE
+			NativeVisual_Push(5,inst,(unsigned)playerIndex,1);
+#endif
+			int ready=DrawTiresSolid_StagePlayer(&scratch, driver, inst, playerIndex, primMem, &primCount);
+#ifdef CTR_NATIVE
+			NativeVisual_Pop();
+#endif
+			if (ready == 0)
 			{
 				continue;
 			}
@@ -1071,6 +1084,9 @@ static void DrawTiresReflection_LinkPrimitive(struct DrawTiresScratch *scratch, 
 
 	u32 *otSlot = (u32 *)(CtrRuntimeAddress)selectedOTSlot;
 	p->tag = CtrGpu_PackOTTag(*otSlot, 0x09000000);
+#ifdef CTR_NATIVE
+	NativeVisual_RecordPacket(p,9);
+#endif
 	*otSlot = (u32)CtrGpu_PrimToOTLink24(p);
 }
 
@@ -1116,6 +1132,9 @@ static int DrawTiresReflection_ProjectWheelQuads(struct DrawTiresScratch *scratc
 	// reflected SXY scratch order used by the later jump-table primitive path.
 	for (int wheelIndex = 3; wheelIndex >= 0; wheelIndex--)
 	{
+#ifdef CTR_NATIVE
+		NativeVisual_Primitive((unsigned)wheelIndex);
+#endif
 		DrawTiresReflection_LoadCorner(scratch, 0, wheelIndex, -1, -1);
 		DrawTiresReflection_LoadCorner(scratch, 1, wheelIndex, 1, -1);
 		DrawTiresReflection_LoadCorner(scratch, 2, wheelIndex, -1, 1);
@@ -1210,7 +1229,14 @@ void DrawTires_Reflection(struct Thread *thread, struct PrimMem *primMem, u8 num
 
 		for (int playerIndex = 0; playerIndex < (int)(u8)numPlyr; playerIndex++)
 		{
-			if (DrawTiresReflection_StagePlayer(&scratch, driver, inst, playerIndex, primMem, &primCount) == 0)
+#ifdef CTR_NATIVE
+			NativeVisual_Push(6,inst,(unsigned)playerIndex,1);
+#endif
+			int ready=DrawTiresReflection_StagePlayer(&scratch, driver, inst, playerIndex, primMem, &primCount);
+#ifdef CTR_NATIVE
+			NativeVisual_Pop();
+#endif
+			if (ready == 0)
 			{
 				continue;
 			}

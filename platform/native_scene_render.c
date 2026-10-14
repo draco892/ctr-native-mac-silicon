@@ -1,4 +1,5 @@
 #include <platform/native_scene_render.h>
+#include <platform/native_visual.h>
 #include <platform/native_scene_geometry.h>
 #include <string.h>
 #include <stdlib.h>
@@ -138,14 +139,15 @@ static enum NativeAssetResult SceneRender_TerrainMesh(const struct NativeLevelVi
                     source.texture.v[k]=(u8)(source.geometry.vertices[k].colorLow>>8);
                 }
             }
-            status=NativeSceneCamera_ProjectTerrain(camera,&source,&triangle,&frontFacing); if(status!=NATIVE_ASSET_OK) return status;
+            NativeVisual_Push(3,level->map,((uint64_t)q<<8)|((uint64_t)face<<4)|t,1);
+            status=NativeSceneCamera_ProjectTerrain(camera,&source,&triangle,&frontFacing); if(status!=NATIVE_ASSET_OK) { NativeVisual_Pop();return status; }
             if(water) triangle.source.textureBlend=NATIVE_TEXTURE_BLEND_SEMI;
             struct NativeProjectionConfig projection={.rotation=camera->transform.view,.h=camera->transform.h};
             for(unsigned row=0;row<3;row++) {
                 s64 dot=0;
                 for(unsigned k=0;k<3;k++) dot-=(s64)projection.rotation.m[row][k]*camera->transform.position[k];
                 s64 translation=dot/4096-(dot%4096<0);
-                if(translation<INT32_MIN || translation>INT32_MAX) return NATIVE_ASSET_INVALID_ARGUMENT;
+                if(translation<INT32_MIN || translation>INT32_MAX) { NativeVisual_Pop();return NATIVE_ASSET_INVALID_ARGUMENT; }
                 projection.translation[row]=(s32)translation;
             }
             struct NativeSceneClipVertex vertices[3];
@@ -153,14 +155,18 @@ static enum NativeAssetResult SceneRender_TerrainMesh(const struct NativeLevelVi
                 const s16 *p=source.geometry.vertices[k].position;
                 struct NativePackedModelVertex packed={.xy=(u16)p[0]|((u32)(u16)p[1]<<16),.z=(u16)p[2]};
                 status=NativeSceneGeometry_Transform(&projection,&packed,1,vertices[k].view);
-                if(status!=NATIVE_ASSET_OK) return status;
+                if(status!=NATIVE_ASSET_OK) { NativeVisual_Pop();return status; }
                 NativeSceneGeometry_Attributes(&triangle.source,k,&vertices[k]);
+                float visualView[3]={(float)vertices[k].view[0],(float)vertices[k].view[1],(float)vertices[k].view[2]};
+                NativeVisual_TerrainProjection(visualView,&triangle.visual[k]);
+                triangle.visual[k].terrainClipped=0;
             }
             s64 determinant=0;
             for(unsigned k=0;k<3;k++) determinant+=(s64)projection.rotation.m[0][k]*
                 ((s64)projection.rotation.m[1][(k+1)%3]*projection.rotation.m[2][(k+2)%3]-(s64)projection.rotation.m[1][(k+2)%3]*projection.rotation.m[2][(k+1)%3]);
             struct SceneRenderEmit emit={camera,&source,determinant<0,sink,user,&stats};
             status=SceneRender_Emit(&emit,&triangle,vertices);
+            NativeVisual_Pop();
             if(status!=NATIVE_ASSET_OK) return status;
         }
     }

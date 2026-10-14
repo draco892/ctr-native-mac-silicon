@@ -8,6 +8,7 @@
 #include <psx/gtereg.h>
 #include <psx/inline_c.h>
 #include <psx/libgte.h>
+#include <platform/native_visual.h>
 
 extern u32 gte_leadingzerocount(u32 lzcs);
 
@@ -84,6 +85,7 @@ s32 MFC2_S(s32 reg)
 
 void MTC2(u32 value, s32 reg)
 {
+	NativeVisual_GteWrite((unsigned)reg);
 	switch (reg)
 	{
 	case 15:
@@ -111,6 +113,7 @@ void MTC2(u32 value, s32 reg)
 
 void MTC2_S(s32 value, s32 reg)
 {
+	NativeVisual_GteWrite((unsigned)reg);
 	switch (reg)
 	{
 	case 15:

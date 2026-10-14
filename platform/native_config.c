@@ -34,6 +34,7 @@ void NativeConfig_Defaults(struct NativeConfig *config)
     config->width = 800; config->height = 600;
 #endif
     config->maxFps = 30;
+    config->interpolation = 0;
     config->axisDeadzone = 500;
     for (unsigned i = 0; i < NATIVE_CONFIG_KEYS; i++) strcpy(config->keyboard[i], keys[i]);
     for (unsigned i = 0; i < NATIVE_CONFIG_CONTROLS; i++) strcpy(config->controller[i], pads[i]);
@@ -151,6 +152,7 @@ static int ConfigProperty(struct ConfigParser *p, enum ConfigGroup group, const 
         if (strcmp(key, "max_fps") == 0) { *id = 2; return ConfigInteger(p, 1, 240, &c->maxFps); }
         if (strcmp(key, "fullscreen") == 0) { *id = 3; return ConfigBoolean(p, &c->fullscreen); }
         if (strcmp(key, "bilinear_filtering") == 0) { *id = 4; return ConfigBoolean(p, &c->bilinearFiltering); }
+        if (strcmp(key, "interpolation") == 0) { *id = 5; return ConfigBoolean(p, &c->interpolation); }
     }
     else if (group == CONFIG_INPUT)
     {

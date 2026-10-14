@@ -24,7 +24,9 @@
 
 typedef struct
 {
-	s16 x, y, page, clut;
+	// Host upload only: preserve subpixel visual positions. Retail packet and
+	// checkpoint formats still use their original integer coordinates.
+	float x, y, page, clut;
 
 	u8 u, v, bright, dither;
 	u8 r, g, b, a;
@@ -32,7 +34,7 @@ typedef struct
 	s8 tcx, tcy, _p0, _p1;
 } GrVertex;
 
-CTR_STATIC_ASSERT(sizeof(GrVertex) == 20);
+CTR_STATIC_ASSERT(sizeof(GrVertex) == 28);
 
 typedef enum
 {

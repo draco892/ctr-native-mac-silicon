@@ -264,6 +264,9 @@ void RenderWeather(struct PushBuffer *pb, struct PrimMem *primMem, struct RainBu
 		u32 z1;
 
 		particleCount--;
+#ifdef CTR_NATIVE
+		NativeVisual_Push(8,rainBuffer,((uint64_t)(unsigned)pb->cameraID<<32)|(unsigned)particleCount,1);
+#endif
 
 		xy0 = ((rngXY + startXY) & RENDER_WEATHER_WRAP_MASK) - scratch->packedCenterXY;
 		xy1 = ((rngXY + endXY) & RENDER_WEATHER_WRAP_MASK) - scratch->packedCenterXY;
@@ -315,6 +318,9 @@ void RenderWeather(struct PushBuffer *pb, struct PrimMem *primMem, struct RainBu
 			}
 		}
 
+#ifdef CTR_NATIVE
+		NativeVisual_Pop();
+#endif
 		RenderWeather_NextRng(&state0, &state1, &rngXY, &rngZ);
 	}
 

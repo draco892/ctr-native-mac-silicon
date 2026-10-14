@@ -10,6 +10,7 @@ int main(void)
     struct NativeConfig config, original;
     NativeConfig_Defaults(&config);
     CHECK(config.width == 800 && config.height == 600 && config.maxFps == 30 && config.fullscreen == 0);
+    CHECK(config.interpolation == 0);
     CHECK(strcmp(config.keyboard[3], "C") == 0 && strcmp(config.controller[3], "a") == 0);
     const char *custom = "{\"video\":{\"width\":1920,\"height\":1080,\"fullscreen\":true,\"max_fps\":20,\"bilinear_filtering\":true},"
                          "\"input\":{\"keyboard_slot\":2,\"axis_deadzone\":3000,\"keyboard\":{\"cross\":\"\\u0059\"},"
@@ -18,6 +19,11 @@ int main(void)
     CHECK(config.width == 1920 && config.height == 1080 && config.fullscreen && config.maxFps == 20 && config.bilinearFiltering);
     CHECK(config.keyboardSlot == 2 && config.axisDeadzone == 3000 && strcmp(config.keyboard[3], "Y") == 0);
     CHECK(strcmp(config.keyboard[0], "X") == 0 && strcmp(config.controller[16], "axis:-leftx") == 0);
+    const char *interpolated = "{\"video\":{\"max_fps\":120,\"interpolation\":true}}";
+    CHECK(NativeConfig_Parse(interpolated,strlen(interpolated),&config,error,sizeof(error)));
+    CHECK(config.interpolation == 1 && config.maxFps == 120);
+    CHECK(NativeConfig_Parse("{\"video\":{\"interpolation\":false}}",33,&config,error,sizeof(error)));
+    CHECK(config.interpolation == 0);
     original = config;
     const char *invalid[] = {
         "", "[]", "null", "{", "{}garbage", "{}\0trailing",
@@ -27,6 +33,7 @@ int main(void)
         "{\"video\":{\"max_fps\":30.0}}", "{\"video\":{\"max_fps\":3e1}}",
         "{\"video\":{\"max_fps\":030}}", "{\"video\":{\"max_fps\":-1}}",
         "{\"video\":{\"fullscreen\":1}}", "{\"video\":{\"fullscreen\":truefalse}}",
+        "{\"video\":{\"interpolation\":1}}", "{\"video\":{\"interpolation\":true,\"interpolation\":false}}",
         "{\"video\":{\"width\":800,\"width\":900}}", "{\"input\":{},\"input\":{}}",
         "{\"video\":{\"widht\":800}}", "{\"other\":{}}", "{\"video\":{\"video\":{}}}",
         "{\"input\":{\"keyboard_slot\":4}}", "{\"input\":{\"axis_deadzone\":32767}}",

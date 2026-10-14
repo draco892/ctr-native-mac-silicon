@@ -297,6 +297,9 @@ void VehGroundShadow_Main(void)
 		VehGroundShadow_AddPointer(entryCursor, scratch, 0xb8);
 		do
 		{
+#ifdef CTR_NATIVE
+			NativeVisual_Push(7,driver,(unsigned)playerIndex,1);
+#endif
 			if (VEH_GROUND_SHADOW_SIGNED_BYTE(entryCursor, -2) == culledState)
 				goto next_driver;
 			if ((VEH_GROUND_SHADOW_HALF(entryCursor, 0x12) & HIDE_MODEL) != 0)
@@ -597,6 +600,9 @@ void VehGroundShadow_Main(void)
 				VEH_GROUND_SHADOW_WORD((u8 *)y, 0x00) = VEH_GROUND_SHADOW_WORD(scratch, 0x18);
 
 			quad_points_ready:
+#ifdef CTR_NATIVE
+				NativeVisual_Primitive((unsigned)quadIndex);
+#endif
 				depthIndex = ((s32)VEH_GROUND_SHADOW_WORD(scratch, 0x24) >> 8) + VEH_GROUND_SHADOW_SIGNED_BYTE(entryCursor, -1);
 				if (depthIndex < 0)
 					depthIndex = 0;
@@ -609,6 +615,9 @@ void VehGroundShadow_Main(void)
 				ot = (u32 *)VEH_GROUND_SHADOW_WORD(scratch, 0x23c) + depthIndex;
 #endif
 				prim[0] = *ot | VEH_GROUND_SHADOW_GPU_TAG_POLY_FT4;
+#ifdef CTR_NATIVE
+				NativeVisual_RecordPacket(prim,9);
+#endif
 				prim += 10;
 				*ot = (u32)packetAddress;
 				y += 0x28;
@@ -616,6 +625,9 @@ void VehGroundShadow_Main(void)
 			} while (quadIndex < VEH_GROUND_SHADOW_NUM_QUADS);
 
 		next_driver:
+#ifdef CTR_NATIVE
+			NativeVisual_Pop();
+#endif
 			entryCursor += 0x28;
 			driver = VEH_SHADOW_DRIVER_SLOT(entryCursor);
 			entryBase += 0x28;

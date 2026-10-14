@@ -11,6 +11,7 @@
 #ifdef CTR_NATIVE
 #include <string.h>
 #include <platform/native_gpu_links.h>
+#include <platform/native_visual.h>
 #endif
 
 typedef short VERTTYPE;
@@ -142,6 +143,9 @@ static inline u32 CTR_GPU_ReadTagWord(const void *p)
 static inline void CTR_GPU_WriteTagWord(void *p, u32 word)
 {
 	memcpy(p, &word, sizeof(word));
+#ifdef CTR_NATIVE_VISUAL_INTERPOLATION
+	NativeVisual_RecordPacket(p, word >> 24);
+#endif
 }
 
 static inline void CTR_GPU_WriteTagCode(void *p, u8 code)

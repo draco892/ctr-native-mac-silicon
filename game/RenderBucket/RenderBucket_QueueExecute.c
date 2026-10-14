@@ -756,6 +756,9 @@ static void RenderBucket_LinkPrimRaw(u32 *otEntry, void *prim, u32 lenWord)
 	// NOTE(aalhendi): Source-backs DrawInstPrim_Normal's retail OT tag write at
 	// 0x8006ae50-0x8006ae64.
 	RenderBucket_WritePackedWord(prim, CtrGpu_PackOTTag(*otEntry, lenWord));
+#ifdef CTR_NATIVE
+	NativeVisual_RecordPacket(prim, lenWord >> 24);
+#endif
 	*otEntry = RenderBucket_OTAddress(prim);
 }
 
@@ -4437,6 +4440,9 @@ void RenderBucket_DrawFunc_Normal(struct RenderBucketDrawContext *ctx)
 
 	while (*pCmd != 0xffffffff)
 	{
+#ifdef CTR_NATIVE
+        NativeVisual_Primitive((uint64_t)((uintptr_t)pCmd-(uintptr_t)ctx->idpp->ptrCommandList));
+#endif
 		u32 command = *pCmd++;
 		u16 flags = (command >> 24) & 0xff;
 		u16 stackIndex = (command >> 16) & 0xff;
@@ -4726,6 +4732,9 @@ static void RenderBucket_DrawFunc_Special(struct RenderBucketDrawContext *ctx)
 
 	while (*pCmd != 0xffffffff)
 	{
+#ifdef CTR_NATIVE
+        NativeVisual_Primitive((uint64_t)((uintptr_t)pCmd-(uintptr_t)ctx->idpp->ptrCommandList));
+#endif
 		u32 command = *pCmd++;
 		u16 flags = (command >> 24) & 0xff;
 		u16 stackIndex = (command >> 16) & 0xff;
@@ -4822,6 +4831,9 @@ static void RenderBucket_DrawFunc_Reflection(struct RenderBucketDrawContext *ctx
 
 	while (*pCmd != 0xffffffff)
 	{
+#ifdef CTR_NATIVE
+        NativeVisual_Primitive((uint64_t)((uintptr_t)pCmd-(uintptr_t)ctx->idpp->ptrCommandList));
+#endif
 		u32 command = *pCmd++;
 		u16 flags = (command >> 24) & 0xff;
 		u16 stackIndex = (command >> 16) & 0xff;
@@ -4923,6 +4935,9 @@ static void RenderBucket_DrawFunc_Split(struct RenderBucketDrawContext *ctx)
 
 	while (*pCmd != 0xffffffff)
 	{
+#ifdef CTR_NATIVE
+        NativeVisual_Primitive((uint64_t)((uintptr_t)pCmd-(uintptr_t)ctx->idpp->ptrCommandList));
+#endif
 		u32 command = *pCmd++;
 		u16 flags = (command >> 24) & 0xff;
 		u16 stackIndex = (command >> 16) & 0xff;
@@ -5034,6 +5049,9 @@ static void RenderBucket_DrawFunc_NormalAlt(struct RenderBucketDrawContext *ctx)
 
 	while (*pCmd != 0xffffffff)
 	{
+#ifdef CTR_NATIVE
+        NativeVisual_Primitive((uint64_t)((uintptr_t)pCmd-(uintptr_t)ctx->idpp->ptrCommandList));
+#endif
 		u32 command = *pCmd++;
 		u16 flags = (command >> 24) & 0xff;
 		u16 stackIndex = (command >> 16) & 0xff;
@@ -5299,6 +5317,7 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 	anim = RenderBucket_GetAnim(inst, mh);
 
 #ifdef CTR_NATIVE
+    NativeVisual_Push(1, inst, (uint64_t)(uintptr_t)mh ^ ((uint64_t)inst->animIndex << 48) ^ (unsigned)pb->cameraID, 1);
     RenderBucket_HostPointers()->inst=inst;
 #else
     scratch->instPtr32 = (u32)(u32)inst;
@@ -5400,5 +5419,8 @@ void RenderBucket_Execute(void *param_1, struct PrimMem *param_2)
 		}
 
 		RenderBucket_DispatchDrawFunc(&ctx);
+#ifdef CTR_NATIVE
+		NativeVisual_Pop();
+#endif
 	}
 }

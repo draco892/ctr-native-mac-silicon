@@ -142,11 +142,17 @@ CTR_STATIC_ASSERT(offsetof(struct CtrGpuDrawModePacket, terminator) == 0x08);
 static inline void CtrGpu_LinkPacket24(u32 *ot, u32 *packetTag, const void *packet, u32 tag)
 {
 	*packetTag = CtrGpu_PackOTTag(*ot, tag);
+#ifdef CTR_NATIVE
+	NativeVisual_RecordPacket(packet,tag >> 24);
+#endif
 	*ot = (u32)CtrGpu_PrimToOTLink24(packet);
 }
 
 static inline void CtrGpu_LinkPrimToOT(u32 *ot, const void *prim)
 {
+#ifdef CTR_NATIVE
+	NativeVisual_RecordPacket(prim,CTR_GPU_ReadTagWord(prim) >> 24);
+#endif
 	*ot = (u32)CtrGpu_PrimToOTLink24(prim);
 }
 

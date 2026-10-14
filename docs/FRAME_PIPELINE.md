@@ -3,7 +3,8 @@
 The native frame pipeline now separates tick-owned preparation from execution of
 prepared GPU packets. Simulation follows retail NTSC (two VBlanks per update,
 about 29.9 updates/s), while presentation can independently target 1–240 FPS.
-Repeated presentations display the same prepared pose; motion is not interpolated.
+By default, repeated presentations display the same prepared pose. The new visual
+interpolation path is experimental and disabled by default.
 
 ## Ownership and order
 
@@ -42,8 +43,8 @@ belong to `MainFrame_BeginUpdate`. The PSX path retains the original sequence.
 This is a packet preparation/execution boundary, not yet a pure scene builder.
 Future interpolation must split the remaining mixed update/draw helpers before
 regenerating packets for intermediate poses. Extra presentations can currently
-reuse prepared packets, but those display the same pose. Snapshot interpolation
-and animation smoothing remain later roadmap work.
+reuse prepared packets, but those display the same pose. An opt-in snapshot path now exists, but complete animation smoothing and
+validation remain unfinished roadmap work.
 
 ## Independent scheduler
 
@@ -84,6 +85,65 @@ build-macos-arm64-game/ctr_native --config /absolute/path/fps-120.json --perf-di
 
 This checks live scheduler timing. It does not certify replay parity or motion
 interpolation.
+
+## Experimental visual snapshots and graphical regression
+
+Keep `video.interpolation` set to `false` for the stable renderer, including at
+60/75/120 FPS. The configurable presentation ceiling and independent simulation
+scheduler continue to work with interpolation disabled. The supplied config and
+built-in default both explicitly disable it. Alt/Option+F3 toggles it for the
+current session without rewriting the config.
+
+When explicitly enabled above 30 FPS, capture stores two host-owned frames of
+copied packet values. Generation keys distinguish reused pool objects; model
+primitive command offsets identify source triangles. Presentation samples the
+values without rerunning preparation, input, gameplay, audio or events. Capture
+resets on loads, scene/menu/mode changes, large camera cuts, respawn, checkpoint
+restore, stalls, and disabling interpolation. Capture overflow falls back to
+canonical packets. It adds roughly one simulation tick of visual latency.
+
+The initial prototype matched 3D poses by screen XY. That was ambiguous when
+unrelated source vertices projected to the same pixel. The current code follows
+the GTE SXY FIFO and binds a pose to the exact GPU coordinate field. Manual SXY
+writes invalidate the affected metadata. Decoded terrain carries per-corner pose
+values through emission, including final clipped eye-space positions; it no
+longer consults a screen-coordinate lookup. Saturated or incompatible GTE output
+is rejected, and incompletely captured model primitives retain their canonical
+geometry as a whole. A missing pose or an invalid previous-camera projection
+disables terrain reprojection for the entire viewport, preserving shared edges.
+Camera history is shared across terrain triangles instead
+of pairing changing clipping output by its draw ordinal.
+
+This is still an experiment: clipping/PVS and order-table visibility are prepared
+at the canonical pose; extra presentations do not rebuild visibility or depth
+order. Specialized primitives without verified projection metadata remain at the
+simulation cadence. Terrain RGB/UV and texture-atlas changes remain discrete;
+complete smoothing of wheels, water, particles and split-screen needs further
+work. Roadmap points 4–6 must not be considered complete on the strength of unit
+tests or one-track smoke checks.
+
+The host vertex upload uses floating-point positions but retains byte UV, RGB and
+extra attributes. Retail packet bytes, game structures and checkpoint layouts
+are unchanged. `presentations.csv` adds visual alpha, vertex/match/sample/project
+counts and overflow diagnostics. Unit tests cover coincident XY with distinct
+source poses, manual FIFO invalidation, whole-primitive fallback, quaternion
+rotation/wrap, copied-history lifetime, reset/generation safety and overflow.
+
+### Verification scope after the graphical regression
+
+Normal and AddressSanitizer/UndefinedBehaviorSanitizer builds pass all 44 tests.
+The corrected projection-binding prototype was manually exercised in the menus
+and Crash Cove, including acceleration, steering, jump/fall/respawn and pause,
+with interpolation toggled on/off. That one-track check does not establish
+whole-game visual parity; interpolation therefore remains opt-in.
+
+The final stable path was also run sequentially at ceilings 10, 30, 60, 75 and
+120, for 150 simulation frames each, with interpolation explicitly disabled.
+Every run exits cleanly and captures zero visual vertices. These are boot/loading
+smoke measurements, not race benchmarks: observed update rates are approximately
+29.70/s and median swap intervals are respectively 101.46, 36.27, 18.90, 16.62
+and 10.42 ms. The 120 ceiling does not establish an 8.33 ms frame-time guarantee.
+Recorded outputs live under ignored `debug/fps-interpolation/final-caps`.
 
 ## Gameplay baseline
 

@@ -7,6 +7,7 @@
 #include <macros.h>
 #include <psx/gtereg.h>
 #include <psx/libgte.h>
+#include <platform/native_visual.h>
 
 GTERegisters gteRegs;
 
@@ -316,6 +317,20 @@ internal int GTE_RotTransPers(int idx, int lm)
 	C2_SXY1 = C2_SXY2;
 	C2_SX2 = Lm_G1(F((s64)C2_OFX + ((s64)C2_IR1 * h_over_sz3)) >> 16);
 	C2_SY2 = Lm_G2(F((s64)C2_OFY + ((s64)C2_IR2 * h_over_sz3)) >> 16);
+	if (m_sf == 1 && NativeVisual_IsCapturing())
+	{
+		struct NativeVisualProjection visual = {
+			.matrix = {{C2_R11/4096.0f,C2_R12/4096.0f,C2_R13/4096.0f},
+				{C2_R21/4096.0f,C2_R22/4096.0f,C2_R23/4096.0f},
+				{C2_R31/4096.0f,C2_R32/4096.0f,C2_R33/4096.0f}},
+			.translation = {(float)C2_TRX,(float)C2_TRY,(float)C2_TRZ},
+			.local = {(float)VX(idx),(float)VY(idx),(float)VZ(idx)},
+			.offset = {C2_OFX/65536.0f,C2_OFY/65536.0f}, .h = C2_H
+		};
+		NativeVisual_GteProject(&visual,C2_SXY2);
+	}
+
+	else NativeVisual_GteProject(NULL,C2_SXY2);
 
 	return h_over_sz3;
 }

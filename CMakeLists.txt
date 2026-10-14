@@ -69,6 +69,23 @@ if(BUILD_TESTING)
     add_test(NAME ctr_native_frame_scheduler COMMAND ctr_native_frame_scheduler_tests)
     add_test(NAME ctr_native_frame_loop COMMAND ctr_native_frame_loop_tests)
 
+    add_executable(ctr_native_visual_tests tests/native_visual_tests.c platform/native_visual.c
+        platform/native_gpu_vertices.c platform/native_gpu_links.c)
+    set_target_properties(ctr_native_visual_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_visual_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_visual_tests PRIVATE CTR_NATIVE CTR_NATIVE_VISUAL_INTERPOLATION)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_visual_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_visual_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_visual_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    if(UNIX)
+        target_link_libraries(ctr_native_visual_tests PRIVATE m)
+    endif()
+    add_test(NAME ctr_native_visual COMMAND ctr_native_visual_tests)
+
     add_executable(ctr_native_frame_present_tests tests/native_frame_present_tests.c)
     set_target_properties(ctr_native_frame_present_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     target_include_directories(ctr_native_frame_present_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -610,6 +627,7 @@ if(CTR_NATIVE_DECODED_TERRAIN)
     target_compile_definitions(ctr_native PRIVATE CTR_NATIVE_DECODED_TERRAIN)
 endif()
 target_compile_definitions(ctr_native PRIVATE
+    CTR_NATIVE_VISUAL_INTERPOLATION
     CTR_NATIVE_GAME_SCENE
     CTR_NATIVE
     CTR_INTERNAL

@@ -620,6 +620,9 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 			s32 sinY;
 
 			CTR_PSX_OBSERVE_VALUE(cameraID);
+#ifdef CTR_NATIVE
+			NativeVisual_Push(2,particle,(unsigned)cameraID,1);
+#endif
 			if ((s8)particle->driverID != -1 && (s8)particle->driverID != cameraID)
 				goto nextParticle;
 			iconGroup = particle->ptrIconGroup;
@@ -1185,6 +1188,9 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 				u32 link = CtrGpu_PrimToOTLink24(prim);
 				payload += 7;
 				*prim = *ot | PARTICLE_GPU_TAG_LENGTH_SPECIAL_LINE;
+#ifdef CTR_NATIVE
+				NativeVisual_RecordPacket(prim,7);
+#endif
 				*ot = link;
 				prim += 7;
 			}
@@ -1193,11 +1199,17 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 				u32 link = CtrGpu_PrimToOTLink24(prim);
 				payload += 10;
 				*prim = *ot | PARTICLE_GPU_TAG_LENGTH_POLY_FT4;
+#ifdef CTR_NATIVE
+				NativeVisual_RecordPacket(prim,9);
+#endif
 				*ot = link;
 				prim += 10;
 			}
 		}
 		nextParticle:
+#ifdef CTR_NATIVE
+			NativeVisual_Pop();
+#endif
 			CTR_PSX_KEEP_VALUE(payload);
 			particle = particle->next;
 		} while (particle);

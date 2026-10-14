@@ -1,4 +1,5 @@
 #include <platform/native_scene_geometry.h>
+#include <platform/native_visual.h>
 #include <string.h>
 static s64 SceneGeometry_Floor(s64 n,s64 d) { return n/d-(n%d<0); }
 enum NativeAssetResult NativeSceneGeometry_Transform(const struct NativeProjectionConfig *p,
@@ -118,6 +119,8 @@ enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *
                 if(coordinate<0) coordinate=0; if(coordinate>limit) coordinate=limit;
                 tri.screen[k][axis]=(s16)coordinate;
             }
+            float visualView[3]={(float)v->view[0],(float)v->view[1],(float)v->view[2]};
+            NativeVisual_TerrainProjection(visualView,&tri.visual[k]);
             tri.depth[k]=(u16)v->view[2];
             tri.source.texture.u[k]=(u8)((v->uv[0]+32768)/65536);
             tri.source.texture.v[k]=(u8)((v->uv[1]+32768)/65536);

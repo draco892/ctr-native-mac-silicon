@@ -3,6 +3,7 @@
 #include <platform/native_model_commands.h>
 #include <platform/native_model_projection.h>
 #include <platform/native_vram.h>
+#include <platform/native_visual.h>
 
 struct NativeModelDrawWorkspace
 {
@@ -20,6 +21,7 @@ struct NativeDrawTriangle
 	u16 averageDepth;
 	struct NativeTexturePixel corners[3];
 	int hasCornerPixels;
+	struct NativeVisualProjection visual[3];
 	s16 orderingBias; // Runtime ordering metadata, never a serialized pointer.
 };
 struct NativeModelDraw

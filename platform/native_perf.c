@@ -1,4 +1,5 @@
 #include "platform/native_perf.h"
+#include <platform/native_visual.h>
 
 #if defined(CTR_INTERNAL)
 #include <macros.h>
@@ -474,7 +475,7 @@ int NativePerf_ConfigureFromArgs(int argc, char **argv)
 		s_csvFile = s_gpuCsvFile = s_driverCsvFile = NULL;
 		return 1;
 	}
-	fprintf(s_presentationCsvFile, "presentation_index,simulation_frame_index,delta_ms,elapsed_s\n");
+    fprintf(s_presentationCsvFile, "presentation_index,simulation_frame_index,delta_ms,elapsed_s,visual_alpha,visual_vertices,visual_matched,visual_sampled,visual_projected,visual_overflow\n");
 	fflush(s_presentationCsvFile);
 	s_enabled = 1;
 
@@ -579,9 +580,10 @@ void NativePerf_RecordDriver(const struct NativePerfFrameInfo *frame, const stru
 void NativePerf_RecordPresentation(const struct NativeRenderTime *time)
 {
 	if (!s_enabled || s_presentationCsvFile == NULL || time == NULL) return;
-	fprintf(s_presentationCsvFile, "%llu,%u,%.6f,%.9f\n", (unsigned long long)time->frameIndex,
+	struct NativeVisualStats visual=NativeVisual_GetStats();
+	fprintf(s_presentationCsvFile, "%llu,%u,%.6f,%.9f,%.6f,%u,%u,%u,%u,%d\n", (unsigned long long)time->frameIndex,
 	        s_frameOpen || s_frameIndex == 0 ? s_frameIndex : s_frameIndex - 1,
-	        time->deltaSeconds * 1000.0, time->elapsedSeconds);
+	        time->deltaSeconds * 1000.0, time->elapsedSeconds,visual.alpha,visual.vertices,visual.matched,visual.sampled,visual.projected,visual.overflow);
 	if ((time->frameIndex % NATIVE_PERF_FLUSH_INTERVAL) == 0)
 		fflush(s_presentationCsvFile);
 }

@@ -22,6 +22,7 @@
 #include "platform/native_log.h"
 #include "platform/native_memory.h"
 #include "platform/native_perf.h"
+#include "platform/native_visual.h"
 #include "platform/native_replay_scheduler.h"
 #include "platform/native_savestate.h"
 
@@ -56,6 +57,7 @@ CTR_STATIC_ASSERT(sizeof(void *) == 4);
 #include "platform/native_checkpoint_file.c"
 #include "platform/native_cd.c"
 #include "platform/native_gpu_links.c"
+#include "platform/native_visual.c"
 #include "platform/native_gpu.c"
 #include "platform/native_gte_core.c"
 #include "platform/native_glad.c"

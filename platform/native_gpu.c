@@ -256,113 +256,7 @@ void LineSwapSourceVerts(VERTTYPE **p0, VERTTYPE **p1, u8 **c0, u8 **c1)
 	}
 }
 
-void MakeLineArray(GrVertex *vertex, VERTTYPE *p0, VERTTYPE *p1)
-{
-	const VERTTYPE dx = p1[0] - p0[0];
-	const VERTTYPE dy = p1[1] - p0[1];
-
-	float ofsX, ofsY;
-	DrawEnvOffset(&ofsX, &ofsY);
-
-	memset(vertex, 0, sizeof(GrVertex) * 4);
-
-	if (dx > abs((s16)dy))
-	{ // horizontal
-		vertex[0].x = p0[0] + ofsX;
-		vertex[0].y = p0[1] + ofsY;
-
-		vertex[1].x = p1[0] + ofsX + 1;
-		vertex[1].y = p1[1] + ofsY;
-
-		vertex[2].x = vertex[1].x;
-		vertex[2].y = vertex[1].y + 1;
-
-		vertex[3].x = vertex[0].x;
-		vertex[3].y = vertex[0].y + 1;
-	}
-	else
-	{ // vertical
-		vertex[0].x = p0[0] + ofsX;
-		vertex[0].y = p0[1] + ofsY;
-
-		vertex[1].x = p1[0] + ofsX;
-		vertex[1].y = p1[1] + ofsY + 1;
-
-		vertex[2].x = vertex[1].x + 1;
-		vertex[2].y = vertex[1].y;
-
-		vertex[3].x = vertex[0].x + 1;
-		vertex[3].y = vertex[0].y;
-	} // TODO diagonal line alignment
-}
-
-void MakeVertexTriangle(GrVertex *vertex, VERTTYPE *p0, VERTTYPE *p1, VERTTYPE *p2)
-{
-	assert(p0);
-	assert(p1);
-	assert(p2);
-
-	float ofsX, ofsY;
-	DrawEnvOffset(&ofsX, &ofsY);
-
-	memset(vertex, 0, sizeof(GrVertex) * 3);
-
-	vertex[0].x = p0[0] + ofsX;
-	vertex[0].y = p0[1] + ofsY;
-
-	vertex[1].x = p1[0] + ofsX;
-	vertex[1].y = p1[1] + ofsY;
-
-	vertex[2].x = p2[0] + ofsX;
-	vertex[2].y = p2[1] + ofsY;
-}
-
-void MakeVertexQuad(GrVertex *vertex, VERTTYPE *p0, VERTTYPE *p1, VERTTYPE *p2, VERTTYPE *p3)
-{
-	assert(p0);
-	assert(p1);
-	assert(p2);
-	assert(p3);
-
-	float ofsX, ofsY;
-	DrawEnvOffset(&ofsX, &ofsY);
-
-	memset(vertex, 0, sizeof(GrVertex) * 4);
-
-	vertex[0].x = p0[0] + ofsX;
-	vertex[0].y = p0[1] + ofsY;
-
-	vertex[1].x = p1[0] + ofsX;
-	vertex[1].y = p1[1] + ofsY;
-
-	vertex[2].x = p2[0] + ofsX;
-	vertex[2].y = p2[1] + ofsY;
-
-	vertex[3].x = p3[0] + ofsX;
-	vertex[3].y = p3[1] + ofsY;
-}
-
-void MakeVertexRect(GrVertex *vertex, VERTTYPE *p0, s16 w, s16 h)
-{
-	assert(p0);
-
-	float ofsX, ofsY;
-	DrawEnvOffset(&ofsX, &ofsY);
-
-	memset(vertex, 0, sizeof(GrVertex) * 4);
-
-	vertex[0].x = p0[0] + ofsX;
-	vertex[0].y = p0[1] + ofsY;
-
-	vertex[1].x = vertex[0].x;
-	vertex[1].y = vertex[0].y + h;
-
-	vertex[2].x = vertex[0].x + w;
-	vertex[2].y = vertex[0].y + h;
-
-	vertex[3].x = vertex[0].x + w;
-	vertex[3].y = vertex[0].y;
-}
+#include "native_gpu_vertices.c"
 
 void MakeTexcoordQuad(GrVertex *vertex, u8 *uv0, u8 *uv1, u8 *uv2, u8 *uv3, s16 page, s16 clut, u8 dither)
 {
@@ -490,20 +384,20 @@ void MakeTexcoordRect(GrVertex *vertex, u8 *uv, s16 page, s16 clut, s16 w, s16 h
 	vertex[0].clut = clut;
 
 	vertex[1].u = uv[0];
-	vertex[1].v = uv[1] + h;
+	vertex[1].v = (u8)(uv[1] + h);
 	vertex[1].bright = bright;
 	vertex[1].dither = dither;
 	vertex[1].page = texPage;
 	vertex[1].clut = clut;
 
-	vertex[2].u = uv[0] + w;
-	vertex[2].v = uv[1] + h;
+	vertex[2].u = (u8)(uv[0] + w);
+	vertex[2].v = (u8)(uv[1] + h);
 	vertex[2].bright = bright;
 	vertex[2].dither = dither;
 	vertex[2].page = texPage;
 	vertex[2].clut = clut;
 
-	vertex[3].u = uv[0] + w;
+	vertex[3].u = (u8)(uv[0] + w);
 	vertex[3].v = uv[1];
 	vertex[3].bright = bright;
 	vertex[3].dither = dither;
@@ -616,112 +510,6 @@ void MakeTexcoordQuadZero(GrVertex *vertex, u8 dither)
 	vertex[3].dither = dither;
 	vertex[3].page = 0;
 	vertex[3].clut = 0;
-}
-
-void MakeColourNoShade(GrVertex *vertex, int n)
-{
-	--n;
-	while (n >= 0)
-	{
-		vertex[n].r = 128;
-		vertex[n].g = 128;
-		vertex[n].b = 128;
-		vertex[n].a = 255;
-		--n;
-	}
-}
-
-void MakeColourLine(GrVertex *vertex, bool shadeTexOn, u8 *col0, u8 *col1)
-{
-	if (!shadeTexOn)
-	{
-		MakeColourNoShade(vertex, 4);
-		return;
-	}
-	assert(col0);
-	assert(col1);
-
-	vertex[0].r = col0[0];
-	vertex[0].g = col0[1];
-	vertex[0].b = col0[2];
-	vertex[0].a = 255;
-
-	vertex[1].r = col1[0];
-	vertex[1].g = col1[1];
-	vertex[1].b = col1[2];
-	vertex[1].a = 255;
-
-	vertex[2].r = col1[0];
-	vertex[2].g = col1[1];
-	vertex[2].b = col1[2];
-	vertex[2].a = 255;
-
-	vertex[3].r = col0[0];
-	vertex[3].g = col0[1];
-	vertex[3].b = col0[2];
-	vertex[3].a = 255;
-}
-
-void MakeColourTriangle(GrVertex *vertex, bool shadeTexOn, u8 *col0, u8 *col1, u8 *col2)
-{
-	if (!shadeTexOn)
-	{
-		MakeColourNoShade(vertex, 3);
-		return;
-	}
-
-	assert(col0);
-	assert(col1);
-	assert(col2);
-
-	vertex[0].r = col0[0];
-	vertex[0].g = col0[1];
-	vertex[0].b = col0[2];
-	vertex[0].a = 255;
-
-	vertex[1].r = col1[0];
-	vertex[1].g = col1[1];
-	vertex[1].b = col1[2];
-	vertex[1].a = 255;
-
-	vertex[2].r = col2[0];
-	vertex[2].g = col2[1];
-	vertex[2].b = col2[2];
-	vertex[2].a = 255;
-}
-
-void MakeColourQuad(GrVertex *vertex, bool shadeTexOn, u8 *col0, u8 *col1, u8 *col2, u8 *col3)
-{
-	if (!shadeTexOn)
-	{
-		MakeColourNoShade(vertex, 4);
-		return;
-	}
-
-	assert(col0);
-	assert(col1);
-	assert(col2);
-	assert(col3);
-
-	vertex[0].r = col0[0];
-	vertex[0].g = col0[1];
-	vertex[0].b = col0[2];
-	vertex[0].a = 255;
-
-	vertex[1].r = col1[0];
-	vertex[1].g = col1[1];
-	vertex[1].b = col1[2];
-	vertex[1].a = 255;
-
-	vertex[2].r = col2[0];
-	vertex[2].g = col2[1];
-	vertex[2].b = col2[2];
-	vertex[2].a = 255;
-
-	vertex[3].r = col3[0];
-	vertex[3].g = col3[1];
-	vertex[3].b = col3[2];
-	vertex[3].a = 255;
 }
 
 void TriangulateQuad()
@@ -959,9 +747,9 @@ void DrawAllSplits()
 
 			NATIVE_GPU_LOG("%s\n", "==========================================");
 			NATIVE_GPU_LOG("POLYGON: %d\n", g_dbg_polygonSelected);
-			NATIVE_GPU_LOG("X: %d Y: %d\n", vert->x, vert->y);
+			NATIVE_GPU_LOG("X: %.3f Y: %.3f\n", (double)vert->x, (double)vert->y);
 			NATIVE_GPU_LOG("U: %d V: %d\n", vert->u, vert->v);
-			NATIVE_GPU_LOG("TP: %d CLT: %d\n", vert->page, vert->clut);
+			NATIVE_GPU_LOG("TP: %.0f CLT: %.0f\n", (double)vert->page, (double)vert->clut);
 
 			NATIVE_GPU_LOG("%s\n", "==========================================");
 		}
