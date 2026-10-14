@@ -87,6 +87,7 @@ CTR_STATIC_ASSERT(sizeof(void *) == 4);
 #include "platform/native_scene_assets.c"
 #include "platform/native_vertex_animation.c"
 #include "platform/native_scene_geometry.c"
+#include "platform/native_scene_snapshot.c"
 #include "platform/native_scene_render.c"
 #include "platform/native_scene_gpu.c"
 #include "platform/native_inline_c.c"

@@ -40,11 +40,10 @@ retain them across those boundaries.
 `MainFrame_ResetDB` is graphics-only on native: its former loading and tick hooks
 belong to `MainFrame_BeginUpdate`. The PSX path retains the original sequence.
 
-This is a packet preparation/execution boundary, not yet a pure scene builder.
-Future interpolation must split the remaining mixed update/draw helpers before
-regenerating packets for intermediate poses. Extra presentations can currently
-reuse prepared packets, but those display the same pose. An opt-in snapshot path now exists, but complete animation smoothing and
-validation remain unfinished roadmap work.
+The canonical preparation boundary still includes mixed update/draw helpers.
+The opt-in scene snapshot path copies unprojected sources independently and
+regenerates standard 3D geometry without calling those helpers again. Specialized
+effects still use the prepared packets and require a later migration.
 
 ## Independent scheduler
 
@@ -94,45 +93,67 @@ scheduler continue to work with interpolation disabled. The supplied config and
 built-in default both explicitly disable it. Alt/Option+F3 toggles it for the
 current session without rewriting the config.
 
-When explicitly enabled above 30 FPS, capture stores two host-owned frames of
-copied packet values. Generation keys distinguish reused pool objects; model
-primitive command offsets identify source triangles. Presentation samples the
-values without rerunning preparation, input, gameplay, audio or events. Capture
-resets on loads, scene/menu/mode changes, large camera cuts, respawn, checkpoint
-restore, stalls, and disabling interpolation. Capture overflow falls back to
-canonical packets. It adds roughly one simulation tick of visual latency.
+When explicitly enabled above 30 FPS, `NativeSceneGameSnapshot_Begin` copies the
+scene before preparation: world camera position/basis, instance pose including
+model scale, flags, animation/frame/header and generation IDs. Model command
+offsets identify unprojected source triangles. Packed animation vertices and
+materials are copied into two host-owned frames; historical asset/game pointers
+are never dereferenced. Births use current geometry, deleted objects disappear,
+and reused pool addresses cannot inherit the old object's pose. Model/animation
+changes and large object jumps do not blend incompatible poses.
 
-The initial prototype matched 3D poses by screen XY. That was ambiguous when
-unrelated source vertices projected to the same pixel. The current code follows
-the GTE SXY FIFO and binds a pose to the exact GPU coordinate field. Manual SXY
-writes invalidate the affected metadata. Decoded terrain carries per-corner pose
-values through emission, including final clipped eye-space positions; it no
-longer consults a screen-coordinate lookup. Saturated or incompatible GTE output
-is rejected, and incompletely captured model primitives retain their canonical
-geometry as a whole. A missing pose or an invalid previous-camera projection
-disables terrain reprojection for the entire viewport, preserving shared edges.
-Camera history is shared across terrain triangles instead
-of pairing changing clipping output by its draw ordinal.
+Terrain capture traverses the complete reachable BSP, independently of the
+canonical camera/PVS list, and copies animated terrain vertices. Allocated but
+unreachable nodes are excluded. Model sources use header 0; terrain uses the
+highest valid decoded texture LOD. Distance-dependent LOD selection is pending.
 
-This is still an experiment: clipping/PVS and order-table visibility are prepared
-at the canonical pose; extra presentations do not rebuild visibility or depth
-order. Specialized primitives without verified projection metadata remain at the
-simulation cadence. Terrain RGB/UV and texture-atlas changes remain discrete;
-complete smoothing of wheels, water, particles and split-screen needs further
-work. Roadmap points 4–6 must not be considered complete on the strength of unit
-tests or one-track smoke checks.
+`NativeSceneSnapshot_Render` samples camera and object poses using quaternion
+rotation with signed scale, including reflected camera bases. Animation corners
+blend only across the same primitive and vertex topology. It composes one eye
+transform per object, rejects triangles outside the six frustum planes, clips
+surviving geometry, projects with subpixel XY and rebuilds depth buckets. Terrain
+winding follows camera handedness. Thus visibility, clipping, projection and
+ordering for regenerated geometry all use the same sampled camera, including
+triangles absent from the previous prepared draw list.
 
-The host vertex upload uses floating-point positions but retains byte UV, RGB and
-extra attributes. Retail packet bytes, game structures and checkpoint layouts
-are unchanged. `presentations.csv` adds visual alpha, vertex/match/sample/project
-counts and overflow diagnostics. Unit tests cover coincident XY with distinct
-source poses, manual FIFO invalidation, whole-primitive fallback, quaternion
-rotation/wrap, copied-history lifetime, reset/generation safety and overflow.
+Presentation builds a private host GPU chain: regenerated terrain/model packets
+replace their canonical counterparts, while retained commands and UI preserve
+ordering. The original GPU arena remains untouched. Bounded packet/link/vertex
+budgets or capture errors select the entire canonical chain; partially generated
+frames are never published. Reset epochs invalidate scene history immediately
+on loads/checkpoint restore/toggles. Scene/menu/mode changes, camera cuts, respawn
+and stalls also reset history. Input, gameplay, audio, events and preparation do
+not run on extra presentations. The smoothing adds roughly one simulation tick
+of visual latency.
+
+Original packet colors/UVs can update a source material only for one intact
+primary triangle whose three captured local corners match the source. Clipped,
+split or reflected packet corners cannot overwrite an uncut source's material.
+The exact GTE SXY-field bindings remain available for this check; runtime 3D
+screen-coordinate interpolation is disabled. Rebuilt packet fields instead
+receive presentation-local float XY overrides, cleared at the next presentation.
+Retail packet bytes, game structures and checkpoint layouts are unchanged.
+
+Current integration covers standard 3D terrain, kart bodies and ordinary model
+instances in one-player gameplay. Menus, cutscenes, loading, adventure arenas and
+split-screen use canonical packets. Pixel LOD, billboard, custom-matrix, huge and
+split-state instances also retain canonical geometry. Wheels, shadows,
+reflections, particles, weather, sky and other specialized primitives still use
+the simulation pose, so they can misalign during motion. Water/material animation
+and texture/light transitions are not fully smoothed. Migrating those effects,
+expanding layouts, tuning LOD/performance and whole-game validation remain
+unfinished; this is not complete interpolation for the entire game.
+
+`presentations.csv` includes scene object/source/triangle/match/unsupported counts
+and regeneration/fallback flags. Unit tests cover copied source lifetime,
+ID/signature resets, intermediate visibility, reflected rotation and winding,
+handedness cuts, material corner validation, clipping, fresh depth ordering and
+presentation-local float-field lifetime, alongside the earlier prototype tests.
 
 ### Verification scope after the graphical regression
 
-Normal and AddressSanitizer/UndefinedBehaviorSanitizer builds pass all 44 tests.
-The corrected projection-binding prototype was manually exercised in the menus
+Normal and AddressSanitizer/UndefinedBehaviorSanitizer builds pass all 45 tests.
+The earlier corrected projection-binding prototype was manually exercised in the menus
 and Crash Cove, including acceleration, steering, jump/fall/respawn and pause,
 with interpolation toggled on/off. That one-track check does not establish
 whole-game visual parity; interpolation therefore remains opt-in.
@@ -144,6 +165,18 @@ smoke measurements, not race benchmarks: observed update rates are approximately
 29.70/s and median swap intervals are respectively 101.46, 36.27, 18.90, 16.62
 and 10.42 ms. The 120 ceiling does not establish an 8.33 ms frame-time guarantee.
 Recorded outputs live under ignored `debug/fps-interpolation/final-caps`.
+
+The source-regeneration path was manually exercised in one-player Crash Cove and
+Roo's Tubes with interpolation enabled, acceleration, steering, jump and on/off
+comparison, including pause and a level change. Both races captured all eight
+kart bodies. Crash Cove copied about 16,000 source triangles; Roo's Tubes copied
+about 14,200. Profiling confirmed regenerated frames without canonical fallback
+in the sampled race segments. The terrain winding regression found during
+implementation was corrected using camera handedness and covered by a test.
+These are short visual checks, not all-track parity validation. At a 120 ceiling,
+observed race presentation intervals were roughly 16–20 ms on the development
+machine; this implementation does not yet guarantee 120 rendered FPS. Outputs
+are under ignored `debug/scene-snapshot/final`.
 
 ## Gameplay baseline
 

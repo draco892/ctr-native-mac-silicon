@@ -400,6 +400,26 @@ if(BUILD_TESTING)
         endif()
     endif()
     add_test(NAME ctr_native_scene_geometry COMMAND ctr_native_scene_geometry_tests)
+    add_executable(ctr_native_scene_snapshot_tests tests/native_scene_snapshot_tests.c platform/native_scene_snapshot.c
+        platform/native_scene_geometry.c platform/native_model_projection.c platform/native_scene_camera.c
+        platform/native_instance_transform.c platform/native_terrain_material.c platform/native_model_transform.c
+        platform/native_model_matrix.c platform/native_model_animation.c platform/native_model_vertices.c
+        platform/native_model_commands.c platform/native_mesh_geometry.c platform/native_asset_readers.c platform/native_ptrmap.c)
+    set_target_properties(ctr_native_scene_snapshot_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_scene_snapshot_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_scene_snapshot_tests PRIVATE CTR_NATIVE)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_scene_snapshot_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_scene_snapshot_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_scene_snapshot_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    if(UNIX)
+        target_link_libraries(ctr_native_scene_snapshot_tests PRIVATE m)
+    endif()
+    add_test(NAME ctr_native_scene_snapshot COMMAND ctr_native_scene_snapshot_tests)
+
 
     add_executable(ctr_native_resident_tests tests/native_resident_tests.c platform/native_resident.c platform/native_ptrmap.c)
     set_target_properties(ctr_native_resident_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)

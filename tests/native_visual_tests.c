@@ -129,6 +129,16 @@ int main(void)
     NativeVisual_Reset();CaptureTerrain(0,0,0);CaptureTerrain(1,32,1);
     CHECK(Draw(0.5f).x==13 && NativeVisual_GetStats().projected==0);
     NativeVisual_Reset();
+    // A freshly rebuilt GPU arena has presentation-local subpixel coordinates;
+    // its fields must never be paired with the canonical arena or survive it.
+    NativeVisual_Reset();NativeVisual_EnableWorldSampling(0);NativeVisual_BeginPresentation(1);
+    CHECK(NativeVisual_PresentationXY(&triangles[1].x0,12.25f,34.5f));
+    MakeVertexTriangle(sameXY,&triangles[1].x0,&triangles[1].x1,&triangles[1].x2);
+    CHECK(sameXY[0].x==15.25f && sameXY[0].y==39.5f);
+    NativeVisual_EndPresentation();
+    MakeVertexTriangle(sameXY,&triangles[1].x0,&triangles[1].x1,&triangles[1].x2);
+    CHECK(sameXY[0].x==triangles[1].x0+3 && sameXY[0].y==triangles[1].y0+5);
+    NativeVisual_EnableWorldSampling(1);
     // Previous arenas can disappear: history consists only of copied values.
     POLY_G3 *temporary=malloc(sizeof(*temporary));CHECK(temporary);
     CHECK(NativeGpuLinks_RegisterRange(temporary,sizeof(*temporary),NULL));

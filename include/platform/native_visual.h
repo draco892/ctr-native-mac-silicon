@@ -11,8 +11,19 @@ struct NativeVisualProjection {
     unsigned terrainClipped;
 };
 struct NativeVisualStats { unsigned packets, vertices, matched, sampled, projected; float alpha; int overflow; };
+struct NativeVisualScenePacket {
+    unsigned kind,count,code,ordinal,contextCount,projectedMask; uint64_t object,part,primitive;
+    float local[4][3];
+    uint32_t colors[4]; uint8_t u[4],v[4];uint16_t page,clut;
+};
 #ifdef CTR_NATIVE_VISUAL_INTERPOLATION
 void NativeVisual_Reset(void);
+uint64_t NativeVisual_ResetEpoch(void);
+uint64_t NativeVisual_ObjectID(const void *);
+int NativeVisual_PacketIdentity(const void *,unsigned *kind,uint64_t *object);
+int NativeVisual_ScenePacket(unsigned index,struct NativeVisualScenePacket *);
+void NativeVisual_EnableWorldSampling(int enabled);
+int NativeVisual_PresentationXY(const void *,float,float);
 void NativeVisual_NewObject(const void *object);
 void NativeVisual_BeginCapture(int enabled, uint64_t signature);
 void NativeVisual_Section(unsigned section);
@@ -36,6 +47,13 @@ void NativeVisual_SampleRect(const void *source, float *w, float *h);
 struct NativeVisualStats NativeVisual_GetStats(void);
 #else
 static inline void NativeVisual_Reset(void) {}
+static inline uint64_t NativeVisual_ResetEpoch(void) { return 0; }
+static inline uint64_t NativeVisual_ObjectID(const void *p) {return (uint64_t)(uintptr_t)p;}
+static inline int NativeVisual_PacketIdentity(const void *p,unsigned *k,uint64_t *o) {(void)p;(void)k;(void)o;return 0;}
+static inline int NativeVisual_ScenePacket(unsigned i,struct NativeVisualScenePacket *p) {(void)i;(void)p;return 0;}
+static inline void NativeVisual_EnableWorldSampling(int e) {(void)e;}
+static inline int NativeVisual_PresentationXY(const void *p,float x,float y) {(void)p;(void)x;(void)y;return 1;}
+
 static inline void NativeVisual_NewObject(const void *o) { (void)o; }
 static inline void NativeVisual_BeginCapture(int e,uint64_t s) { (void)e;(void)s; }
 static inline void NativeVisual_Section(unsigned s) { (void)s; }

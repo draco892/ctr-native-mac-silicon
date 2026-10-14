@@ -22,7 +22,17 @@ with tempfile.TemporaryDirectory() as folder:
     # base rather than assets/ or the caller's working directory.
     if (sample.parent / "assets/ctr-u.bin").exists() and Path(exe).parent.parent == sample.parent:
         run(["--check-config"], root, True, str(sample) + ": loaded")
-    run(["--config", str(sample), "--check-config"], root, True, "800x600 windowed, max_fps=30, keyboard.cross=C")
+    # The checked-in file is also the user's settings; validate its actual
+    # contents without requiring them to keep the default FPS preference.
+    settings = json.loads(sample.read_text())
+    video = settings.get("video", {})
+    cross = settings.get("input", {}).get("keyboard", {}).get("cross", "C")
+    mode = "fullscreen" if video.get("fullscreen", False) else "windowed"
+    expected = f"{video.get('width', 800)}x{video.get('height', 600)} {mode}, max_fps={video.get('max_fps', 30)}, keyboard.cross={cross}"
+    run(["--config", str(sample), "--check-config"], root, True, expected)
+    defaults = root / "defaults.json"
+    defaults.write_text("{}")
+    run(["--config", str(defaults), "--check-config"], root, True, "800x600 windowed, max_fps=30, keyboard.cross=C")
     valid = {
         "video": {"width": 1280, "height": 720, "fullscreen": True, "max_fps": 20},
         "input": {"keyboard": {"cross": "Y", "l3": "none"},

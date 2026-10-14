@@ -121,6 +121,16 @@ enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *
             }
             float visualView[3]={(float)v->view[0],(float)v->view[1],(float)v->view[2]};
             NativeVisual_TerrainProjection(visualView,&tri.visual[k]);
+            // Continuous presentation coordinates use the same clipped eye
+            // point; canonical packets keep the integer GTE result above.
+            float ratio=(float)c->transform.h/(float)v->view[2];if(ratio>4) ratio=4;
+            for(unsigned axis=0;axis<2;axis++) {
+                float coordinate=c->transform.offset[axis]/65536.0f+v->view[axis]*ratio;
+                float limit=(float)(axis==0?c->width:c->height);
+                if(coordinate<0) coordinate=0;if(coordinate>limit) coordinate=limit;
+                tri.visualXY[k][axis]=coordinate;
+            }
+            tri.hasVisualXY=1;
             tri.depth[k]=(u16)v->view[2];
             tri.source.texture.u[k]=(u8)((v->uv[0]+32768)/65536);
             tri.source.texture.v[k]=(u8)((v->uv[1]+32768)/65536);

@@ -22,6 +22,8 @@ struct NativeDrawTriangle
 	struct NativeTexturePixel corners[3];
 	int hasCornerPixels;
 	struct NativeVisualProjection visual[3];
+	float visualXY[3][2];
+	int hasVisualXY;
 	s16 orderingBias; // Runtime ordering metadata, never a serialized pointer.
 };
 struct NativeModelDraw

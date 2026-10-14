@@ -20,6 +20,7 @@
 #include "RenderLevel/RenderLists.c"
 #ifdef CTR_NATIVE_GAME_SCENE
 #include "RenderLevel/NativeSceneConsumer.c"
+#include "RenderLevel/NativeSceneSnapshot.c"
 #endif
 #include "DrawTires.c"
 #include "RenderStars.c"

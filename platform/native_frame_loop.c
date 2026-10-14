@@ -6,6 +6,9 @@
 #include <platform/native_replay_scheduler.h>
 #include <platform/native_log.h>
 #include <stdlib.h>
+#ifdef CTR_NATIVE_GAME_SCENE
+#include <platform/native_scene_snapshot_game.h>
+#endif
 
 static struct NativeFrameScheduler s_frameScheduler;
 static int s_independentFrameTiming, s_preparedFrameValid;
@@ -51,6 +54,9 @@ void Platform_BeginVisualCapture(struct GameTracker *tracker)
         }
         NativeVisual_Camera((unsigned)i,&camera);
     }
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeSceneGameSnapshot_Begin(tracker,enabled,signature^NativeVisual_ResetEpoch());
+#endif
 #else
     (void)tracker;
 #endif
@@ -86,6 +92,7 @@ static void NativeFrameLoop_Present(struct GameTracker *tracker, struct GamepadS
     if(s_independentFrameTiming && s_frameScheduler.frequency && SDL_GetPerformanceCounter()>=s_visualTickCounter)
         alpha=(float)((double)(SDL_GetPerformanceCounter()-s_visualTickCounter)*NATIVE_FRAME_GPU_HZ /
             ((double)s_frameScheduler.frequency*NATIVE_FRAME_VBLANK_CYCLES*2));
+    NativeVisual_EnableWorldSampling(0);
     NativeVisual_BeginPresentation(alpha);
     Platform_BeginFrame();
     MainFrame_RenderFrame(tracker, pads);
@@ -98,6 +105,9 @@ void Platform_CommitPreparedFrame(struct GameTracker *tracker, struct GamepadSys
 {
     s_preparedFrameValid = 1;
     NativeVisual_EndCapture();
+#ifdef CTR_NATIVE_GAME_SCENE
+    NativeSceneGameSnapshot_Seal();
+#endif
     NativeFrameLoop_Present(tracker, pads);
 }
 

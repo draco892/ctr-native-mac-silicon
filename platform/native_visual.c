@@ -13,14 +13,14 @@
 #define NV_FIELDS 131072u
 
 struct NvContext {
-    uint64_t key, baseKey; unsigned ordinal,terrainViewport; int world;
+    uint64_t key, baseKey,object,part,primitive; unsigned kind,ordinal,terrainViewport; int world;
 };
 struct NvVertex {
     float xy[2],uv[2]; uint8_t rgb[3], xyOffset, rgbOffset,uvOffset; int projected;
     struct NativeVisualProjection projection;
 };
 struct NvPacket {
-    uintptr_t address; uint64_t key, context, material;
+    uintptr_t address; uint64_t key, context, material,object,part,primitive; unsigned kind,ordinal;
     unsigned words, count, contextCount, terrainViewport; int previous,world;
     float width, height; struct NvVertex vertex[4];
 };
@@ -34,11 +34,16 @@ static uint32_t nv_addresses[NV_TABLE], nv_history[NV_TABLE];
 static uint32_t nv_xyFields[NV_FIELDS], nv_rgbFields[NV_FIELDS],nv_uvFields[NV_FIELDS];
 static struct NvProjection nv_projections[NV_PROJECTIONS];
 static struct NvObject nv_objects[NV_OBJECTS];
+struct NvPresentationXY {uintptr_t field;float x,y;};
+static struct NvPresentationXY nv_presentationXY[NV_FIELDS];
+static unsigned nv_presentationXYCount;
+static int nv_presentationXYDirty;
 static struct NvProjection nv_gte[3];
 static struct NvCount nv_counts[NV_CONTEXTS];
 static struct NvContext nv_context, nv_stack[8];
 static unsigned nv_stackSize, nv_terrainMask;
-static uint64_t nv_serial, nv_signature;
+static uint64_t nv_serial, nv_signature, nv_resetEpoch;
+static int nv_worldSampling=1;
 static int nv_capturing, nv_presenting, nv_historyValid, nv_overflow;
 static struct NativeVisualStats nv_stats;
 
@@ -54,6 +59,8 @@ static float NvCoord(uint32_t word,unsigned axis) { return (float)(int16_t)(word
 
 void NativeVisual_Reset(void)
 {
+    nv_resetEpoch++;
+    nv_presentationXYCount=0;
     nv_capturing = nv_presenting = nv_historyValid = 0;
     nv_frames[0].count = nv_frames[1].count = nv_frames[0].cameraMask = nv_frames[1].cameraMask = 0;
     memset(nv_addresses,0,sizeof(nv_addresses));
@@ -74,7 +81,7 @@ void NativeVisual_NewObject(const void *object)
     NativeVisual_Reset(); memset(nv_objects,0,sizeof(nv_objects));
     NativeVisual_NewObject(object);
 }
-static uint64_t NvObjectID(const void *object)
+uint64_t NativeVisual_ObjectID(const void *object)
 {
     uintptr_t address=(uintptr_t)object;
     unsigned slot=(unsigned)NvHash(address)&(NV_OBJECTS-1);
@@ -110,9 +117,9 @@ void NativeVisual_Push(unsigned kind,const void *object,uint64_t part,int world)
     if(!nv_capturing) return;
     if(nv_stackSize==8) { nv_overflow=1; return; }
     nv_stack[nv_stackSize++]=nv_context;
-    uint64_t key=NvHash(NvHash(NvHash(nv_context.key^kind)^NvObjectID(object))^part);
+    uint64_t key=NvHash(NvHash(NvHash(nv_context.key^kind)^NativeVisual_ObjectID(object))^part);
     unsigned terrainViewport=kind==4 && part<4 ? (unsigned)part+1 : kind==3 ? nv_context.terrainViewport : 0;
-    nv_context=(struct NvContext){.key=key,.baseKey=key,.world=world,.terrainViewport=terrainViewport};
+    nv_context=(struct NvContext){.key=key,.baseKey=key,.world=world,.terrainViewport=terrainViewport,.kind=kind,.object=NativeVisual_ObjectID(object),.part=part};
 }
 void NativeVisual_Pop(void)
 {
@@ -121,7 +128,7 @@ void NativeVisual_Pop(void)
 void NativeVisual_Primitive(uint64_t primitive)
 {
     if(!nv_capturing) return;
-    nv_context.key=NvHash(nv_context.baseKey^primitive);nv_context.ordinal=0;
+    nv_context.key=NvHash(nv_context.baseKey^primitive);nv_context.ordinal=0;nv_context.primitive=primitive;
 }
 void NativeVisual_Camera(unsigned viewport,const struct NativeVisualProjection *camera)
 {
@@ -150,7 +157,9 @@ void NativeVisual_RecordPacket(const void *packet,unsigned words)
     struct NvPacket *p=&frame->packet[frame->count]; memset(p,0,sizeof(*p));
     p->address=address; p->context=nv_context.key; p->words=words; p->previous=-1;
     p->world=nv_context.world;p->terrainViewport=nv_context.terrainViewport;
-    p->key=NvHash(nv_context.key^NvHash(++nv_context.ordinal));
+    p->kind=nv_context.kind;p->object=nv_context.object;p->part=nv_context.part;p->primitive=nv_context.primitive;
+    p->ordinal=++nv_context.ordinal;
+    p->key=NvHash(nv_context.key^NvHash(p->ordinal));
     unsigned countSlot=NvCountSlot(p->context);
     nv_counts[countSlot].key=p->context; nv_counts[countSlot].used=1; nv_counts[countSlot].count++;
     nv_addresses[slot]=++frame->count;
@@ -330,6 +339,36 @@ void NativeVisual_EndCapture(void)
     nv_stats.packets=frame->count;
 }
 
+uint64_t NativeVisual_ResetEpoch(void) { return nv_resetEpoch; }
+void NativeVisual_EnableWorldSampling(int enabled) { nv_worldSampling=enabled; }
+int NativeVisual_PacketIdentity(const void *packet,unsigned *kind,uint64_t *object)
+{
+    unsigned slot=(unsigned)NvHash((uintptr_t)packet)&(NV_TABLE-1);
+    while(nv_addresses[slot]) {
+        const struct NvPacket *p=&nv_frames[nv_current].packet[nv_addresses[slot]-1];
+        if(p->address==(uintptr_t)packet) {*kind=p->kind;*object=p->object;return 1;}
+        slot=(slot+1)&(NV_TABLE-1);
+    }
+    return 0;
+}
+int NativeVisual_ScenePacket(unsigned index,struct NativeVisualScenePacket *out)
+{
+    if(index>=nv_frames[nv_current].count || !out) return 0;
+    const struct NvPacket *p=&nv_frames[nv_current].packet[index];
+    *out=(struct NativeVisualScenePacket){.kind=p->kind,.object=p->object,.part=p->part,.primitive=p->primitive,.count=p->count,.ordinal=p->ordinal,.contextCount=p->contextCount};
+    if(!p->count || !NativeGpuLinks_IsRegisteredHostRange((const void *)p->address,(p->words+1)*4)) return 1;
+    const uint8_t *raw=(const uint8_t *)p->address;out->code=raw[7];
+    for(unsigned k=0;k<p->count;k++) {
+        const struct NvVertex *v=&p->vertex[k];
+        if(v->projected && !v->projection.terrainClipped) {out->projectedMask|=1u<<k;memcpy(out->local[k],v->projection.local,sizeof(out->local[k]));}
+        out->colors[k]=v->rgb[0]|((uint32_t)v->rgb[1]<<8)|((uint32_t)v->rgb[2]<<16);
+        out->u[k]=(uint8_t)v->uv[0];out->v[k]=(uint8_t)v->uv[1];
+    }
+    if(p->vertex[0].uvOffset) out->clut=(uint16_t)(NvWord(raw+p->vertex[0].uvOffset)>>16);
+    if(p->count>1 && p->vertex[1].uvOffset) out->page=(uint16_t)(NvWord(raw+p->vertex[1].uvOffset)>>16);
+    return 1;
+}
+
 /* Decompose an orthogonal scaled basis. Reject reflections/shear; those use
  * bounded screen-space interpolation rather than an invalid quaternion. */
 static int NvQuaternion(const float matrix[3][3],float q[4],float scale[3])
@@ -415,12 +454,14 @@ static int NvProjectPoint(const struct NativeVisualProjection *p,float xy[2])
 }
 void NativeVisual_BeginPresentation(float alpha)
 {
+    if(nv_presentationXYDirty) memset(nv_presentationXY,0,sizeof(nv_presentationXY));
+    nv_presentationXYCount=0;nv_presentationXYDirty=0;
     nv_stats.alpha=isfinite(alpha)?fminf(1,fmaxf(0,alpha)):1;
     nv_stats.sampled=nv_stats.projected=0;
     nv_presenting=nv_historyValid && !nv_overflow && nv_stats.alpha<1;
     struct NvFrame *frame=&nv_frames[nv_current],*old=&nv_frames[nv_current^1];
     nv_terrainMask=frame->terrainValidMask & old->terrainValidMask;
-    if(!nv_presenting) return;
+    if(!nv_presenting || !nv_worldSampling) return;
     // A terrain vertex crossing behind the old camera cannot be reprojected.
     // Fall back for the whole viewport, so adjacent triangles never choose
     // different cameras or mix canonical and interpolated corners.
@@ -439,7 +480,7 @@ void NativeVisual_BeginPresentation(float alpha)
         }
     }
 }
-void NativeVisual_EndPresentation(void) { nv_presenting=0; }
+void NativeVisual_EndPresentation(void) { nv_presenting=0;nv_presentationXYCount=0; }
 static int NvTerrainHistory(const struct NvVertex *v)
 {
     unsigned viewport=v->projection.terrainViewport;
@@ -462,10 +503,27 @@ static const struct NvPacket *NvPacketAtField(const void *field,unsigned *vertex
     }
     return NULL;
 }
+int NativeVisual_PresentationXY(const void *field,float x,float y)
+{
+    if(!field || !isfinite(x) || !isfinite(y) || nv_presentationXYCount>=NV_FIELDS/2) return 0;
+    unsigned slot=(unsigned)NvHash((uintptr_t)field)&(NV_FIELDS-1);
+    while(nv_presentationXY[slot].field && nv_presentationXY[slot].field!=(uintptr_t)field) slot=(slot+1)&(NV_FIELDS-1);
+    if(!nv_presentationXY[slot].field) nv_presentationXYCount++;
+    nv_presentationXYDirty=1;
+    nv_presentationXY[slot]=(struct NvPresentationXY){(uintptr_t)field,x,y};return 1;
+}
 void NativeVisual_SampleXY(const void *source,float *x,float *y)
 {
-    if(!nv_presenting || !source || !x || !y) return;
-    unsigned k;const struct NvPacket *p=NvPacketAtField(source,&k,0);if(!p) return;
+    if(!source || !x || !y) return;
+    if(nv_presentationXYCount) {
+        unsigned slot=(unsigned)NvHash((uintptr_t)source)&(NV_FIELDS-1);
+        while(nv_presentationXY[slot].field) {
+            if(nv_presentationXY[slot].field==(uintptr_t)source) {*x=nv_presentationXY[slot].x;*y=nv_presentationXY[slot].y;return;}
+            slot=(slot+1)&(NV_FIELDS-1);
+        }
+    }
+    if(!nv_presenting) return;
+    unsigned k;const struct NvPacket *p=NvPacketAtField(source,&k,0);if(!p || (p->world && !nv_worldSampling)) return;
     if(p->terrainViewport && !(nv_terrainMask&(1u<<(p->terrainViewport-1)))) return;
     if(NvTerrainHistory(&p->vertex[k])) {
         const struct NvVertex *vertex=&p->vertex[k];unsigned viewport=vertex->projection.terrainViewport-1;
