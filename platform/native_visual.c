@@ -508,6 +508,11 @@ void NativeVisual_BeginPresentation(float alpha)
     }
 }
 void NativeVisual_EndPresentation(void) { nv_presenting=0;nv_presentationXYCount=0; }
+void NativeVisual_BeginScenePresentation(float alpha)
+{
+    NativeVisual_BeginPresentation(alpha);
+    nv_presenting=0; /* Only explicit presentation-local XY overrides apply. */
+}
 static int NvTerrainHistory(const struct NvVertex *v)
 {
     unsigned viewport=v->projection.terrainViewport;

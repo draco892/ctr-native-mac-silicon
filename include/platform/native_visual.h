@@ -51,6 +51,9 @@ void NativeVisual_GteStore(const void *field, unsigned index, uint32_t xy);
 void NativeVisual_TerrainProjection(const float view[3], struct NativeVisualProjection *out);
 void NativeVisual_EndCapture(void);
 void NativeVisual_BeginPresentation(float alpha);
+/* Scene regeneration owns smoothing. Retained packets, including UI and
+ * unsupported geometry, must remain byte-for-byte canonical when sampled. */
+void NativeVisual_BeginScenePresentation(float alpha);
 void NativeVisual_EndPresentation(void);
 void NativeVisual_SampleXY(const void *source, float *x, float *y);
 void NativeVisual_SampleRGB(const void *source, uint8_t *r, uint8_t *g, uint8_t *b);
@@ -91,6 +94,7 @@ static inline void NativeVisual_GteStore(const void *f,unsigned i,uint32_t xy) {
 static inline void NativeVisual_TerrainProjection(const float v[3],struct NativeVisualProjection *p) {(void)v;*p=(struct NativeVisualProjection){0};}
 static inline void NativeVisual_EndCapture(void) {}
 static inline void NativeVisual_BeginPresentation(float a) { (void)a; }
+static inline void NativeVisual_BeginScenePresentation(float a) { (void)a; }
 static inline void NativeVisual_EndPresentation(void) {}
 static inline void NativeVisual_SampleXY(const void *s,float *x,float *y) { (void)s;(void)x;(void)y; }
 static inline void NativeVisual_SampleRGB(const void *s,uint8_t *r,uint8_t *g,uint8_t *b) { (void)s;(void)r;(void)g;(void)b; }

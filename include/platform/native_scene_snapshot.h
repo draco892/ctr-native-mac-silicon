@@ -30,6 +30,7 @@ struct NativeSceneSourceTriangle {
     int reflectedCull; /* Terrain winding is authored before the view reflection. */
     unsigned effect,line, fixedBucket; /* fixedBucket is encoded as bucket + 1; zero means depth. */
     s16 orderingBias;
+    unsigned continuousUV; /* Water/environment coordinates; atlas frames stay discrete. */
 };
 struct NativeSceneSnapshot;
 struct NativeSceneSnapshotStats { unsigned objects,sources,triangles,culled,clipped,matched,unsupported; int valid; };

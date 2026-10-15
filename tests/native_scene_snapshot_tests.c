@@ -102,11 +102,106 @@ static int Effects(struct NativeSceneSnapshot *scene)
     CHECK(Render(scene,1,&out,&stats) && out.count==0);
     return 0;
 }
+/* Sprite/depth corner permutations cannot break wheel geometry history. */
+static int WheelCorners(struct NativeSceneSnapshot *scene)
+{
+    struct Output out;struct NativeSceneSnapshotStats stats;
+    const float local[4][2]={{15,-5},{25,-5},{15,5},{25,5}};
+    for(unsigned a=0;a<8;a++) for(unsigned b=0;b<8;b++) {
+        NativeSceneSnapshot_Reset(scene);
+        for(unsigned frame=0;frame<2;frame++) {
+            NativeSceneSnapshot_Begin(scene,1,25);
+            struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+                .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+            CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+            float angle=frame*1.57079632679f,c=cosf(angle),v=sinf(angle);
+            struct NativeSceneObjectSnapshot kart={.id=1,.modelIdentity=9,.supported=1,
+                .pose={.basis={{c,-v,0},{v,c,0},{0,0,1}},.position={frame*40.0f,0,256}}};
+            CHECK(NativeSceneSnapshot_Object(scene,&kart));
+            struct NativeSceneEffect wheel={.id=99,.anchor=1,.kind=5,.count=4,.bucket=4,.code=0x2e,.topology=frame?b:a};
+            for(unsigned k=0;k<4;k++) {
+                unsigned physical=NativeSceneEffect_WheelCorner(wheel.topology,k);
+                float x=local[physical][0]+(frame ? (physical&1?4:-4):0);
+                float y=local[physical][1]+(frame ? (physical&2?4:-4):0);
+                wheel.eye[k][0]=kart.pose.position[0]+c*x-v*y;
+                wheel.eye[k][1]=v*x+c*y;wheel.eye[k][2]=256;
+                wheel.u[k]=(uint8_t)(physical*10);wheel.v[k]=20;
+            }
+            CHECK(NativeSceneSnapshot_Effect(scene,&wheel));CHECK(NativeSceneSnapshot_Seal(scene));
+        }
+        for(unsigned step=0;step<=4;step++) {
+            float t=step/4.0f,c=cosf(t*1.57079632679f),v=sinf(t*1.57079632679f);
+            CHECK(Render(scene,t,&out,&stats) && out.count==2);
+            float expectedX=96+(40*t+c*(15-4*t)-v*(-5-4*t))*0.5f;
+            CHECK(fabsf(out.triangles[0].visualXY[0][0]-expectedX)<0.51f);
+            CHECK(out.triangles[0].source.texture.u[0]==0 && out.triangles[0].source.texture.u[1]==10);
+        }
+    }
+    /* A retained body must not receive independently interpolated wheels. */
+    NativeSceneSnapshot_Begin(scene,1,26);
+    struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+        .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+    CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+    struct NativeSceneObjectSnapshot retained={.id=1,.pose={.basis={{1,0,0},{0,1,0},{0,0,1}}}};
+    CHECK(NativeSceneSnapshot_Object(scene,&retained));
+    struct NativeSceneEffect wheel={.id=99,.anchor=1,.kind=5,.count=4,.bucket=4};
+    CHECK(!NativeSceneSnapshot_Effect(scene,&wheel));CHECK(NativeSceneSnapshot_Seal(scene));
+    CHECK(Render(scene,0.5f,&out,&stats) && !out.count);
+    return 0;
+}
+/* Material history uses source identity/topology, never screen coordinates. */
+static int Materials(struct NativeSceneSnapshot *scene)
+{
+    struct Output out;struct NativeSceneSnapshotStats stats;
+    for(unsigned mode=0;mode<9;mode++) {
+        NativeSceneSnapshot_Reset(scene);
+        for(unsigned frame=0;frame<2;frame++) {
+            NativeSceneSnapshot_Begin(scene,1,30+mode);
+            struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+                .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+            CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+            struct NativeSceneObjectSnapshot object={.id=1,.modelIdentity=9,.supported=1,
+                .pose={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={0,0,256}}};
+            CHECK(NativeSceneSnapshot_Object(scene,&object));
+            struct NativeSceneSourceTriangle source={.object=1,.primitive=1,
+                .local={{-20,-20,0},{20,-20,0},{0,20,0}},
+                .material={.textured=1,.vertices={0,1,2},.texture={.tpage=96,.clut=4}}};
+            source.continuousUV=mode==1 || mode==7;
+            for(unsigned k=0;k<3;k++) {
+                source.material.colors[k]=frame ? 0xc8c8c8:0;
+                source.material.texture.u[k]=mode==7 ? (frame?5:250):(frame && (mode==1 || mode==2)?30:10);
+                source.material.texture.v[k]=20;
+            }
+            if(frame && mode==3) source.material.texture.tpage=97;
+            if(frame && mode==4) source.material.texture.clut=5;
+            if(frame && mode==5) source.material.textureBlend=NATIVE_TEXTURE_BLEND_SEMI;
+            if(frame && mode==6) source.material.vertices[0]=3;
+            if(mode==8) source.material.textured=0;
+            CHECK(NativeSceneSnapshot_Triangle(scene,&source));CHECK(NativeSceneSnapshot_Seal(scene));
+        }
+        for(unsigned step=0;step<=120;step++) {
+            float alpha=step/120.0f;
+            CHECK(Render(scene,alpha,&out,&stats) && out.count==1);
+            const struct NativeModelTriangle *m=&out.triangles[0].source;
+            unsigned expected=(mode==0 || mode==1 || mode==8) ? (unsigned)lroundf(200*alpha):(mode==6 || step==120 ? 200:0);
+            CHECK((m->colors[0]&255)==expected && ((m->colors[0]>>8)&255)==expected && ((m->colors[0]>>16)&255)==expected);
+            unsigned u=mode==7 ? (step==120?5:250):mode==1 ? (unsigned)lroundf(10+20*alpha):mode==2 && step==120 ? 30:10;
+            CHECK(m->texture.u[0]==u);
+            CHECK(m->texture.tpage==(mode==3 && step==120 ? 97:96));
+            CHECK(m->texture.clut==(mode==4 && step==120 ? 5:4));
+        }
+        /* Repeated rendering must not consume or mutate material history. */
+        CHECK(Render(scene,0.5f,&out,&stats) && out.count==1);
+    }
+    return 0;
+}
 int main(void)
 {
     struct NativeSceneSnapshot *scene=NativeSceneSnapshot_Create();CHECK(scene);
     struct Output out;struct NativeSceneSnapshotStats stats;
     CHECK(Effects(scene)==0);
+    CHECK(WheelCorners(scene)==0);
+    CHECK(Materials(scene)==0);
     Capture(scene,1,1,-64,0,0);Capture(scene,1,1,64,0,0);
     for(unsigned i=0;i<=120;i++) {
         float alpha=(float)i/120;CHECK(Render(scene,alpha,&out,&stats) && out.count==1);

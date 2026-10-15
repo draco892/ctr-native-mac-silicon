@@ -122,6 +122,20 @@ int main(void)
     MakeVertexRect(rect,&rectangles[1].x0,rectangles[1].w,rectangles[1].h);
     CHECK(fabsf(rect[2].x-rect[0].x-15)<0.001f);
     NativeVisual_EndPresentation();CHECK(memcmp(&originalRect,&rectangles[1],sizeof(originalRect))==0);
+    // Scene mode must leave every retained menu/UI field canonical despite
+    // valid packet history. Only explicitly regenerated XY fields can change.
+    NativeVisual_BeginScenePresentation(0.5f);
+    GrVertex canonical[4];
+    MakeVertexTriangle(canonical,&triangles[1].x0,&triangles[1].x1,&triangles[1].x2);
+    MakeColourTriangle(canonical,true,&triangles[1].r0,&triangles[1].r1,&triangles[1].r2);
+    CHECK(canonical[0].x==original.x0+3 && canonical[0].r==original.r0);
+    MakeVertexRect(rect,&rectangles[1].x0,rectangles[1].w,rectangles[1].h);
+    CHECK(rect[0].x==originalRect.x0+3 && rect[2].x-rect[0].x==originalRect.w);
+    CHECK(NativeVisual_GetStats().sampled==0);
+    CHECK(NativeVisual_PresentationXY(&triangles[1].x0,12.25f,34.5f));
+    MakeVertexTriangle(canonical,&triangles[1].x0,&triangles[1].x1,&triangles[1].x2);
+    CHECK(canonical[0].x==15.25f && canonical[0].y==39.5f && canonical[1].x==original.x1+3);
+    NativeVisual_EndPresentation();
     NativeVisual_Reset();Capture(0,0,0,0,1,1);Capture(1,0,0,3.14159265358979323846f,1,1);
     GrVertex rotated=Draw(0.5f);
     CHECK(fabsf(rotated.x-3)<0.01f && fabsf(fabsf(rotated.y-5)-100)<0.01f);

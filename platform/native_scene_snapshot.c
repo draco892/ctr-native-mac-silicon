@@ -22,6 +22,37 @@ static uint64_t SnapshotHash(uint64_t x)
 }
 static float SnapshotLerp(float a,float b,float t) { return a+(b-a)*t; }
 static float SnapshotAlpha(float t) { return isfinite(t)?fminf(1,fmaxf(0,t)):1; }
+/* Only interpolate attributes belonging to the same material. UVs for sprite
+ * and atlas animation select an entire frame; moving them through the atlas
+ * would sample unrelated texels. Water explicitly opts into continuous UVs. */
+static struct NativeModelTriangle SnapshotMaterial(const struct NativeSceneSourceTriangle *a,
+    const struct NativeSceneSourceTriangle *b,float t,struct NativeSceneClipVertex vertices[3])
+{
+    const struct NativeModelTriangle *current=&b->material,*previous=a ? &a->material:NULL;
+    int compatible=previous && a->continuousUV==b->continuousUV && a->line==b->line &&
+        previous->textured==current->textured && previous->textureBlend==current->textureBlend &&
+        previous->texture.tpage==current->texture.tpage && previous->texture.clut==current->texture.clut;
+    if(compatible && current->textured) for(unsigned k=0;k<3;k++) {
+        int du=(int)current->texture.u[k]-previous->texture.u[k],dv=(int)current->texture.v[k]-previous->texture.v[k];
+        /* Byte-coordinate wrap is a discontinuity. Never sweep through the
+         * middle of the page or interpolate a different atlas frame. */
+        if(b->continuousUV ? (abs(du)>128 || abs(dv)>128):(du!=0 || dv!=0)) compatible=0;
+    }
+    struct NativeModelTriangle material=previous && !compatible && t<1 ? *previous:*current;
+    for(unsigned k=0;k<3;k++) {
+        NativeSceneGeometry_Attributes(&material,k,&vertices[k]);
+        if(!compatible) continue;
+        for(unsigned channel=0;channel<3;channel++) {
+            unsigned x=(previous->colors[k]>>(channel*8))&255,y=(current->colors[k]>>(channel*8))&255;
+            vertices[k].rgb[channel]=(s32)lroundf(SnapshotLerp((float)x,(float)y,t)*65536);
+        }
+        if(b->continuousUV) {
+            vertices[k].uv[0]=(s32)lroundf(SnapshotLerp(previous->texture.u[k],current->texture.u[k],t)*65536);
+            vertices[k].uv[1]=(s32)lroundf(SnapshotLerp(previous->texture.v[k],current->texture.v[k],t)*65536);
+        }
+    }
+    return material;
+}
 static const struct NativeSceneObjectSnapshot *SnapshotObject(const struct SnapshotFrame *f,uint64_t id)
 {
     unsigned slot=(unsigned)SnapshotHash(id)&(SNAP_OBJECT_TABLE-1);
@@ -146,6 +177,12 @@ int NativeSceneSnapshot_Effect(struct NativeSceneSnapshot *s,const struct Native
     const struct NativeSceneCameraSnapshot *camera=&f->cameras[effect->viewport];
     const struct NativeSceneObjectSnapshot *anchor=effect->anchor ? SnapshotObject(f,effect->anchor):NULL;
     if(effect->anchor && !anchor) return 0;
+    int wheel=effect->kind==5 || effect->kind==6;
+    if(wheel && (effect->count!=4 || effect->topology>=8 || !anchor)) return 0;
+    /* An interpolated wheel cannot attach to a retained current-tick body. */
+    if(effect->kind==5 && !anchor->supported) return 0;
+    unsigned packetCorner[4]={0,1,2,3};
+    if(wheel) for(unsigned k=0;k<4;k++) packetCorner[NativeSceneEffect_WheelCorner(effect->topology,k)]=k;
     struct NativeSceneObjectSnapshot object={.id=effect->id,.modelIdentity=effect->flags^((uint64_t)effect->topology<<32),.supported=1,.viewportMask=1u<<effect->viewport,.renderMode=effect->flags,
         .pose={.basis={{1,0,0},{0,1,0},{0,0,1}}}};
     float world[4][3]={{0}},local[4][3]={{0}},centre[3]={0},maxDepth=0;
@@ -188,8 +225,9 @@ int NativeSceneSnapshot_Effect(struct NativeSceneSnapshot *s,const struct Native
         int bias=effect->bucket-((int)fmaxf(0,maxDepth)>>6);if(bias<-32768) bias=-32768;if(bias>32767) bias=32767;source.orderingBias=anchor ? anchor->orderingBias:(s16)bias;
         for(unsigned k=0;k<3;k++) {
             unsigned corner=source.line ? (k?1:0):corners[part][k];
-            memcpy(source.local[k],local[corner],sizeof(source.local[k]));source.material.vertices[k]=effect->topology*4+corner;
-            source.material.colors[k]=(effect->code&5)==5 ? 0x808080:effect->colors[corner];source.material.texture.u[k]=effect->u[corner];source.material.texture.v[k]=effect->v[corner];
+            unsigned capturedCorner=packetCorner[corner];
+            memcpy(source.local[k],local[capturedCorner],sizeof(source.local[k]));source.material.vertices[k]=(wheel ? 0:effect->topology*4)+corner;
+            source.material.colors[k]=(effect->code&5)==5 ? 0x808080:effect->colors[capturedCorner];source.material.texture.u[k]=effect->u[capturedCorner];source.material.texture.v[k]=effect->v[capturedCorner];
         }
         if(!NativeSceneSnapshot_Triangle(s,&source)) return 0;
     }
@@ -310,15 +348,8 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
             previousSource=SnapshotSource(old,source->object,source->primitive);
             if(previousSource && memcmp(previousSource->material.vertices,source->material.vertices,sizeof(source->material.vertices))!=0) previousSource=NULL;
         }
-        struct NativeModelTriangle material=source->material;
-        if(source->effect && previousSource) for(unsigned k=0;k<3;k++) {
-            material.colors[k]=0;
-            for(unsigned channel=0;channel<3;channel++) {
-                unsigned a=(previousSource->material.colors[k]>>(channel*8))&255,b=(source->material.colors[k]>>(channel*8))&255;
-                material.colors[k]|=(u32)lroundf(SnapshotLerp((float)a,(float)b,t))<<(channel*8);
-            }
-        }
         struct NativeSceneClipVertex vertices[3];
+        struct NativeModelTriangle material=SnapshotMaterial(previousSource,source,t,vertices);
         for(unsigned k=0;k<3;k++) {
             for(unsigned row=0;row<3;row++) {
                 float eye=pose.position[row];
@@ -326,7 +357,6 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
                 if(!isfinite(eye) || fabsf(eye)>(1<<24)) return NATIVE_ASSET_INVALID_DATA;
                 vertices[k].view[row]=(s32)floorf(eye);
             }
-            NativeSceneGeometry_Attributes(&material,k,&vertices[k]);
         }
         unsigned outside[6]={0};
         s64 ox=clipCamera.transform.offset[0]/65536,oy=clipCamera.transform.offset[1]/65536;

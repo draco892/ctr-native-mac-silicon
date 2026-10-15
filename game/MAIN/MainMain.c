@@ -456,7 +456,6 @@ u32 main(void)
 			NativePerf_BeginScope(NATIVE_PERF_BUCKET_RENDER_FRAME);
 #endif
 #ifdef CTR_NATIVE
-			Platform_BeginVisualCapture(gGT);
 			MainFrame_PrepareFrame(gGT, gGS);
 			// Retail timing still belongs to the update loop. Drawing prepared
 			// packets again must not emit VBlank callbacks (input/audio/timers).

@@ -25,11 +25,9 @@ struct DrawTiresSolidProjectedWheel
  * corners project to the same pixel. */
 static void DrawTires_BindCorners(POLY_FT4 *p,const struct DrawTiresScratch *scratch,int order)
 {
-    static const u8 corners[8][4]={{3,1,2,0},{2,0,3,1},{3,1,2,0},{2,0,3,1},
-        {1,3,0,2},{0,2,1,3},{1,3,0,2},{0,2,1,3}};
     if((unsigned)order>=8) return;
     void *fields[4]={&p->x0,&p->x1,&p->x2,&p->x3};
-    for(unsigned k=0;k<4;k++) NativeVisual_CopyProjection(fields[k],&scratch->projectedSxy[corners[order][k]]);
+    for(unsigned k=0;k<4;k++) NativeVisual_CopyProjection(fields[k],&scratch->projectedSxy[NativeSceneEffect_WheelCorner((unsigned)order,k)]);
     NativeVisual_EffectTopology((unsigned)order);
 }
 #endif

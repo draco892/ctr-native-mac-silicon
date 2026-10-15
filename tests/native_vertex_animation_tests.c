@@ -58,6 +58,14 @@ int main(void)
     u8 hidden[4]={0},visible[4]={1}; const void *masks[4]={hidden,hidden,hidden,visible}; size_t sizes[4]={4,4,4,4};
     CHECK(NativeVertexAnimation_Apply(&a,7,masks,sizes,3,output,sizeof(output),&animated)==NATIVE_ASSET_OK && memcmp(output,asset+0x240,16)==0);
     CHECK(NativeVertexAnimation_Apply(&a,7,masks,sizes,4,output,sizeof(output),&animated)==NATIVE_ASSET_OK && memcmp(output,asset+0x240,16)!=0);
+    /* Full-scene snapshots animate sources absent from the canonical PVS,
+     * using a copied view; the default mask and asset remain untouched. */
+    CTR_WriteU32LE(asset+0x390,0);
+    struct NativeVertexAnimationView full=a;full.visibility=NULL;
+    CHECK(NativeVertexAnimation_Apply(&a,7,NULL,NULL,0,output,sizeof(output),&animated)==NATIVE_ASSET_OK && memcmp(output,asset+0x240,16)==0);
+    CHECK(NativeVertexAnimation_Apply(&full,7,NULL,NULL,0,output,sizeof(output),&animated)==NATIVE_ASSET_OK && memcmp(output,asset+0x240,16)!=0);
+    CHECK(CTR_ReadU32LE(asset+0x390)==0 && a.visibility!=NULL);
+    CTR_WriteU32LE(asset+0x390,1);
     sizes[3]=3; CHECK(NativeVertexAnimation_Apply(&a,0,masks,sizes,4,output,sizeof(output),&animated)==NATIVE_ASSET_INVALID_DATA && animated.vertices==NULL);
     CHECK(NativeVertexAnimation_Apply(&a,0,NULL,NULL,0,output,15,&animated)==NATIVE_ASSET_OUTPUT_TOO_SMALL);
     CHECK(NativeVertexAnimation_Apply(&a,0,NULL,NULL,0,asset+0x240,16,&animated)==NATIVE_ASSET_INVALID_ARGUMENT);

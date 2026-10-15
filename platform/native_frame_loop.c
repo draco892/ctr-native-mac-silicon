@@ -20,7 +20,8 @@ void Platform_BeginVisualCapture(struct GameTracker *tracker)
     static struct { SVec3 pos,rot; } previousCamera[4];
     static int previousPlayers;
     int enabled=s_independentFrameTiming && gNativeConfig.maxFps>30 && gNativeConfig.interpolation &&
-        sdata->Loading.stage==LOAD_IDLE && !(tracker->gameMode1 & LOADING);
+        sdata->Loading.stage==LOAD_IDLE && tracker->numPlyrCurrGame==1 &&
+        !(tracker->gameMode1 & (LOADING|MAIN_MENU|GAME_CUTSCENE|ADVENTURE_ARENA));
     uint64_t signature=(uint64_t)(uintptr_t)tracker->level1 ^ ((uint64_t)(unsigned)tracker->levelID<<32) ^
         (unsigned)tracker->gameMode1 ^ ((uint64_t)(unsigned)tracker->numPlyrCurrGame<<56) ^ (uint64_t)(uintptr_t)sdata->ptrActiveMenu;
     for(int i=0;i<tracker->numPlyrCurrGame && i<4;i++) {
@@ -93,7 +94,7 @@ static void NativeFrameLoop_Present(struct GameTracker *tracker, struct GamepadS
         alpha=(float)((double)(SDL_GetPerformanceCounter()-s_visualTickCounter)*NATIVE_FRAME_GPU_HZ /
             ((double)s_frameScheduler.frequency*NATIVE_FRAME_VBLANK_CYCLES*2));
     NativeVisual_EnableWorldSampling(0);
-    NativeVisual_BeginPresentation(alpha);
+    NativeVisual_BeginScenePresentation(alpha);
     Platform_BeginFrame();
     MainFrame_RenderFrame(tracker, pads);
     Platform_EndFrame();

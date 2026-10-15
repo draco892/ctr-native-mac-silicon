@@ -15,7 +15,8 @@ renderer deadline is due. Each update runs:
 1. `MainFrame_BeginUpdate`: hub loading hook and retail frame bookkeeping.
 2. `MainFrame_ResetDB`: select/reset graphical buffers, OT and GPU link ranges.
 3. `MainFrame_GameLogic`: existing simulation, except while loading.
-4. `MainFrame_PrepareFrame`: build the frame's GPU packets. This owns the retail
+4. `MainFrame_PrepareFrame`: refresh camera matrices in `RainLogic`, begin visual
+   capture, then build the frame's GPU packets. This owns the retail
    mixed update/draw routines, including menu input, HUD transitions, weather,
    texture animation, pause capture, fades, memory-card servicing, and race flag.
 5. `DrawSync` and `RenderPrepareSubmit`: finish GPU bookkeeping, reset the flip
@@ -94,7 +95,8 @@ built-in default both explicitly disable it. Alt/Option+F3 toggles it for the
 current session without rewriting the config.
 
 When explicitly enabled above 30 FPS, `NativeSceneGameSnapshot_Begin` copies the
-scene before preparation: world camera position/basis, instance pose including
+scene after preparation refreshes the camera matrices and before 3D drawing:
+world camera position/basis, instance pose including
 model scale, flags, animation/frame/header and generation IDs. Model command
 offsets identify unprojected source triangles. Packed animation vertices and
 materials are copied into two host-owned frames; historical asset/game pointers
@@ -132,8 +134,8 @@ of visual latency.
 Original packet colors/UVs can update a source material only for one intact
 primary triangle whose three captured local corners match the source. Clipped,
 split or reflected packet corners cannot overwrite an uncut source's material.
-The exact GTE SXY-field bindings remain available for this check; runtime 3D
-screen-coordinate interpolation is disabled. Rebuilt packet fields instead
+The exact GTE SXY-field bindings remain available for this check; runtime packet
+interpolation is disabled for both world geometry and retained 2D/UI commands. Rebuilt packet fields instead
 receive presentation-local float XY overrides, cleared at the next presentation.
 Retail packet bytes, game structures and checkpoint layouts are unchanged.
 
@@ -143,9 +145,8 @@ split-screen use canonical packets. Pixel LOD, billboard, custom-matrix, huge an
 split-state instances also retain canonical geometry. Verified wheels, shadows, reflections, particles, weather, confetti and sky now
 enter the scene source path described below. Primitives without complete source
 provenance keep their entire canonical geometry and can still misalign during
-motion. Water/material animation
-and texture/light transitions are not fully smoothed. Migrating those effects,
-expanding layouts, tuning LOD/performance and whole-game validation remain
+motion. Continuous material colours and water coordinates now share scene history;
+texture frames remain discrete. Expanding layouts, tuning LOD/performance and whole-game validation remain
 unfinished; this is not complete interpolation for the entire game.
 
 `presentations.csv` includes scene object/source/triangle/match/unsupported counts
@@ -161,7 +162,7 @@ asset or GPU pointers. The adapter converts captured GTE eye coordinates into
 world units using the effect's explicit scale (wheel/shadow/particle coordinates
 use quarter units), then imports them into the same scene history as the camera
 and kart. Wheels copy the kart pose and ordering bias; their local corners and
-sprite topology remain distinct across changes of corner order. Shadow patches
+sprite UVs are mapped back to stable physical corners before history matching. Shadow patches
 sample ground-space geometry. Ordinary particles sample their world centre and
 colours; camera-facing particles retain eye-space axes instead of inheriting the
 camera's previous orientation. Sky sources use camera rotation without parallax.
@@ -184,7 +185,9 @@ Lines are clipped against all six eye-space planes with endpoint colour
 interpolation and emitted as GPU lines, including their own draw mode. Quads are
 split using the original corner/UV ordering and clipped as triangles. Blend mode,
 page, CLUT and raw-texture semantics are preserved; atlas/frame selection remains
-discrete. Unsupported primitives remain whole canonical packets; capture or
+discrete. If any solid wheel lacks trusted 3D provenance or its kart body is
+unsupported, the complete frame retains the canonical pose to keep body and
+wheels together. Other unsupported primitives remain whole canonical packets; capture or
 capacity failure falls back to the complete canonical frame. No effect generator,
 RNG, emitter, sound, gameplay update or event is rerun during presentation.
 
@@ -197,6 +200,87 @@ suites retain 45 test executables. Short manual comparisons exercised Crash Cove
 and Cortex Castle with motion, steering, jump, pause, level change and the
 interpolation toggle; they do not establish whole-game parity or a 120 FPS
 performance guarantee. Logs are under ignored `debug/effects`.
+
+### Materials, water and discrete animation
+
+All matched source triangles now interpolate vertex RGB, including terrain,
+scenery lighting and model colours captured after preparation. Attributes remain
+Q16 until clipping and GPU packing, so generated clip corners inherit the sampled
+colour gradient. This interpolates copied lighting results; it does not rerun
+retail lighting or depth-cue code under the sampled camera. Intact primary model
+packets still require exact local-corner provenance before updating a material;
+raw textured packets supply neutral modulation colours.
+
+Water environment UVs explicitly opt into continuous interpolation, with the same
+source identity, topology and material compatibility checks. Byte-coordinate
+wraps larger than half a page switch discretely, avoiding a sweep through the
+page. Atlas/sprite frames, page, CLUT and blend changes select the previous complete
+material until alpha reaches one. They never interpolate UVs across unrelated
+frames or blend incompatible palettes. Missing history, topology changes and
+new objects use current material values immediately.
+
+Terrain snapshot animation uses a copied animation view with no PVS mask. Water
+and scenery sources newly revealed by the sampled camera therefore receive the
+current timer's values even when absent from the canonical visibility list.
+Asset masks, live vertices, game timers and GTE state are unchanged. Special
+primitives without complete 3D provenance retain their canonical packets; this
+step does not reconstruct unsupported geometry from screen coordinates.
+
+Regression tests sample 121 alpha values for ordinary lighting, water UVs,
+untextured colours, atlas frames, page/CLUT/blend changes, UV wraps and changed
+vertex topology. Animation tests additionally exercise a hidden source through
+both the masked retail-compatible view and the full-scene view. Both complete-game
+builds pass 45/45 tests, including ASan/UBSan. A short normal-build Crash Cove
+check exercised movement, steering, jump, pause and on/off comparison with water
+in view. This does not establish all-track parity; interpolation remains opt-in.
+Test and manual logs are retained under ignored `debug/materials`.
+
+### Menu and wheel regression correction
+
+Scene presentation now uses `NativeVisual_BeginScenePresentation`: retained GPU
+packets receive no legacy XY, RGB or rectangle-size interpolation, even when
+packet history exists. Only regenerated fields with explicit presentation-local
+XY overrides are sampled. Capture is also disabled in menus, cinematics,
+adventure arenas and multiplayer layouts, matching the scene adapter's gates.
+This prevents menu background triangles from being matched by packet ordinal
+and interpolated independently of their neighbours.
+
+Wheel sprite/depth cases reorder four physical corners. The importer now undoes
+that permutation for positions, colours and UVs before assigning source vertex
+identities. All eight cases therefore share geometry history while their
+material frames remain discrete. Tests exercise all 64 old/new case pairs,
+including parent translation/rotation and changing wheel geometry. Separate
+regressions verify canonical menu XY/RGB/rectangle sampling with valid history,
+explicit regenerated overrides, and rejection of wheels attached to unsupported
+bodies. Both full suites pass 45/45 tests, including ASan/UBSan.
+
+A short 60 FPS/interpolation-enabled check covered the main menu and Crash Cove
+with acceleration, left/right steering, jump and pause. The profiled run recorded
+1,540 regenerated and 117 canonical fallback presentations while the scene path
+was requested; its last 300 scene presentations were all regenerated. Legacy
+packet-sampled field counts remained zero throughout. Fallback still displays a
+canonical tick pose and can reduce smoothness in unsupported cases; this is not
+whole-game visual parity. Test and runtime logs are under `debug/glitch-fix`.
+
+### Current-tick camera capture boundary
+
+`Platform_BeginVisualCapture` runs inside `MainFrame_PrepareFrame`, immediately
+after `RainLogic`. Its `PushBuffer_UpdateFrustum` calls rebuild camera matrices
+from current camera position/rotation. Previously capture ran before preparation,
+so current object poses were paired with the preceding tick's camera matrix,
+while subsequently emitted wheels, particles and sky used the refreshed matrix.
+Acceleration/camera movement could therefore lift the rendered kart relative to
+the scene and misalign background effects even when the copied geometry was
+otherwise valid. Camera refresh is still executed exactly once per simulation
+tick, with no extra game logic or GTE work during presentation. Texture cycling
+also precedes this capture boundary, as it does in canonical geometry drawing.
+
+Both complete-game builds pass 45/45 tests, including ASan/UBSan, after this
+ordering correction. A short 60 FPS/interpolation-enabled Crash Cove check
+covered acceleration, steering, pause and the interpolation toggle. Runtime
+profiling confirms regenerated scene presentations; this is not whole-game
+parity or proof that every background variant is migrated. Logs are under
+`debug/camera-order`.
 
 ### Verification scope after the graphical regression
 

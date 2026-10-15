@@ -70,6 +70,12 @@ void MainFrame_RenderFrame(struct GameTracker *gGT, struct GamepadSystem *gGamep
 	}
 
 	RainLogic(gGT);
+#ifdef CTR_NATIVE
+	/* RainLogic refreshes each push buffer's camera matrices from its current
+	 * position/rotation. Capturing before that point pairs current object poses
+	 * with the preceding tick's camera, while emitted effects use the new one. */
+	Platform_BeginVisualCapture(gGT);
+#endif
 	DropRain_MakeSound(gGT);
 	MenuHighlight();
 	MAINFRAME_PERF_END(NATIVE_PERF_BUCKET_MAINFRAME_SETUP);

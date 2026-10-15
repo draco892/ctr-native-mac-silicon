@@ -17,4 +17,12 @@ struct NativeSceneEffect {
     uint8_t u[4],v[4];
     uint16_t page,clut;
 };
+/* Retail wheel quads reorder physical corners for their selected sprite and
+ * depth case. These are identities, not changes in wheel geometry. */
+static inline unsigned NativeSceneEffect_WheelCorner(unsigned order,unsigned corner)
+{
+    static const uint8_t corners[8][4]={{3,1,2,0},{2,0,3,1},{3,1,2,0},{2,0,3,1},
+        {1,3,0,2},{0,2,1,3},{1,3,0,2},{0,2,1,3}};
+    return corners[order&7][corner&3];
+}
 #endif

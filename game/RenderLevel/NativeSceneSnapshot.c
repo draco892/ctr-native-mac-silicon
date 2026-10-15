@@ -100,7 +100,10 @@ static void SceneGameCaptureTerrain(const struct Level *legacy,u32 tick)
     void *vertices=animation.count && result==NATIVE_ASSET_OK ? malloc(bytes) : NULL;
     u8 *water=calloc(mesh.quadCount?mesh.quadCount:1,1);
     if(result!=NATIVE_ASSET_OK || (animation.count && !vertices) || !water) {free(vertices);free(water);NativeSceneSnapshot_Invalidate(sceneGame);return;}
-    result=NativeVertexAnimation_Apply(&animation,tick,NULL,NULL,0,vertices,bytes,&animated);
+    /* Full-scene sources need animation even outside the canonical PVS. This
+     * copied view ignores the asset visibility mask without modifying it. */
+    struct NativeVertexAnimationView fullAnimation=animation;fullAnimation.visibility=NULL;
+    result=NativeVertexAnimation_Apply(&fullAnimation,tick,NULL,NULL,0,vertices,bytes,&animated);
     /* Follow the complete reachable BSP, without the tick's camera/PVS mask.
      * Allocated-but-unreachable nodes/quads are not renderable scene sources. */
     u32 *stack=mesh.bspCount ? malloc(((size_t)mesh.bspCount*2+1)*sizeof(*stack)):NULL;
@@ -142,6 +145,7 @@ static void SceneGameCaptureTerrain(const struct Level *legacy,u32 tick)
                 void *environment=NULL;
                 if(NativePtrMap_Resolve(level.map,0x44,12,&environment)!=NATIVE_PTRMAP_OK) {result=NATIVE_ASSET_INVALID_DATA;break;}
                 source.material.textured=1;source.material.textureBlend=NATIVE_TEXTURE_BLEND_SEMI;
+                source.continuousUV=1;
                 source.material.texture.clut=CTR_ReadU16LE((u8 *)environment+2);source.material.texture.tpage=CTR_ReadU16LE((u8 *)environment+6);
             }
             for(unsigned k=0;k<3;k++) {
@@ -241,7 +245,13 @@ static int SceneGameCaptureEffects(void)
                         sceneEffects++;if(kind<13) captured[kind]++;
                     }
                     NativeVisual_MarkEffect(packet);
-                } else {sceneEffectFallback++;if(kind<13) retained[kind]++;}
+                } else {
+                    /* Keep the entire frame at the canonical pose if even one
+                     * solid wheel lacks 3D provenance. Mixing its current-tick
+                     * packet with a sampled kart body visibly detaches it. */
+                    if(kind==5) return 0;
+                    sceneEffectFallback++;if(kind<13) retained[kind]++;
+                }
             }
         }
         if(NativeGpuLinks_IsTerminator(tag)) break;
@@ -262,7 +272,7 @@ void NativeSceneGameSnapshot_Seal(void)
         struct NativeModelTriangle material={.textured=(packet.code&0xfcu)==0x34,
             .textureBlend=(packet.code&2)?NATIVE_TEXTURE_BLEND_SEMI:NATIVE_TEXTURE_BLEND_OPAQUE,
             .texture={.clut=packet.clut,.tpage=packet.page}};
-        for(unsigned k=0;k<3;k++) {material.colors[k]=packet.colors[k];material.texture.u[k]=packet.u[k];material.texture.v[k]=packet.v[k];}
+        for(unsigned k=0;k<3;k++) {material.colors[k]=(packet.code&5)==5 ? 0x808080:packet.colors[k];material.texture.u[k]=packet.u[k];material.texture.v[k]=packet.v[k];}
         NativeSceneSnapshot_Material(sceneGame,packet.object,packet.primitive,packet.part,packet.local,&material);
     }
     if(NativeVisual_GetStats().overflow || !SceneGameCaptureEffects()) NativeSceneSnapshot_Invalidate(sceneGame);
