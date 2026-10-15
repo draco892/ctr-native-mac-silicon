@@ -20,15 +20,16 @@ void Platform_BeginVisualCapture(struct GameTracker *tracker)
     static struct { SVec3 pos,rot; } previousCamera[4];
     static int previousPlayers;
     int enabled=s_independentFrameTiming && gNativeConfig.maxFps>30 && gNativeConfig.interpolation &&
-        sdata->Loading.stage==LOAD_IDLE && tracker->numPlyrCurrGame==1 &&
-        !(tracker->gameMode1 & (LOADING|MAIN_MENU|GAME_CUTSCENE|ADVENTURE_ARENA));
+        sdata->Loading.stage==LOAD_IDLE && tracker->numPlyrCurrGame>=1 && tracker->numPlyrCurrGame<=4 &&
+        !(tracker->gameMode1 & LOADING);
     uint64_t signature=(uint64_t)(uintptr_t)tracker->level1 ^ ((uint64_t)(unsigned)tracker->levelID<<32) ^
         (unsigned)tracker->gameMode1 ^ ((uint64_t)(unsigned)tracker->numPlyrCurrGame<<56) ^ (uint64_t)(uintptr_t)sdata->ptrActiveMenu;
     for(int i=0;i<tracker->numPlyrCurrGame && i<4;i++) {
         const struct PushBuffer *camera=&tracker->pushBuffer[i];
         signature=signature*UINT64_C(1099511628211) ^ tracker->cameraDC[i].mode ^
             ((uint64_t)tracker->cameraDC[i].nearOrFar<<32) ^ (uint64_t)(uintptr_t)tracker->cameraDC[i].driverToFollow ^
-            ((uint64_t)(unsigned short)camera->rect.w<<16) ^ (unsigned short)camera->rect.h;
+            ((uint64_t)(unsigned short)camera->rect.w<<16) ^ (unsigned short)camera->rect.h ^
+            ((uint64_t)(unsigned short)camera->rect.x<<48) ^ ((uint64_t)(unsigned short)camera->rect.y<<32);
         if(previousPlayers==tracker->numPlyrCurrGame) {
             const short *now=&camera->pos.x,*last=&previousCamera[i].pos.x;
             const short *rot=&camera->rot.x,*lastRot=&previousCamera[i].rot.x;

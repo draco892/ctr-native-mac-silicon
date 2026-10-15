@@ -1,4 +1,5 @@
 #include <platform/native_scene_snapshot.h>
+#include <platform/native_scene_layout.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -318,10 +319,86 @@ static int DistantSubpixelGeometry(struct NativeSceneSnapshot *scene)
     CHECK(out.triangles[0].visualXY[2][1]>out.triangles[0].visualXY[0][1]);
     return 0;
 }
+static int MultipleViews(struct NativeSceneSnapshot *scene)
+{
+    /* Reversed/discontiguous OT allocation, nested OTs, and all UI entries. */
+    uint32_t storage[4][1024],ui[5],nested[16];
+    struct NativeSceneLayout layout={.world={storage[3],storage[1],storage[2],storage[0]},.ui=ui,.views=4};
+    unsigned view=0,bucket=0;
+    for(unsigned v=0;v<4;v++) for(unsigned b=0;b<1024;b++) {
+        CHECK(NativeSceneLayout_Locate(&layout,layout.world[v]+b,&view,&bucket));CHECK(view==v && bucket==b);
+        CHECK(!NativeSceneLayout_Locate(&layout,nested,&view,&bucket));CHECK(view==v && bucket==b);
+    }
+    for(unsigned b=0;b<5;b++) {CHECK(NativeSceneLayout_Locate(&layout,ui+b,&view,&bucket));CHECK(view==4 && bucket==0);}
+    layout.views=2;CHECK(!NativeSceneLayout_Locate(&layout,storage[2],&view,&bucket));
+    NativeSceneSnapshot_Reset(scene);
+    for(unsigned frame=0;frame<2;frame++) {
+        NativeSceneSnapshot_Begin(scene,1,90);
+        for(unsigned v=0;v<4;v++) {
+            struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={(float)(v*10+frame*8),0,0}},
+                .width=v<2?512:253,.height=106,.h=128,.offset={128,53},.nearDepth=32,.farDepth=1024};
+            CHECK(NativeSceneSnapshot_Camera(scene,v,&camera));
+        }
+        struct NativeSceneObjectSnapshot object={.id=1,.modelIdentity=42,.supported=1,.pose={.basis={{1,0,0},{0,1,0},{0,0,1}}}};
+        CHECK(NativeSceneSnapshot_Object(scene,&object));
+        struct NativeSceneSourceTriangle source={.object=1,.primitive=1,.local={{-20,-20,256},{20,-20,256},{0,20,256}},
+            .material={.vertices={0,1,2}}};
+        CHECK(NativeSceneSnapshot_Triangle(scene,&source));
+        for(unsigned v=0;v<4;v++) {
+            struct NativeModelTriangle material=source.material;
+            for(unsigned k=0;k<3;k++) material.colors[k]=(v+1)*0x202020+frame*0x101010;
+            CHECK(NativeSceneSnapshot_MaterialForView(scene,v,1,1,42,source.local,&material));
+        }
+        CHECK(!NativeSceneSnapshot_MaterialForView(scene,4,1,1,42,source.local,&source.material));
+        /* A billboard confined to camera 2 must never leak into other views. */
+        struct NativeSceneEffect particle={.id=2,.kind=2,.viewport=2,.count=3,.flags=NATIVE_EFFECT_BILLBOARD,
+            .bucket=4,.code=0x30,.eye={{-5,-5,256},{5,-5,256},{0,5,256}}};
+        CHECK(NativeSceneSnapshot_Effect(scene,&particle));CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    for(unsigned v=0;v<4;v++) for(unsigned step=0;step<=120;step++) {
+        float alpha=(float)step/120;struct Output out={0};struct NativeSceneSnapshotStats stats;
+        CHECK(NativeSceneSnapshot_Render(scene,v,alpha,Save,&out,&stats)==NATIVE_ASSET_OK);
+        CHECK(out.count==(v==2?2u:1u));
+        unsigned expected=(v+1)*32+(unsigned)lroundf(16*alpha);
+        CHECK((out.triangles[0].source.colors[0]&255)==expected);
+        CHECK(fabsf(out.triangles[0].visualXY[0][0]-(128+(-20-(float)v*10-8*alpha)*0.5f))<0.6f);
+    }
+    /* UI-only models share the instance pool. Canonical world membership
+     * enables only the corresponding viewport, even when geometry is shared. */
+    NativeSceneSnapshot_Begin(scene,1,92);
+    for(unsigned v=0;v<4;v++) {
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,v,&camera));
+    }
+    struct NativeSceneObjectSnapshot uiModel={.id=7,.supported=1,.viewportMask=NATIVE_SCENE_WORLD_MEMBERSHIP,
+        .pose={.basis={{1,0,0},{0,1,0},{0,0,1}}}};
+    CHECK(NativeSceneSnapshot_Object(scene,&uiModel));
+    struct NativeSceneSourceTriangle uiSource={.object=7,.primitive=1,.local={{-20,-20,256},{20,-20,256},{0,20,256}}};
+    CHECK(NativeSceneSnapshot_Triangle(scene,&uiSource));
+    NativeSceneSnapshot_ActivateObjectView(scene,7,3);
+    NativeSceneSnapshot_ActivateObjectView(scene,7,4); /* UI is not a world view. */
+    CHECK(NativeSceneSnapshot_Seal(scene));
+    for(unsigned v=0;v<4;v++) {
+        struct Output out={0};struct NativeSceneSnapshotStats stats;
+        CHECK(NativeSceneSnapshot_Render(scene,v,0.5f,Save,&out,&stats)==NATIVE_ASSET_OK);
+        CHECK(out.count==(v==3?1u:0u));
+    }
+    /* A menu/cutscene/layout transition starts at its own pose and materials. */
+    NativeSceneSnapshot_Begin(scene,1,91);
+    struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={100,0,0}},
+        .width=512,.height=216,.h=256,.offset={256,108},.nearDepth=64,.farDepth=1024};
+    CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));CHECK(NativeSceneSnapshot_Seal(scene));
+    struct NativeSceneCameraSnapshot sampled;CHECK(NativeSceneSnapshot_CameraPose(scene,0,0,&sampled));
+    CHECK(sampled.view.position[0]==100);
+    CHECK(!NativeSceneSnapshot_CameraPose(scene,1,0,&sampled));
+    return 0;
+}
 int main(void)
 {
     struct NativeSceneSnapshot *scene=NativeSceneSnapshot_Create();CHECK(scene);
     struct Output out;struct NativeSceneSnapshotStats stats;
+    CHECK(MultipleViews(scene)==0);
     CHECK(DistantSubpixelGeometry(scene)==0);
     CHECK(AnimationPoseContinuity(scene)==0);
     CHECK(CameraAspectAndCanonicalPose(scene)==0);

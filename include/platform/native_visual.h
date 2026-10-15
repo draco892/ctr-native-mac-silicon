@@ -13,7 +13,7 @@ struct NativeVisualProjection {
 };
 struct NativeVisualStats { unsigned packets, vertices, matched, sampled, projected; float alpha; int overflow; };
 struct NativeVisualScenePacket {
-    unsigned kind,count,code,ordinal,contextCount,projectedMask; uint64_t object,part,primitive;
+    unsigned kind,count,code,ordinal,contextCount,projectedMask,viewport; uint64_t object,part,primitive;
     float local[4][3];
     uint32_t colors[4]; uint8_t u[4],v[4];uint16_t page,clut;
 };
@@ -24,6 +24,7 @@ uint64_t NativeVisual_ObjectID(const void *);
 int NativeVisual_PacketIdentity(const void *,unsigned *kind,uint64_t *object);
 int NativeVisual_ScenePacket(unsigned index,struct NativeVisualScenePacket *);
 void NativeVisual_EnableWorldSampling(int enabled);
+void NativeVisual_ModelViewport(unsigned viewport);
 void NativeVisual_EffectScope(unsigned viewport,float viewScale,unsigned flags,const void *anchor);
 void NativeVisual_EffectTopology(unsigned topology);
 int NativeVisual_PacketEffect(const void *,struct NativeSceneEffect *);
@@ -65,6 +66,7 @@ static inline uint64_t NativeVisual_ResetEpoch(void) { return 0; }
 static inline uint64_t NativeVisual_ObjectID(const void *p) {return (uint64_t)(uintptr_t)p;}
 static inline int NativeVisual_PacketIdentity(const void *p,unsigned *k,uint64_t *o) {(void)p;(void)k;(void)o;return 0;}
 static inline int NativeVisual_ScenePacket(unsigned i,struct NativeVisualScenePacket *p) {(void)i;(void)p;return 0;}
+static inline void NativeVisual_ModelViewport(unsigned v) {(void)v;}
 static inline void NativeVisual_EffectScope(unsigned v,float s,unsigned f,const void *a) {(void)v;(void)s;(void)f;(void)a;}
 static inline void NativeVisual_EffectTopology(unsigned t) {(void)t;}
 static inline int NativeVisual_IsEffectPacket(const void *p) {(void)p;return 0;}

@@ -1,6 +1,8 @@
 #include <common.h>
 #include <platform/native_scene_snapshot_game.h>
 #include <platform/native_scene_snapshot.h>
+#include <platform/native_scene_layout.h>
+#include <platform/native_scene_visibility.h>
 #include <platform/native_scene_assets.h>
 #include <platform/native_vertex_animation.h>
 #include <platform/native_visual.h>
@@ -17,7 +19,7 @@ struct SceneGameGroup {unsigned head,tail,view,bucket,depth,order;};
 static struct SceneGameGroup sceneGroups[SCENE_GAME_PACKETS];
 static unsigned sceneGroupCount;
 static unsigned sceneHeads[5][1024],sceneTails[5][1024],scenePacketCount,sceneVertexBudget;
-static int sceneCapture,sceneReady,sceneTerrain,sceneWanted;
+static int sceneCapture,sceneReady,sceneTerrain,sceneWanted,sceneWorldMembership;
 static uint64_t sceneEpoch;
 static struct GameTracker *sceneTracker;
 static unsigned sceneEffects,sceneEffectFallback;
@@ -34,11 +36,31 @@ static void SceneGameCaptureError(const char *name,int result)
 #define SceneGameCaptureError(name,result) ((void)0)
 #endif
 
+static struct NativeSceneLayout SceneGameLayout(const struct GameTracker *tracker)
+{
+    struct NativeSceneLayout layout={.views=(unsigned)tracker->numPlyrCurrGame,.ui=tracker->pushBuffer_UI.ptrOT};
+    for(unsigned i=0;i<layout.views && i<4;i++) layout.world[i]=tracker->pushBuffer[i].ptrOT;
+    return layout;
+}
+/* Only the normal environment can precede regenerated world geometry.
+ * DecalMP may link an offscreen OT into bucket 1023 as well as lower buckets. */
+static int SceneGameWorldEnvironment(const struct GameTracker *tracker,unsigned view,const u32 *packet,unsigned length)
+{
+    if(!tracker->backBuffer || length<3) return 0;
+    const struct PushBuffer *pb=&tracker->pushBuffer[view];
+    const DRAWENV *env=&tracker->backBuffer->drawEnv;
+    int x=env->clip.x+pb->rect.x,y=env->clip.y+pb->rect.y;
+    u32 clip=0xe3000000u|((u32)x&1023u)|(((u32)y&1023u)<<10);
+    u32 end=0xe4000000u|((u32)(x+pb->rect.w-1)&1023u)|(((u32)(y+pb->rect.h-1)&1023u)<<10);
+    u32 offset=0xe5000000u|((u32)(env->ofs[0]+pb->rect.x)&2047u)|(((u32)(env->ofs[1]+pb->rect.y)&2047u)<<11);
+    return packet[1]==clip && packet[2]==end && packet[3]==offset;
+}
 static void SceneGameCaptureInstance(const struct Instance *instance)
 {
     if(!instance) return;
     struct NativeSceneObjectSnapshot object={.id=NativeVisual_ObjectID(instance),.flags=instance->flags,
-        .animation=instance->animIndex,.frame=(u16)instance->animFrame,.orderingBias=(s8)instance->depthBiasNormal};
+        .animation=instance->animIndex,.frame=(u16)instance->animFrame,.orderingBias=(s8)instance->depthBiasNormal,
+        .viewportMask=sceneWorldMembership ? NATIVE_SCENE_WORLD_MEMBERSHIP:0u};
     for(unsigned row=0;row<3;row++) {
         object.pose.position[row]=(float)instance->matrix.t[row];
         for(unsigned col=0;col<3;col++) object.pose.basis[row][col]=instance->matrix.m[row][col]/4096.0f;
@@ -171,11 +193,18 @@ void NativeSceneGameSnapshot_Begin(struct GameTracker *tracker,int enabled,uint6
     sceneEffects=sceneEffectFallback=0;
     sceneRetainedModels=sceneCanonicalReasons=0;
     sceneCapture=sceneReady=sceneTerrain=0;memset(&sceneStats,0,sizeof(sceneStats));
-    /* Other viewport layouts retain canonical packets until their special
-     * decals/reflections are migrated, rather than mixing camera poses. */
-    enabled=enabled && tracker->numPlyrCurrGame==1 &&
-        !(tracker->gameMode1&(LOADING|GAME_CUTSCENE|MAIN_MENU|ADVENTURE_ARENA));
+    enabled=enabled && tracker->numPlyrCurrGame>=1 && tracker->numPlyrCurrGame<=4 && !(tracker->gameMode1&LOADING);
     sceneWanted=enabled;
+    /* The opening crate changes scripted model visibility and split geometry
+     * during preparation. Partial replacement cannot reproduce that sequence:
+     * keep one complete canonical chain for every presentation of the intro. */
+    if(enabled && tracker->levelID==NAUGHTY_DOG_CRATE) {
+        sceneCanonicalReasons=NATIVE_SCENE_CANONICAL_SCRIPTED_INTRO;
+        enabled=0;
+    }
+    /* These modes reuse world models in UI/custom push buffers. Keep complete
+     * sources, but publish only views with an actual world-chain occurrence. */
+    sceneWorldMembership=tracker->numPlyrCurrGame>1 || (tracker->gameMode1&(MAIN_MENU|GAME_CUTSCENE|ADVENTURE_ARENA));
     if(!sceneGame && enabled) sceneGame=NativeSceneSnapshot_Create();
     if(!sceneGame) return;
     NativeSceneSnapshot_Begin(sceneGame,enabled,signature);if(!enabled) return;sceneCapture=1;
@@ -227,18 +256,26 @@ static int SceneGameCaptureEffects(void)
         sceneEffects++;if(candidate.kind<13) captured[candidate.kind]++;
     }
     const u32 *packet=&sceneTracker->pushBuffer[0].ptrOT[1023];
-    unsigned bucket=1023,walk=0;u16 page=0;int inWorld=1;
+    unsigned bucket=1023,view=0,walk=0;u16 page=0;
+    struct NativeSceneLayout layout=SceneGameLayout(sceneTracker);
     for(;;) {
         if(++walk>131072 || !NativeGpuLinks_IsRegisteredHostRange(packet,4)) return 0;
-        uintptr_t address=(uintptr_t)packet,base=(uintptr_t)sceneTracker->pushBuffer[0].ptrOT;
-        if(address>=base && address<=base+1023*4) {bucket=(unsigned)((address-base)/4);inWorld=1;}
-        else if(address<base && address>=(uintptr_t)sceneTracker->pushBuffer_UI.ptrOT) inWorld=0;
+        NativeSceneLayout_Locate(&layout,packet,&view,&bucket);
+        int inWorld=view<4;
         u32 tag=*packet;unsigned length=tag>>24;
         if(length) {
             if(length>32 || !NativeGpuLinks_IsRegisteredHostRange(packet,(length+1)*4)) return 0;
             if((packet[1]>>24)==0xe1) page=(u16)packet[1];
+            if(inWorld) {
+                unsigned code=packet[1]>>24;
+                if(code>=0xe3 && code<=0xe5 && !SceneGameWorldEnvironment(sceneTracker,view,packet,length)) {
+                    sceneCanonicalReasons|=NATIVE_SCENE_CANONICAL_OFFSCREEN;
+                    return 0;
+                }
+            }
             unsigned kind=0;uint64_t owner=0;
             int known=NativeVisual_PacketIdentity(packet,&kind,&owner);
+            if(inWorld && known && kind==1) NativeSceneSnapshot_ActivateObjectView(sceneGame,owner,view);
             int special=inWorld && known && (kind==2 || (kind>=5 && kind<=10) || kind==12 || (kind==1 && !NativeSceneSnapshot_CoversObject(sceneGame,owner) && NativeVisual_IsEffectPacket(packet)));
             if(special && !NativeVisual_EffectCovered(packet)) {
                 struct NativeSceneEffect effect;
@@ -283,7 +320,10 @@ void NativeSceneGameSnapshot_Seal(void)
             .textureBlend=(packet.code&2)?NATIVE_TEXTURE_BLEND_SEMI:NATIVE_TEXTURE_BLEND_OPAQUE,
             .texture={.clut=packet.clut,.tpage=packet.page}};
         for(unsigned k=0;k<3;k++) {material.colors[k]=(packet.code&5)==5 ? 0x808080:packet.colors[k];material.texture.u[k]=packet.u[k];material.texture.v[k]=packet.v[k];}
-        NativeSceneSnapshot_Material(sceneGame,packet.object,packet.primitive,packet.part,packet.local,&material);
+        /* RenderBucket includes cameraID in the low part bits. Strip only
+         * the viewport whose material is being installed. */
+        unsigned view=packet.viewport;
+        NativeSceneSnapshot_MaterialForView(sceneGame,view,packet.object,packet.primitive,packet.part^view,packet.local,&material);
     }
     if(NativeVisual_GetStats().overflow || !SceneGameCaptureEffects()) NativeSceneSnapshot_Invalidate(sceneGame);
     if(sceneRetainedModels) sceneCanonicalReasons|=NATIVE_SCENE_CANONICAL_MODEL;
@@ -369,13 +409,11 @@ uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float
     u32 *canonical=&tracker->pushBuffer[0].ptrOT[1023];
     if(!sceneReady || !sceneGame || sceneEpoch!=NativeVisual_ResetEpoch()) {sceneStats.fallback=sceneWanted;return canonical;}
     scenePacketCount=sceneVertexBudget=sceneGroupCount=0;memset(sceneHeads,0,sizeof(sceneHeads));memset(sceneTails,0,sizeof(sceneTails));
+    struct NativeSceneLayout layout=SceneGameLayout(tracker);
     unsigned view=0,bucket=1023,walk=0;const u32 *packet=canonical;
     for(;;) {
         if(++walk>131072 || !NativeGpuLinks_IsRegisteredHostRange(packet,4)) goto fallback;
-        uintptr_t address=(uintptr_t)packet;
-        if(address>=(uintptr_t)tracker->pushBuffer[0].ptrOT && address<=(uintptr_t)(tracker->pushBuffer[0].ptrOT+1023)) {
-            view=0;bucket=(unsigned)((address-(uintptr_t)tracker->pushBuffer[0].ptrOT)/4);
-        } else if(address<(uintptr_t)tracker->pushBuffer[0].ptrOT && address>=(uintptr_t)tracker->pushBuffer_UI.ptrOT) {view=4;bucket=0;}
+        NativeSceneLayout_Locate(&layout,packet,&view,&bucket);
         u32 tag=packet[0];unsigned length=tag>>24,kind=0;uint64_t owner=0;
         if(length) {
             if(length>32 || !NativeGpuLinks_IsRegisteredHostRange(packet,(length+1)*4)) goto fallback;

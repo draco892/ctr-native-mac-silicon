@@ -15,7 +15,7 @@
 struct NvEffectScope {unsigned viewport,flags,topology;float scale;uint64_t anchor;};
 struct NvContext {
     struct NvEffectScope effect;
-    uint64_t key, baseKey,object,part,primitive; unsigned kind,ordinal,terrainViewport; int world;
+    uint64_t key, baseKey,object,part,primitive; unsigned kind,ordinal,terrainViewport,viewport; int world;
 };
 struct NvVertex {
     float xy[2],uv[2]; uint8_t rgb[3], xyOffset, rgbOffset,uvOffset; int projected;
@@ -23,7 +23,7 @@ struct NvVertex {
 };
 struct NvPacket {
     struct NvEffectScope effect;int effectCovered;
-    uintptr_t address; uint64_t key, context, material,object,part,primitive; unsigned kind,ordinal;
+    uintptr_t address; uint64_t key, context, material,object,part,primitive; unsigned kind,ordinal,viewport;
     unsigned words, count, contextCount, terrainViewport; int previous,world;
     float width, height; struct NvVertex vertex[4];
 };
@@ -162,7 +162,7 @@ void NativeVisual_RecordPacket(const void *packet,unsigned words)
     struct NvPacket *p=&frame->packet[frame->count]; memset(p,0,sizeof(*p));
     p->address=address; p->context=nv_context.key; p->words=words; p->previous=-1;
     p->world=nv_context.world;p->terrainViewport=nv_context.terrainViewport;
-    p->effect=nv_context.effect;
+    p->effect=nv_context.effect;p->viewport=nv_context.viewport;
     p->kind=nv_context.kind;p->object=nv_context.object;p->part=nv_context.part;p->primitive=nv_context.primitive;
     p->ordinal=++nv_context.ordinal;
     p->key=NvHash(nv_context.key^NvHash(p->ordinal));
@@ -382,7 +382,7 @@ int NativeVisual_ScenePacket(unsigned index,struct NativeVisualScenePacket *out)
 {
     if(index>=nv_frames[nv_current].count || !out) return 0;
     const struct NvPacket *p=&nv_frames[nv_current].packet[index];
-    *out=(struct NativeVisualScenePacket){.kind=p->kind,.object=p->object,.part=p->part,.primitive=p->primitive,.count=p->count,.ordinal=p->ordinal,.contextCount=p->contextCount};
+    *out=(struct NativeVisualScenePacket){.kind=p->kind,.object=p->object,.part=p->part,.primitive=p->primitive,.count=p->count,.ordinal=p->ordinal,.contextCount=p->contextCount,.viewport=p->viewport};
     if(!p->count || !NativeGpuLinks_IsRegisteredHostRange((const void *)p->address,(p->words+1)*4)) return 1;
     const uint8_t *raw=(const uint8_t *)p->address;out->code=(unsigned)(NvWord(raw+p->vertex[0].rgbOffset)>>24);
     for(unsigned k=0;k<p->count;k++) {
@@ -621,6 +621,8 @@ void NativeVisual_GteLoad(unsigned index,const void *source)
     uint32_t xy=NvWord(source);const struct NativeVisualProjection *p=NvProjectionFor(source,xy);
     nv_gte[index]=(struct NvProjection){.xy=xy,.used=p!=NULL};if(p) nv_gte[index].value=*p;
 }
+void NativeVisual_ModelViewport(unsigned viewport)
+{ if(nv_capturing) nv_context.viewport=viewport; }
 void NativeVisual_EffectScope(unsigned viewport,float scale,unsigned flags,const void *anchor)
 {
     if(nv_capturing) nv_context.effect=(struct NvEffectScope){.viewport=viewport+1,.scale=scale,.flags=flags,.anchor=anchor?NativeVisual_ObjectID(anchor):0};

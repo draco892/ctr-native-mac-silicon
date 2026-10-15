@@ -419,6 +419,26 @@ if(BUILD_TESTING)
         target_link_libraries(ctr_native_scene_snapshot_tests PRIVATE m)
     endif()
     add_test(NAME ctr_native_scene_snapshot COMMAND ctr_native_scene_snapshot_tests)
+    get_target_property(CTR_SNAPSHOT_TEST_SOURCES ctr_native_scene_snapshot_tests SOURCES)
+    list(REMOVE_ITEM CTR_SNAPSHOT_TEST_SOURCES tests/native_scene_snapshot_tests.c)
+    add_executable(ctr_native_scene_layout_game_tests tests/native_scene_layout_game_tests.c
+        ${CTR_SNAPSHOT_TEST_SOURCES} platform/native_visual.c platform/native_gpu_links.c
+        platform/native_vertex_animation.c platform/native_scene_visibility.c)
+    set_target_properties(ctr_native_scene_layout_game_tests PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_include_directories(ctr_native_scene_layout_game_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(ctr_native_scene_layout_game_tests PRIVATE CTR_NATIVE CTR_NATIVE_VISUAL_INTERPOLATION)
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(ctr_native_scene_layout_game_tests PRIVATE -Wall -Wextra -Werror)
+        if(CTR_ENABLE_SANITIZERS)
+            target_compile_options(ctr_native_scene_layout_game_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(ctr_native_scene_layout_game_tests PRIVATE -fsanitize=address,undefined)
+        endif()
+    endif()
+    if(UNIX)
+        target_link_libraries(ctr_native_scene_layout_game_tests PRIVATE m)
+    endif()
+    add_test(NAME ctr_native_scene_layout_game COMMAND ctr_native_scene_layout_game_tests)
+
 
 
     add_executable(ctr_native_resident_tests tests/native_resident_tests.c platform/native_resident.c platform/native_ptrmap.c)

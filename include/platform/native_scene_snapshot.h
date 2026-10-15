@@ -6,6 +6,7 @@
 
 /* Value-only scene history. Asset views, game pointers and GPU arenas are never
  * retained. Inputs are copied before projection, visibility tests or clipping. */
+enum { NATIVE_SCENE_WORLD_MEMBERSHIP=1u<<4 };
 struct NativeScenePose { float basis[3][3], position[3]; };
 struct NativeSceneObjectSnapshot {
     uint64_t id, modelIdentity,poseIdentity; /* Asset identity independent of animation; zero uses modelIdentity. */
@@ -13,7 +14,7 @@ struct NativeSceneObjectSnapshot {
     uint32_t flags, animation, frame, header;
     int supported;
     s16 orderingBias;
-    unsigned viewportMask; /* Zero means every viewport; effects bind to one camera. */
+    unsigned viewportMask; /* Zero means every viewport; bit 4 alone defers visibility to canonical world membership. */
     unsigned renderMode; /* NativeSceneEffectFlags, zero for ordinary models. */
 };
 struct NativeSceneCameraSnapshot {
@@ -41,8 +42,10 @@ void NativeSceneSnapshot_Reset(struct NativeSceneSnapshot *);
 void NativeSceneSnapshot_Begin(struct NativeSceneSnapshot *,int enabled,uint64_t signature);
 int NativeSceneSnapshot_Camera(struct NativeSceneSnapshot *,unsigned,const struct NativeSceneCameraSnapshot *);
 int NativeSceneSnapshot_Object(struct NativeSceneSnapshot *,const struct NativeSceneObjectSnapshot *);
+void NativeSceneSnapshot_ActivateObjectView(struct NativeSceneSnapshot *,uint64_t object,unsigned view);
 int NativeSceneSnapshot_Triangle(struct NativeSceneSnapshot *,const struct NativeSceneSourceTriangle *);
 int NativeSceneSnapshot_Material(struct NativeSceneSnapshot *,uint64_t object,uint64_t primitive,uint64_t modelIdentity,const float local[3][3],const struct NativeModelTriangle *);
+int NativeSceneSnapshot_MaterialForView(struct NativeSceneSnapshot *,unsigned view,uint64_t object,uint64_t primitive,uint64_t modelIdentity,const float local[3][3],const struct NativeModelTriangle *);
 int NativeSceneSnapshot_Effect(struct NativeSceneSnapshot *,const struct NativeSceneEffect *);
 void NativeSceneSnapshot_Invalidate(struct NativeSceneSnapshot *);
 /* Retained camera-dependent packets require the whole world at the same tick. */

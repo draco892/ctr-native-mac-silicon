@@ -46,11 +46,14 @@ scheduler emits VBlank callbacks for input, audio and timers, and runs simulatio
 even when `video.max_fps` is below 30. The renderer presents prepared GPU packets
 at the configured ceiling (1–240, default 30), repeating the latest pose between
 updates at higher rates. Experimental scene interpolation regenerates standard
-one-player 3D geometry from copied camera/object/animation snapshots, including
+3D geometry in one to four views, menus, adventure hubs and in-engine cutscenes
+from copied camera/object/animation snapshots, including
 verified wheel, shadow, reflection, particle, weather and sky sources. Material
 colours and water UVs share the sampled timeline; texture frames and palette/page
 changes switch discretely without sweeping through the atlas. Unsupported
-primitives and other layouts still use prepared packets. Scenes containing
+primitives still use prepared packets. Offscreen render passes such as multiplayer
+kart decals preserve the complete canonical chain; full split-screen smoothing
+is therefore still incomplete. Scenes containing
 retained camera-dependent models/effects or sky glow use a coherent current-tick
 pose throughout, so those cases can still have roughly 30 distinct poses/s. It is opt-in and remains
 disabled by default following graphical regressions. Loading,

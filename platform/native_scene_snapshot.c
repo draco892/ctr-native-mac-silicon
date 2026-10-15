@@ -13,6 +13,8 @@ struct SnapshotFrame {
     struct NativeSceneObjectSnapshot objects[SNAP_OBJECTS];
     struct NativeSceneSourceTriangle sources[SNAP_SOURCES];
     unsigned objectMap[SNAP_OBJECT_TABLE],sourceMap[SNAP_SOURCE_TABLE];
+    unsigned materialCount,materialMap[SNAP_SOURCES][4];
+    struct NativeModelTriangle materials[SNAP_SOURCES];
     int valid,currentPose;
 };
 struct NativeSceneSnapshot { struct SnapshotFrame frames[2]; unsigned current; uint64_t signature; int capturing,history; };
@@ -88,7 +90,7 @@ void NativeSceneSnapshot_Begin(struct NativeSceneSnapshot *s,int enabled,uint64_
     s->signature=signature;s->history=s->frames[s->current].valid;
     s->current^=1;
     struct SnapshotFrame *f=&s->frames[s->current];
-    f->objectCount=f->sourceCount=f->cameraMask=0;f->valid=1;f->currentPose=0;
+    f->objectCount=f->sourceCount=f->cameraMask=f->materialCount=0;f->valid=1;f->currentPose=0;
     memset(f->objectMap,0,sizeof(f->objectMap));memset(f->sourceMap,0,sizeof(f->sourceMap));
     s->capturing=1;
 }
@@ -123,6 +125,13 @@ int NativeSceneSnapshot_Object(struct NativeSceneSnapshot *s,const struct Native
     }
     f->objects[f->objectCount]=*o;f->objectMap[slot]=++f->objectCount;return 1;
 }
+void NativeSceneSnapshot_ActivateObjectView(struct NativeSceneSnapshot *s,uint64_t id,unsigned view)
+{
+    if(!s || !s->capturing || view>=4) return;
+    struct SnapshotFrame *f=&s->frames[s->current];
+    const struct NativeSceneObjectSnapshot *object=SnapshotObject(f,id);
+    if(object && (object->viewportMask&NATIVE_SCENE_WORLD_MEMBERSHIP)) f->objects[object-f->objects].viewportMask|=1u<<view;
+}
 int NativeSceneSnapshot_Triangle(struct NativeSceneSnapshot *s,const struct NativeSceneSourceTriangle *t)
 {
     if(!s || !s->capturing || !t) return 0;
@@ -136,11 +145,12 @@ int NativeSceneSnapshot_Triangle(struct NativeSceneSnapshot *s,const struct Nati
         if(existing->object==t->object && existing->primitive==t->primitive) {NativeSceneSnapshot_Invalidate(s);return 0;}
         slot=(slot+1)&(SNAP_SOURCE_TABLE-1);
     }
+    memset(f->materialMap[f->sourceCount],0,sizeof(f->materialMap[0]));
     f->sources[f->sourceCount]=*t;f->sourceMap[slot]=++f->sourceCount;return 1;
 }
-int NativeSceneSnapshot_Material(struct NativeSceneSnapshot *s,uint64_t object,uint64_t primitive,uint64_t identity,const float local[3][3],const struct NativeModelTriangle *material)
+int NativeSceneSnapshot_MaterialForView(struct NativeSceneSnapshot *s,unsigned view,uint64_t object,uint64_t primitive,uint64_t identity,const float local[3][3],const struct NativeModelTriangle *material)
 {
-    if(!s || !s->capturing || !material || !local) return 0;
+    if(!s || !s->capturing || !material || !local || view>=4) return 0;
     struct SnapshotFrame *f=&s->frames[s->current];
     const struct NativeSceneObjectSnapshot *o=SnapshotObject(f,object);
     if(!o || o->modelIdentity!=identity) return 0;
@@ -153,7 +163,21 @@ int NativeSceneSnapshot_Material(struct NativeSceneSnapshot *s,uint64_t object,u
     struct NativeSceneSourceTriangle *destination=&f->sources[source-f->sources];
     struct NativeModelTriangle updated=*material;
     memcpy(updated.vertices,destination->material.vertices,sizeof(updated.vertices));updated.command=destination->material.command;
-    destination->material=updated;return 1;
+    unsigned *entry=&f->materialMap[destination-f->sources][view];
+    if(!*entry) {
+        if(f->materialCount==SNAP_SOURCES) {NativeSceneSnapshot_Invalidate(s);return 0;}
+        *entry=++f->materialCount;
+    }
+    f->materials[*entry-1]=updated;return 1;
+}
+int NativeSceneSnapshot_Material(struct NativeSceneSnapshot *s,uint64_t object,uint64_t primitive,uint64_t identity,const float local[3][3],const struct NativeModelTriangle *material)
+{ return NativeSceneSnapshot_MaterialForView(s,0,object,primitive,identity,local,material); }
+static struct NativeSceneSourceTriangle SnapshotSourceForView(const struct SnapshotFrame *f,const struct NativeSceneSourceTriangle *source,unsigned view)
+{
+    struct NativeSceneSourceTriangle result=*source;
+    unsigned entry=f->materialMap[source-f->sources][view];
+    if(entry) result.material=f->materials[entry-1];
+    return result;
 }
 static int SnapshotInverse(const float matrix[3][3],const float input[3],float out[3])
 {
@@ -372,7 +396,9 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
             if(previousSource && memcmp(previousSource->material.vertices,source->material.vertices,sizeof(source->material.vertices))!=0) previousSource=NULL;
         }
         struct NativeSceneClipVertex vertices[3];
-        struct NativeModelTriangle material=SnapshotMaterial(previousSource,source,t,vertices);
+        struct NativeSceneSourceTriangle currentMaterial=SnapshotSourceForView(f,source,view),previousMaterial;
+        if(previousSource) previousMaterial=SnapshotSourceForView(old,previousSource,view);
+        struct NativeModelTriangle material=SnapshotMaterial(previousSource ? &previousMaterial:NULL,&currentMaterial,t,vertices);
         for(unsigned k=0;k<3;k++) {
             for(unsigned row=0;row<3;row++) {
                 float eye=pose.position[row];

@@ -5390,6 +5390,7 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 
 #ifdef CTR_NATIVE
     NativeVisual_Push(1, inst, (uint64_t)(uintptr_t)mh ^ ((uint64_t)inst->animIndex << 48) ^ (unsigned)pb->cameraID, 1);
+    NativeVisual_ModelViewport((unsigned)pb->cameraID);
     if(idpp->instFlags&SPLIT_STATE_MASK) NativeVisual_EffectScope((unsigned)pb->cameraID,1,0,inst);
     RenderBucket_HostPointers()->inst=inst;
 #else

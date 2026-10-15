@@ -122,6 +122,17 @@ static void EffectBindings(void)
 int main(void)
 {
     Register();EffectBindings();
+    Register();NativeVisual_BeginCapture(1,99);
+    NativeVisual_Push(1,&identity,0x12340002,1);NativeVisual_ModelViewport(3);
+    memset(&triangles[0],0,sizeof(triangles[0]));setPolyG3(&triangles[0]);
+    NativeVisual_RecordPacket(&triangles[0],6);NativeVisual_Pop();
+    NativeVisual_Push(1,&identity,0x12340002,1);
+    memset(&triangles[1],0,sizeof(triangles[1]));setPolyG3(&triangles[1]);
+    NativeVisual_RecordPacket(&triangles[1],6);NativeVisual_Pop();NativeVisual_EndCapture();
+    struct NativeVisualScenePacket viewportPacket;
+    CHECK(NativeVisual_ScenePacket(0,&viewportPacket) && viewportPacket.viewport==3 && viewportPacket.part==0x12340002);
+    CHECK(NativeVisual_ScenePacket(1,&viewportPacket) && viewportPacket.viewport==0);
+    NativeVisual_Reset();
     Register();NativeVisual_NewObject(&identity);
     Capture(0,100,0,0,0,1);Capture(1,201,100,0,0,1);
     POLY_G3 original=triangles[1];TILE originalRect=rectangles[1];

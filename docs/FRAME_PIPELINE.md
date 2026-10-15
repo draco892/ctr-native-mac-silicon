@@ -141,15 +141,17 @@ interpolation is disabled for both world geometry and retained 2D/UI commands. R
 receive presentation-local float XY overrides, cleared at the next presentation.
 Retail packet bytes, game structures and checkpoint layouts are unchanged.
 
-Current integration covers standard 3D terrain, kart bodies and ordinary model
-instances in one-player gameplay. Menus, cutscenes, loading, adventure arenas and
-split-screen use canonical packets. Pixel LOD, billboard, custom-matrix, huge and
-split-state instances also retain canonical geometry. Verified wheels, shadows, reflections, particles, weather, confetti and sky now
-enter the scene source path described below. Primitives without complete source
-provenance keep their entire canonical geometry and can still misalign during
-motion. Continuous material colours and water coordinates now share scene history;
-texture frames remain discrete. Expanding layouts, tuning LOD/performance and whole-game validation remain
-unfinished; this is not complete interpolation for the entire game.
+Current integration accepts one to four views, menus, adventure arenas and
+in-engine cutscenes for standard 3D terrain, kart bodies and ordinary instances.
+Loading and synchronous video paths keep their original timing. Pixel LOD,
+billboard, custom-matrix, huge and split-state instances retain canonical geometry.
+Verified wheels, shadows, reflections, particles, weather, confetti and sky enter
+the source path described below. Unsupported camera-dependent geometry selects a
+coherent current pose. Offscreen render passes, including multiplayer kart decals,
+keep the entire original chain, so this is not full split-screen interpolation.
+Continuous material colours and water coordinates share scene history; texture
+frames remain discrete. LOD/performance tuning and whole-game validation remain
+unfinished. See `INTERPOLATION_LAYOUT_VALIDATION.md` for the extension's scope.
 
 `presentations.csv` includes scene object/source/triangle/match/unsupported counts
 and regeneration/fallback flags. Unit tests cover copied source lifetime,
@@ -242,10 +244,11 @@ Test and manual logs are retained under ignored `debug/materials`.
 Scene presentation now uses `NativeVisual_BeginScenePresentation`: retained GPU
 packets receive no legacy XY, RGB or rectangle-size interpolation, even when
 packet history exists. Only regenerated fields with explicit presentation-local
-XY overrides are sampled. Capture is also disabled in menus, cinematics,
-adventure arenas and multiplayer layouts, matching the scene adapter's gates.
-This prevents menu background triangles from being matched by packet ordinal
-and interpolated independently of their neighbours.
+XY overrides are sampled. The initial regression correction also disabled
+capture in menus, cinematics, adventure arenas and multiplayer layouts. The later
+layout extension below admits these modes through scene sources while keeping
+legacy packet matching disabled; menu background triangles are never interpolated
+independently by packet ordinal.
 
 Wheel sprite/depth cases reorder four physical corners. The importer now undoes
 that permutation for positions, colours and UVs before assigning source vertex
@@ -319,7 +322,9 @@ history before the next, avoiding backwards alternation within one tick.
 
 `presentations.csv` appends `scene_current_pose`, `scene_retained_model_packets`
 and `scene_canonical_pose_reasons`. Reason bits are 1=retained models,
-2=incomplete effects, 4=screen-space sky glow. Current-pose regeneration is distinct
+2=incomplete effects, 4=screen-space sky glow, 8=offscreen/custom draw environment.
+Reason bits 8 and 16 select full canonical fallback; 16 identifies the scripted
+Naughty Dog crate introduction. Current-pose regeneration is distinct
 from `scene_fallback`, which submits the complete original command chain.
 A staged effect without a successfully copied source retains its live primitive
 and requests the current pose; it is never marked covered solely by its staging
@@ -477,3 +482,38 @@ and resume routines with a poisoned free-channel tail and verifies the restored
 music ID, start frame, volume, timing and links. The PSX copy remains unchanged.
 The interactive run preceded this final audio correction; the final correction
 is covered by both normal and sanitized automated suites.
+
+### Additional layouts and modes
+
+Capture accepts 1–4 players and in-engine menu/adventure/cutscene modes. Layout
+origins join viewport sizes and camera/mode/menu identity in the history signature;
+changing these starts fresh history. Loading, explicit retail VBlank/video paths,
+reset epochs and camera cuts retain their existing safeguards.
+
+Both OT traversals classify exact active world ranges and the five UI entries,
+independent of their addresses or allocation order. Nested OTs inherit the current
+view and depth. Reassembly keeps viewport order, each view's draw environment and
+its generated depth groups, followed by the canonical UI command stream. Source
+materials are copied per view into a bounded override pool; lighting from another
+camera cannot overwrite them. Model packet metadata carries its viewport explicitly.
+
+Menu, cutscene, adventure and multiplayer instance pools can contain models drawn
+only through a UI/custom push buffer. Their sources are copied, but only actual
+world-chain membership activates a model in a view. This avoids duplicate world
+copies of UI logos/trophies without sampling any UI packet fields. In these modes,
+newly visible objects enter on the canonical visibility tick. One-player racing
+keeps full-source visibility regeneration.
+
+A draw-area/offset command must match that view's normal environment, including
+backbuffer origin. An offscreen/custom environment at any depth (including nested
+OTs linked into bucket 1023) rejects regeneration for the whole prepared frame.
+This preserves render-to-texture dependencies such as DecalMP; migrating those
+passes remains necessary for complete split-screen smoothing. Current-pose guards
+for special models/effects and sky glow also remain, including in adventure hubs.
+
+The Naughty Dog crate intro is explicitly kept on the complete canonical command
+chain for its entire duration. Its scripted visibility and model-split changes
+are not fully represented by source snapshots. This exception prevents partially
+reconstructed crate fragments from blinking out between presentations; capture
+history is cleared before returning to the menu. The presentation FPS ceiling
+still applies, while this intro keeps the original animation cadence.
