@@ -13,7 +13,7 @@ struct SnapshotFrame {
     struct NativeSceneObjectSnapshot objects[SNAP_OBJECTS];
     struct NativeSceneSourceTriangle sources[SNAP_SOURCES];
     unsigned objectMap[SNAP_OBJECT_TABLE],sourceMap[SNAP_SOURCE_TABLE];
-    int valid;
+    int valid,currentPose;
 };
 struct NativeSceneSnapshot { struct SnapshotFrame frames[2]; unsigned current; uint64_t signature; int capturing,history; };
 static uint64_t SnapshotHash(uint64_t x)
@@ -88,11 +88,13 @@ void NativeSceneSnapshot_Begin(struct NativeSceneSnapshot *s,int enabled,uint64_
     s->signature=signature;s->history=s->frames[s->current].valid;
     s->current^=1;
     struct SnapshotFrame *f=&s->frames[s->current];
-    f->objectCount=f->sourceCount=f->cameraMask=0;f->valid=1;
+    f->objectCount=f->sourceCount=f->cameraMask=0;f->valid=1;f->currentPose=0;
     memset(f->objectMap,0,sizeof(f->objectMap));memset(f->sourceMap,0,sizeof(f->sourceMap));
     s->capturing=1;
 }
 void NativeSceneSnapshot_Invalidate(struct NativeSceneSnapshot *s) { if(s) s->frames[s->current].valid=0; }
+void NativeSceneSnapshot_UseCurrentPose(struct NativeSceneSnapshot *s)
+{ if(s && s->capturing) s->frames[s->current].currentPose=1; }
 static int SnapshotPoseValid(const struct NativeScenePose *p)
 {
     for(unsigned row=0;row<3;row++) {
@@ -197,6 +199,8 @@ int NativeSceneSnapshot_Effect(struct NativeSceneSnapshot *s,const struct Native
     }
     if(anchor) {
         object.pose=anchor->pose;object.modelIdentity=anchor->modelIdentity;object.animation=anchor->animation;object.header=anchor->header;
+        object.poseIdentity=anchor->poseIdentity;
+        if(wheel) {object.modelIdentity=anchor->poseIdentity ? anchor->poseIdentity:anchor->modelIdentity;object.animation=UINT32_MAX;}
         for(unsigned k=0;k<effect->count;k++) {
             float relative[3];for(unsigned axis=0;axis<3;axis++) relative[axis]=world[k][axis]-object.pose.position[axis];
             if(!SnapshotInverse(object.pose.basis,relative,local[k])) return 0;
@@ -268,6 +272,7 @@ static int SnapshotQuaternion(const float m[3][3],float q[4],float scale[3])
 }
 static struct NativeScenePose SnapshotBlendPose(const struct NativeScenePose *a,const struct NativeScenePose *b,float t)
 {
+    if(t>=1) return *b;
     struct NativeScenePose p=*b;float qa[4],qb[4],sa[3],sb[3];
     for(unsigned row=0;row<3;row++) p.position[row]=SnapshotLerp(a->position[row],b->position[row],t);
     if(!SnapshotQuaternion(a->basis,qa,sa) || !SnapshotQuaternion(b->basis,qb,sb)) {
@@ -275,6 +280,7 @@ static struct NativeScenePose SnapshotBlendPose(const struct NativeScenePose *a,
         return p;
     }
     if(sa[2]*sb[2]<0) return *b; /* A handedness switch is a camera cut. */
+    if(t<=0) return *a;
     float dot=0;for(unsigned i=0;i<4;i++) dot+=qa[i]*qb[i];if(dot<0) {dot=-dot;for(unsigned i=0;i<4;i++) qb[i]=-qb[i];}if(dot>1) dot=1;
     float wa=1-t,wb=t;
     if(dot<0.9995f) {float angle=acosf(dot),den=sinf(angle);wa=sinf((1-t)*angle)/den;wb=sinf(t*angle)/den;}
@@ -285,12 +291,25 @@ static struct NativeScenePose SnapshotBlendPose(const struct NativeScenePose *a,
     for(unsigned row=0;row<3;row++) for(unsigned col=0;col<3;col++) p.basis[row][col]=r[row][col]*SnapshotLerp(sa[col],sb[col],t);
     return p;
 }
+static struct NativeScenePose SnapshotBlendView(const struct NativeScenePose *a,const struct NativeScenePose *b,float t)
+{
+    /* Model scale belongs to columns; camera aspect correction belongs to
+     * rows (retail scales the Y row by 9/16). Decomposing view columns turns
+     * pitch/roll into shear and changes apparent height during acceleration. */
+    struct NativeScenePose left=*a,right=*b;
+    for(unsigned row=0;row<3;row++) for(unsigned col=0;col<3;col++) {
+        left.basis[row][col]=a->basis[col][row];right.basis[row][col]=b->basis[col][row];
+    }
+    struct NativeScenePose result=SnapshotBlendPose(&left,&right,t),view=result;
+    for(unsigned row=0;row<3;row++) for(unsigned col=0;col<3;col++) view.basis[row][col]=result.basis[col][row];
+    return view;
+}
 int NativeSceneSnapshot_CameraPose(const struct NativeSceneSnapshot *s,unsigned view,float alpha,struct NativeSceneCameraSnapshot *out)
 {
     if(!s || !out || view>=4 || !s->frames[s->current].valid || !(s->frames[s->current].cameraMask&(1u<<view))) return 0;
     const struct SnapshotFrame *f=&s->frames[s->current],*old=&s->frames[s->current^1];*out=f->cameras[view];
-    if(s->history && old->valid && (old->cameraMask&(1u<<view)) && old->cameras[view].width==out->width && old->cameras[view].height==out->height) {
-        out->view=SnapshotBlendPose(&old->cameras[view].view,&out->view,SnapshotAlpha(alpha));
+    if(!f->currentPose && s->history && old->valid && (old->cameraMask&(1u<<view)) && old->cameras[view].width==out->width && old->cameras[view].height==out->height) {
+        out->view=SnapshotBlendView(&old->cameras[view].view,&out->view,SnapshotAlpha(alpha));
         out->h=SnapshotLerp(old->cameras[view].h,out->h,SnapshotAlpha(alpha));
         for(unsigned axis=0;axis<2;axis++) out->offset[axis]=SnapshotLerp(old->cameras[view].offset[axis],out->offset[axis],SnapshotAlpha(alpha));
     }
@@ -305,13 +324,16 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
     struct NativeSceneCamera clipCamera={.width=camera.width,.height=camera.height,.nearDepth=camera.nearDepth,.farDepth=camera.farDepth};
     clipCamera.transform.h=(u16)lroundf(camera.h);
     for(unsigned axis=0;axis<2;axis++) clipCamera.transform.offset[axis]=(s32)lroundf(camera.offset[axis]*65536);
-    const struct SnapshotFrame *f=&s->frames[s->current],*old=&s->frames[s->current^1];float t=SnapshotAlpha(alpha);
+    const struct SnapshotFrame *f=&s->frames[s->current],*old=&s->frames[s->current^1];float t=f->currentPose ? 1:SnapshotAlpha(alpha);
+    stats->currentPose=f->currentPose;
     struct NativeScenePose poses[SNAP_OBJECTS];
     const struct NativeSceneObjectSnapshot *previousObjects[SNAP_OBJECTS]={0};
     for(unsigned i=0;i<f->objectCount;i++) {
         const struct NativeSceneObjectSnapshot *o=&f->objects[i];poses[i]=o->pose;
         const struct NativeSceneObjectSnapshot *p=s->history && old->valid ? SnapshotObject(old,o->id):NULL;
-        if(p && p->supported==o->supported && p->renderMode==o->renderMode && p->viewportMask==o->viewportMask && p->modelIdentity==o->modelIdentity && p->animation==o->animation && p->header==o->header) {
+        uint64_t poseIdentity=o->poseIdentity ? o->poseIdentity:o->modelIdentity;
+        if(p && p->supported==o->supported && p->renderMode==o->renderMode && p->viewportMask==o->viewportMask &&
+            (p->poseIdentity ? p->poseIdentity:p->modelIdentity)==poseIdentity && p->header==o->header) {
             int continuous=1;for(unsigned axis=0;axis<3;axis++) if(fabsf(p->pose.position[axis]-o->pose.position[axis])>1024) continuous=0;
             if(continuous) {poses[i]=SnapshotBlendPose(&p->pose,&o->pose,t);previousObjects[i]=p;stats->matched++;}
         }
@@ -344,7 +366,8 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
         if(!object || !object->supported || (object->viewportMask && !(object->viewportMask&(1u<<view)))) continue;
         unsigned objectIndex=(unsigned)(object-f->objects);
         struct NativeScenePose pose=poses[objectIndex];
-        if(previousObjects[objectIndex]) {
+        const struct NativeSceneObjectSnapshot *previousObject=previousObjects[objectIndex];
+        if(previousObject && previousObject->modelIdentity==object->modelIdentity && previousObject->animation==object->animation) {
             previousSource=SnapshotSource(old,source->object,source->primitive);
             if(previousSource && memcmp(previousSource->material.vertices,source->material.vertices,sizeof(source->material.vertices))!=0) previousSource=NULL;
         }
@@ -377,12 +400,14 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
         struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES];size_t count;
         if(NativeSceneGeometry_NeedsClip(&clipCamera,vertices)) stats->clipped++;
         enum NativeAssetResult status=source->line ? NativeSceneGeometry_ClipLine(&clipCamera,&material,vertices,source->orderingBias,output,&count) :
-            NativeSceneGeometry_Clip(&clipCamera,&material,vertices,source->orderingBias,output,&count);
+            NativeSceneGeometry_ClipSubpixel(&clipCamera,&material,vertices,source->orderingBias,output,&count);
         if(status!=NATIVE_ASSET_OK) return status;
         if(!count) stats->culled++;
         for(size_t k=0;k<count;k++) {
             const struct NativeDrawTriangle *triangle=&output[k];
-            if((cull>0 && triangle->signedArea<=0) || (cull<0 && triangle->signedArea>=0)) {stats->culled++;continue;}
+            float area=(triangle->visualXY[1][0]-triangle->visualXY[0][0])*(triangle->visualXY[2][1]-triangle->visualXY[0][1])-
+                (triangle->visualXY[1][1]-triangle->visualXY[0][1])*(triangle->visualXY[2][0]-triangle->visualXY[0][0]);
+            if((cull>0 && area<=0) || (cull<0 && area>=0)) {stats->culled++;continue;}
             unsigned depth=0;for(unsigned v=0;v<3;v++) if(triangle->depth[v]>depth) depth=triangle->depth[v];
             int bucket=(int)(depth>>6)+triangle->orderingBias;if(bucket<1) bucket=1;if(bucket>1022) bucket=1022;
             if(source->fixedBucket) bucket=(int)source->fixedBucket-1;

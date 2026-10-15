@@ -195,10 +195,136 @@ static int Materials(struct NativeSceneSnapshot *scene)
     }
     return 0;
 }
+static int CameraAspectAndCanonicalPose(struct NativeSceneSnapshot *scene)
+{
+    NativeSceneSnapshot_Reset(scene);
+    struct NativeSceneCameraSnapshot endpoints[2];
+    for(unsigned frame=0;frame<2;frame++) {
+        float angle=frame*1.0471975512f,c=cosf(angle),v=sinf(angle);
+        endpoints[frame]=(struct NativeSceneCameraSnapshot){.view={.basis={{1,0,0},{0,c*0.5625f,-v*0.5625f},{0,v,c}},.position={0,frame*64.0f,0}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        NativeSceneSnapshot_Begin(scene,1,80);CHECK(NativeSceneSnapshot_Camera(scene,0,&endpoints[frame]));CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    for(unsigned step=0;step<=120;step++) {
+        float t=step/120.0f,c=cosf(t*1.0471975512f),v=sinf(t*1.0471975512f);
+        struct NativeSceneCameraSnapshot sampled;CHECK(NativeSceneSnapshot_CameraPose(scene,0,t,&sampled));
+        CHECK(fabsf(sampled.view.basis[1][1]-c*0.5625f)<0.0001f);
+        CHECK(fabsf(sampled.view.basis[1][2]+v*0.5625f)<0.0001f);
+        CHECK(fabsf(sampled.view.basis[2][1]-v)<0.0001f && fabsf(sampled.view.basis[2][2]-c)<0.0001f);
+        CHECK(fabsf(sampled.view.position[1]-64*t)<0.0001f);
+        if(step==0 || step==120) CHECK(memcmp(&sampled.view,&endpoints[step==120].view,sizeof(sampled.view))==0);
+    }
+    /* Follow a kart up a ramp while accelerating the camera's pitch/position.
+     * Body contact points and independently captured ground patches must stay
+     * aligned at every presentation, rather than acquire a false ride height. */
+    for(unsigned frame=0;frame<2;frame++) {
+        float angle=frame*0.1745329252f,c=cosf(angle),v=sinf(angle);
+        NativeSceneSnapshot_Begin(scene,1,82);
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,c*0.5625f,-v*0.5625f},{0,v,c}},.position={0,64+frame*64.0f,frame*100.0f}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+        struct NativeSceneObjectSnapshot kart={.id=1,.modelIdentity=9,.supported=1,
+            .pose={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={0,frame*64.0f,256+frame*100.0f}}};
+        CHECK(NativeSceneSnapshot_Object(scene,&kart));
+        struct NativeSceneSourceTriangle body={.object=1,.primitive=1,.local={{-20,0,0},{20,0,0},{0,30,0}},.material={.vertices={0,1,2}}};
+        CHECK(NativeSceneSnapshot_Triangle(scene,&body));
+        struct NativeSceneEffect patch={.id=2,.kind=7,.count=3,.bucket=4,.code=0x30};
+        for(unsigned k=0;k<3;k++) for(unsigned row=0;row<3;row++) for(unsigned axis=0;axis<3;axis++)
+            patch.eye[k][row]+=camera.view.basis[row][axis]*(kart.pose.position[axis]+body.local[k][axis]-camera.view.position[axis]);
+        CHECK(NativeSceneSnapshot_Effect(scene,&patch));CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    for(unsigned step=0;step<=120;step++) {
+        float angle=step/120.0f*0.1745329252f,c=cosf(angle),v=sinf(angle);
+        struct Output out;struct NativeSceneSnapshotStats stats;
+        CHECK(Render(scene,step/120.0f,&out,&stats) && out.count==2);
+        float expected=64+(-64*c-256*v)*0.5625f*128/(256*c-64*v);
+        CHECK(fabsf(out.triangles[0].visualXY[0][1]-expected)<0.6f);
+        CHECK(fabsf(out.triangles[0].visualXY[0][1]-out.triangles[1].visualXY[0][1])<0.6f);
+    }
+    /* A retained effect uses the current camera: every generated object,
+     * vertex and colour must select that same pose, for every requested alpha. */
+    for(unsigned frame=0;frame<2;frame++) {
+        NativeSceneSnapshot_Begin(scene,1,81);
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,0.5625f,0},{0,0,1}},.position={frame*40.0f,0,0}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+        struct NativeSceneObjectSnapshot kart={.id=1,.modelIdentity=9,.supported=1,
+            .pose={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={frame*80.0f,0,256}}};
+        CHECK(NativeSceneSnapshot_Object(scene,&kart));
+        struct NativeSceneSourceTriangle triangle={.object=1,.primitive=1,.local={{-20,-20,0},{20,-20,0},{0,20,0}},
+            .material={.vertices={0,1,2},.colors={frame?0xc8c8c8:0,0,0}}};
+        CHECK(NativeSceneSnapshot_Triangle(scene,&triangle));
+        if(frame) NativeSceneSnapshot_UseCurrentPose(scene);
+        CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    struct Output reference,out;struct NativeSceneSnapshotStats stats;
+    CHECK(Render(scene,1,&reference,&stats) && reference.count==1);
+    for(unsigned step=0;step<=120;step++) {
+        CHECK(Render(scene,step/120.0f,&out,&stats) && stats.currentPose && out.count==reference.count);
+        CHECK(memcmp(out.triangles,reference.triangles,sizeof(out.triangles[0]))==0);
+        CHECK(out.triangles[0].source.colors[0]==0xc8c8c8);
+    }
+    Capture(scene,81,1,0,0,0);CHECK(Render(scene,0.5f,&out,&stats) && !stats.currentPose);
+    return 0;
+}
+static int AnimationPoseContinuity(struct NativeSceneSnapshot *scene)
+{
+    struct Output out;struct NativeSceneSnapshotStats stats;
+    NativeSceneSnapshot_Reset(scene);
+    for(unsigned frame=0;frame<3;frame++) {
+        NativeSceneSnapshot_Begin(scene,1,83);
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+        struct NativeSceneObjectSnapshot kart={.id=1,.poseIdentity=frame<2?9:10,.modelIdentity=9^((uint64_t)frame<<48),.animation=frame,.supported=1,
+            .pose={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={frame?80:0,0,256}}};
+        CHECK(NativeSceneSnapshot_Object(scene,&kart));
+        struct NativeSceneSourceTriangle body={.object=1,.primitive=1,.local={{-20,-20,0},{20,-20,0},{0,20,0}},.material={.vertices={0,1,2}}};
+        if(frame) body.local[0][0]=-10; /* New animation shape selects current vertices. */
+        CHECK(NativeSceneSnapshot_Triangle(scene,&body));
+        struct NativeSceneEffect wheel={.id=2,.anchor=1,.kind=5,.count=4,.bucket=4,.code=0x2e};
+        const float corners[4][2]={{-5,-5},{5,-5},{-5,5},{5,5}};
+        for(unsigned k=0;k<4;k++) {
+            unsigned physical=NativeSceneEffect_WheelCorner(0,k);
+            wheel.eye[k][0]=kart.pose.position[0]+corners[physical][0];wheel.eye[k][1]=corners[physical][1];wheel.eye[k][2]=256;
+        }
+        CHECK(NativeSceneSnapshot_Effect(scene,&wheel));CHECK(NativeSceneSnapshot_Seal(scene));
+        if(frame==1) {
+            CHECK(Render(scene,0.5f,&out,&stats) && out.count==3 && stats.matched==2);
+            CHECK(fabsf(out.triangles[0].visualXY[0][0]-111)<0.51f);
+            CHECK(fabsf(out.triangles[1].visualXY[0][0]-113.5f)<0.51f);
+        }
+        if(frame==2) {CHECK(Render(scene,0,&out,&stats) && out.count==3 && !stats.matched);CHECK(fabsf(out.triangles[0].visualXY[0][0]-131)<0.51f);}
+    }
+    return 0;
+}
+static int DistantSubpixelGeometry(struct NativeSceneSnapshot *scene)
+{
+    NativeSceneSnapshot_Begin(scene,1,84);
+    struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+        .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+    CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+    struct NativeSceneObjectSnapshot terrain={.id=1,.modelIdentity=9,.supported=1,.pose={.basis={{1,0,0},{0,1,0},{0,0,1}}}};
+    CHECK(NativeSceneSnapshot_Object(scene,&terrain));
+    struct NativeSceneSourceTriangle sliver={.object=1,.primitive=1,.cull=1,
+        .local={{0,0,512},{1,0,512},{0,1,512}},.material={.vertices={0,1,2}}};
+    CHECK(NativeSceneSnapshot_Triangle(scene,&sliver));
+    sliver.primitive=2;sliver.cull=-1;CHECK(NativeSceneSnapshot_Triangle(scene,&sliver));
+    CHECK(NativeSceneSnapshot_Seal(scene));
+    struct Output out;struct NativeSceneSnapshotStats stats;
+    CHECK(Render(scene,1,&out,&stats) && out.count==1 && stats.culled==1);
+    CHECK(out.triangles[0].signedArea==0);
+    CHECK(out.triangles[0].visualXY[1][0]>out.triangles[0].visualXY[0][0]);
+    CHECK(out.triangles[0].visualXY[2][1]>out.triangles[0].visualXY[0][1]);
+    return 0;
+}
 int main(void)
 {
     struct NativeSceneSnapshot *scene=NativeSceneSnapshot_Create();CHECK(scene);
     struct Output out;struct NativeSceneSnapshotStats stats;
+    CHECK(DistantSubpixelGeometry(scene)==0);
+    CHECK(AnimationPoseContinuity(scene)==0);
+    CHECK(CameraAspectAndCanonicalPose(scene)==0);
     CHECK(Effects(scene)==0);
     CHECK(WheelCorners(scene)==0);
     CHECK(Materials(scene)==0);

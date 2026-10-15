@@ -50,7 +50,9 @@ one-player 3D geometry from copied camera/object/animation snapshots, including
 verified wheel, shadow, reflection, particle, weather and sky sources. Material
 colours and water UVs share the sampled timeline; texture frames and palette/page
 changes switch discretely without sweeping through the atlas. Unsupported
-primitives and other layouts still use prepared packets. It is opt-in and remains
+primitives and other layouts still use prepared packets. Scenes containing
+retained camera-dependent models/effects or sky glow use a coherent current-tick
+pose throughout, so those cases can still have roughly 30 distinct poses/s. It is opt-in and remains
 disabled by default following graphical regressions. Loading,
 scrapbook and internal recording/replay retain their synchronous retail timing.
 

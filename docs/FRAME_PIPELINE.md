@@ -102,7 +102,9 @@ offsets identify unprojected source triangles. Packed animation vertices and
 materials are copied into two host-owned frames; historical asset/game pointers
 are never dereferenced. Births use current geometry, deleted objects disappear,
 and reused pool addresses cannot inherit the old object's pose. Model/animation
-changes and large object jumps do not blend incompatible poses.
+changes and large object jumps do not blend incompatible poses. Animation changes select
+current local geometry while preserving pose history for the same model asset;
+wheels retain their attachment history across those animation changes.
 
 Terrain capture traverses the complete reachable BSP, independently of the
 canonical camera/PVS list, and copies animated terrain vertices. Allocated but
@@ -172,7 +174,7 @@ copies, particle COP2 stores and saved/restored reflection registers. Missing
 provenance explicitly invalidates the destination even when its XY happens to
 match a previous vertex. There is no screen-coordinate source matching.
 
-Sky and weather candidates are copied before screen bounds rejection; confetti
+All eight sky sectors and weather candidates are copied before screen bounds rejection; confetti
 is staged after its valid four-corner projection and before bounds rejection.
 Beaker rain stages separate gradient passes with stable RNG-slot/pass identities.
 These candidates can become visible under the sampled camera. Wheel, shadow,
@@ -281,6 +283,48 @@ covered acceleration, steering, pause and the interpolation toggle. Runtime
 profiling confirms regenerated scene presentations; this is not whole-game
 parity or proof that every background variant is migrated. Logs are under
 `debug/camera-order`.
+
+### Race graphics audit: height, background and canonical cases
+
+View matrices now interpolate row scale (including retail's 9/16 vertical aspect
+correction) separately from camera rotation. Model poses continue to use column
+scale. Endpoints retain exact captured matrices. A 121-sample pitch test checks
+the aspect ratio and endpoint bytes; a moving-camera/ramp fixture independently
+captures a kart and contact patch and verifies their projected heights stay
+within 0.6 pixels of the expected projection at all samples. An animation-change
+fixture verifies continuous body/wheel poses with discrete animation geometry,
+and rejects history when the actual model asset changes.
+
+Subpixel presentation keeps distant triangles whose floating-point area is
+nonzero even when integer GPU corners round onto one line. Culling uses the
+presentation coordinates. The canonical geometry API keeps its integer-area
+policy. A regression checks a 0.25-pixel triangle and rejects its back-facing
+counterpart. This avoids dropping thin background surfaces solely due to integer
+rounding.
+
+Sky capture stages all eight sectors, then emits the same four canonical sectors
+as before. This prevents current-yaw selection from dropping a sector still seen
+by the sampled camera. A production `DrawSky_Full` fixture checks eight copied
+sources, coverage of all four emitted packets, and byte-identical canonical
+packets with capture enabled/disabled.
+
+Retained world model packets and incomplete special effects now request a coherent
+current pose for the whole scene. Screen-space sky glow also requests that pose,
+because its horizon still derives from current pitch/roll. In this mode camera,
+objects, local animation and materials all sample alpha=1, preventing mixed tick
+poses. This deliberately reduces visual motion to tick cadence in unsupported
+cases; it does not claim to migrate their geometry. An arena/capacity failure
+latches full canonical fallback for the rest of that prepared tick and clears
+history before the next, avoiding backwards alternation within one tick.
+
+`presentations.csv` appends `scene_current_pose`, `scene_retained_model_packets`
+and `scene_canonical_pose_reasons`. Reason bits are 1=retained models,
+2=incomplete effects, 4=screen-space sky glow. Current-pose regeneration is distinct
+from `scene_fallback`, which submits the complete original command chain.
+A staged effect without a successfully copied source retains its live primitive
+and requests the current pose; it is never marked covered solely by its staging
+flag.
+See `INTERPOLATION_GRAPHICS_VALIDATION.md` for measured scope and remaining limits.
 
 ### Verification scope after the graphical regression
 

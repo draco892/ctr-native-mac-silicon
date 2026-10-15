@@ -82,6 +82,19 @@ static void EffectBindings(void)
     CHECK(NativeVisual_StagedEffect(0,&copied) && copied.count==3 && copied.eye[0][2]==-64 && copied.eye[2][0]==5);
     CHECK(NativeVisual_EffectCovered(live)); /* Even a currently invisible face has a source. */
     CHECK(!NativeVisual_StagedEffect(1,&copied));NativeVisual_Reset();CHECK(!NativeVisual_StagedEffect(0,&copied));
+    /* Rejected staging cannot claim replacement of an otherwise valid live
+     * packet: the scene adapter must retain it and select a coherent pose. */
+    NativeVisual_BeginCapture(1,903);NativeVisual_Push(8,&identity,0,1);NativeVisual_EffectScope(0,1,NATIVE_EFFECT_STAGED,NULL);
+    POLY_G3 *unstaged=&triangles[0];memset(unstaged,0,sizeof(*unstaged));unstaged->code=0x30;
+    VERTTYPE *unstagedFields[3]={&unstaged->x0,&unstaged->x1,&unstaged->x2};
+    for(unsigned k=0;k<3;k++) {
+        struct NativeVisualProjection p={.matrix={{1,0,0},{0,1,0},{0,0,1}},.translation={0,0,256},.h=256};
+        NativeVisual_BindProjection(unstagedFields[k],&p);
+    }
+    CHECK(!NativeVisual_StageEffect(unstaged,6,1024,0));
+    NativeVisual_RecordPacket(unstaged,6);NativeVisual_EndCapture();
+    CHECK(!NativeVisual_EffectCovered(unstaged) && NativeVisual_PacketEffect(unstaged,&copied));
+    CHECK(copied.flags&NATIVE_EFFECT_STAGED);NativeVisual_Reset();
     /* A compound draw-mode + gradient line has six payload words. */
     uint32_t line[7]={0,0xe1000a40,0,0x52010203,0,0x00040506,0};
     CHECK(NativeGpuLinks_RegisterRange(line,sizeof(line),NULL));

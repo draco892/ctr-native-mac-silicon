@@ -65,9 +65,9 @@ static struct NativeSceneClipVertex SceneGeometry_Intersection(const struct Nati
     if(plane==1) v.view[2]=c->farDepth;
     return v;
 }
-enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *c,
+static enum NativeAssetResult SceneGeometry_Clip(const struct NativeSceneCamera *c,
     const struct NativeModelTriangle *m,const struct NativeSceneClipVertex input[3],s16 bias,
-    struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *count)
+    struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *count,int subpixel)
 {
     if(count!=NULL) *count=0;
     if(output!=NULL) memset(output,0,sizeof(*output)*NATIVE_SCENE_CLIP_MAX_TRIANGLES);
@@ -140,10 +140,20 @@ enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *
         tri.signedArea=((s64)tri.screen[1][0]-tri.screen[0][0])*(tri.screen[2][1]-tri.screen[0][1])-
             ((s64)tri.screen[2][0]-tri.screen[0][0])*(tri.screen[1][1]-tri.screen[0][1]);
         tri.averageDepth=(u16)(((u32)tri.depth[0]+tri.depth[1]+tri.depth[2])/3);
-        if(tri.signedArea) output[written++]=tri;
+        float area=(tri.visualXY[1][0]-tri.visualXY[0][0])*(tri.visualXY[2][1]-tri.visualXY[0][1])-
+            (tri.visualXY[1][1]-tri.visualXY[0][1])*(tri.visualXY[2][0]-tri.visualXY[0][0]);
+        if(subpixel ? area!=0 : tri.signedArea!=0) output[written++]=tri;
     }
     *count=written; return NATIVE_ASSET_OK;
 }
+enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *c,
+    const struct NativeModelTriangle *m,const struct NativeSceneClipVertex input[3],s16 bias,
+    struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *count)
+{ return SceneGeometry_Clip(c,m,input,bias,output,count,0); }
+enum NativeAssetResult NativeSceneGeometry_ClipSubpixel(const struct NativeSceneCamera *c,
+    const struct NativeModelTriangle *m,const struct NativeSceneClipVertex input[3],s16 bias,
+    struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *count)
+{ return SceneGeometry_Clip(c,m,input,bias,output,count,1); }
 
 static struct NativeSceneClipVertex SceneGeometry_Midpoint(const struct NativeSceneClipVertex *a,const struct NativeSceneClipVertex *b)
 {

@@ -5,6 +5,9 @@ struct DrawSkyContext
 	const struct ShortVertex *verts;
 	u32 *ot;
 	u32 screenBounds;
+#ifdef CTR_NATIVE
+    int captureOnly;
+#endif
 };
 
 struct DrawSkyScratch
@@ -116,7 +119,7 @@ static u32 *DrawSky_Piece(struct Skybox *skybox, struct DrawSkyContext *ctx, int
 		sxy2 = MFC2(14);
 
 #ifdef CTR_NATIVE
-        if(NativeVisual_IsCapturing()) {
+        if(ctx->captureOnly && NativeVisual_IsCapturing()) {
             POLY_G3 candidate={0};candidate.code=0x30;
             CtrGpu_WriteColorCode(&candidate.r0,MFC2(20));CtrGpu_WriteColorCode(&candidate.r1,MFC2(21));CtrGpu_WriteColorCode(&candidate.r2,MFC2(22));
             candidate.code=0x30;
@@ -125,7 +128,11 @@ static u32 *DrawSky_Piece(struct Skybox *skybox, struct DrawSkyContext *ctx, int
             NativeVisual_StageEffect(&candidate,6,1023+(s16)face->D/4,0);
         }
 #endif
-		if (DrawSky_IsVisible(gteFlag, sxy0, sxy1, sxy2, ctx->screenBounds))
+		if (
+#ifdef CTR_NATIVE
+            !ctx->captureOnly &&
+#endif
+            DrawSky_IsVisible(gteFlag, sxy0, sxy1, sxy2, ctx->screenBounds))
 		{
 			DrawSky_EmitPrimitive(&prim, ot);
 		}
@@ -172,6 +179,15 @@ void DrawSky_Full(void *skybox, struct PushBuffer *pb, struct PrimMem *primMem)
 		ctx.verts = sky->ptrVertex;
 		ctx.ot = &pb->ptrOT[0x3ff];
 		ctx.screenBounds = DrawSky_ReadWord(pb, 0x20);
+#ifdef CTR_NATIVE
+        /* Capture all sectors before the canonical four-sector selection.
+         * A sampled camera may still look into a sector that current yaw has
+         * just excluded. Capture emits no packets and never advances the game. */
+        ctx.captureOnly=1;
+        if(NativeVisual_IsCapturing()) for(int sector=0;sector<8;sector++)
+            DrawSky_Piece(sky,&ctx,sector,sector,prim);
+        ctx.captureOnly=0;
+#endif
 
 		faceIndex = (int)(baseFaceOffset >> 2);
 		countIndex = (int)(baseCountOffset >> 1);

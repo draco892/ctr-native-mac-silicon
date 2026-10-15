@@ -24,6 +24,11 @@ enum NativeAssetResult NativeSceneGeometry_ClipLine(const struct NativeSceneCame
 enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *camera,
     const struct NativeModelTriangle *material,const struct NativeSceneClipVertex vertices[3],s16 orderingBias,
     struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *count);
+/* Presentation keeps triangles with nonzero float area even when all integer
+ * GPU corners round onto one line. Consumers must cull using visualXY. */
+enum NativeAssetResult NativeSceneGeometry_ClipSubpixel(const struct NativeSceneCamera *,
+    const struct NativeModelTriangle *,const struct NativeSceneClipVertex [3],s16,
+    struct NativeDrawTriangle [NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *);
 enum NativeAssetResult NativeSceneGeometry_Transform(const struct NativeProjectionConfig *projection,
     const struct NativePackedModelVertex *vertex,unsigned depthScale,s32 view[3]);
 void NativeSceneGeometry_Attributes(const struct NativeModelTriangle *material,unsigned corner,struct NativeSceneClipVertex *vertex);

@@ -8,7 +8,7 @@
  * retained. Inputs are copied before projection, visibility tests or clipping. */
 struct NativeScenePose { float basis[3][3], position[3]; };
 struct NativeSceneObjectSnapshot {
-    uint64_t id, modelIdentity;
+    uint64_t id, modelIdentity,poseIdentity; /* Asset identity independent of animation; zero uses modelIdentity. */
     struct NativeScenePose pose;
     uint32_t flags, animation, frame, header;
     int supported;
@@ -33,7 +33,7 @@ struct NativeSceneSourceTriangle {
     unsigned continuousUV; /* Water/environment coordinates; atlas frames stay discrete. */
 };
 struct NativeSceneSnapshot;
-struct NativeSceneSnapshotStats { unsigned objects,sources,triangles,culled,clipped,matched,unsupported; int valid; };
+struct NativeSceneSnapshotStats { unsigned objects,sources,triangles,culled,clipped,matched,unsupported; int valid,currentPose; };
 typedef enum NativeAssetResult (*NativeSceneSnapshotSink)(void *,unsigned bucket,const struct NativeDrawTriangle *);
 struct NativeSceneSnapshot *NativeSceneSnapshot_Create(void);
 void NativeSceneSnapshot_Destroy(struct NativeSceneSnapshot *);
@@ -45,6 +45,8 @@ int NativeSceneSnapshot_Triangle(struct NativeSceneSnapshot *,const struct Nativ
 int NativeSceneSnapshot_Material(struct NativeSceneSnapshot *,uint64_t object,uint64_t primitive,uint64_t modelIdentity,const float local[3][3],const struct NativeModelTriangle *);
 int NativeSceneSnapshot_Effect(struct NativeSceneSnapshot *,const struct NativeSceneEffect *);
 void NativeSceneSnapshot_Invalidate(struct NativeSceneSnapshot *);
+/* Retained camera-dependent packets require the whole world at the same tick. */
+void NativeSceneSnapshot_UseCurrentPose(struct NativeSceneSnapshot *);
 int NativeSceneSnapshot_Seal(struct NativeSceneSnapshot *);
 int NativeSceneSnapshot_CoversObject(const struct NativeSceneSnapshot *,uint64_t);
 int NativeSceneSnapshot_CameraPose(const struct NativeSceneSnapshot *,unsigned,float,struct NativeSceneCameraSnapshot *);

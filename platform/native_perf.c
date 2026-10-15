@@ -478,7 +478,7 @@ int NativePerf_ConfigureFromArgs(int argc, char **argv)
 		s_csvFile = s_gpuCsvFile = s_driverCsvFile = NULL;
 		return 1;
 	}
-    fprintf(s_presentationCsvFile, "presentation_index,simulation_frame_index,delta_ms,elapsed_s,visual_alpha,visual_vertices,visual_matched,visual_sampled,visual_projected,visual_overflow,scene_objects,scene_sources,scene_triangles,scene_matched,scene_unsupported,scene_regenerated,scene_fallback,scene_effects,scene_effect_fallback\n");
+    fprintf(s_presentationCsvFile, "presentation_index,simulation_frame_index,delta_ms,elapsed_s,visual_alpha,visual_vertices,visual_matched,visual_sampled,visual_projected,visual_overflow,scene_objects,scene_sources,scene_triangles,scene_matched,scene_unsupported,scene_regenerated,scene_fallback,scene_effects,scene_effect_fallback,scene_current_pose,scene_retained_model_packets,scene_canonical_pose_reasons\n");
 	fflush(s_presentationCsvFile);
 	s_enabled = 1;
 
@@ -587,11 +587,11 @@ void NativePerf_RecordPresentation(const struct NativeRenderTime *time)
 #ifdef CTR_NATIVE_GAME_SCENE
     struct NativeSceneGameSnapshotStats scene=NativeSceneGameSnapshot_GetStats();
 #else
-    struct {unsigned objects,sources,triangles,matched,unsupported,effects,effectFallback;int regenerated,fallback;} scene={0};
+    struct {unsigned objects,sources,triangles,matched,unsupported,effects,effectFallback,retainedModelPackets,canonicalPoseReasons;int regenerated,fallback,currentPose;} scene={0};
 #endif
-	fprintf(s_presentationCsvFile, "%llu,%u,%.6f,%.9f,%.6f,%u,%u,%u,%u,%d,%u,%u,%u,%u,%u,%d,%d,%u,%u\n", (unsigned long long)time->frameIndex,
+	fprintf(s_presentationCsvFile, "%llu,%u,%.6f,%.9f,%.6f,%u,%u,%u,%u,%d,%u,%u,%u,%u,%u,%d,%d,%u,%u,%d,%u,%u\n", (unsigned long long)time->frameIndex,
 	        s_frameOpen || s_frameIndex == 0 ? s_frameIndex : s_frameIndex - 1,
-	        time->deltaSeconds * 1000.0, time->elapsedSeconds,visual.alpha,visual.vertices,visual.matched,visual.sampled,visual.projected,visual.overflow,scene.objects,scene.sources,scene.triangles,scene.matched,scene.unsupported,scene.regenerated,scene.fallback,scene.effects,scene.effectFallback);
+	        time->deltaSeconds * 1000.0, time->elapsedSeconds,visual.alpha,visual.vertices,visual.matched,visual.sampled,visual.projected,visual.overflow,scene.objects,scene.sources,scene.triangles,scene.matched,scene.unsupported,scene.regenerated,scene.fallback,scene.effects,scene.effectFallback,scene.currentPose,scene.retainedModelPackets,scene.canonicalPoseReasons);
 	if ((time->frameIndex % NATIVE_PERF_FLUSH_INTERVAL) == 0)
 		fflush(s_presentationCsvFile);
 }

@@ -21,6 +21,7 @@ static int sceneCapture,sceneReady,sceneTerrain,sceneWanted;
 static uint64_t sceneEpoch;
 static struct GameTracker *sceneTracker;
 static unsigned sceneEffects,sceneEffectFallback;
+static unsigned sceneRetainedModels,sceneCanonicalReasons;
 static struct NativeSceneGameSnapshotStats sceneStats;
 #ifdef CTR_INTERNAL
 static unsigned sceneCaptureErrors;
@@ -45,7 +46,10 @@ static void SceneGameCaptureInstance(const struct Instance *instance)
     struct NativeModelView model;struct NativeModelHeaderView header;
     int readable=instance->model && NativeSceneAssets_GetModel(&gNativeSceneAssets,instance->model,&model)==NATIVE_ASSET_OK &&
         NativeModel_GetHeader(&model,0,&header)==NATIVE_ASSET_OK;
-    if(readable) object.modelIdentity=(uint64_t)(uintptr_t)instance->model->headers^((uint64_t)instance->animIndex<<48);
+    if(readable) {
+        object.poseIdentity=(uint64_t)(uintptr_t)instance->model->headers;
+        object.modelIdentity=object.poseIdentity^((uint64_t)instance->animIndex<<48);
+    }
     object.supported=readable && !(header.flags&1) && (instance->flags&DRAW_COLLISION_MASK) && !(instance->flags&HIDE_MODEL) &&
         !(instance->flags&(PIXEL_LOD|SCREENSPACE_INSTANCE|CUSTOM_MATRIX|DRAW_BILLBOARD|DRAW_HUGE|SPLIT_STATE_MASK));
     if(readable && !header.animationCount) object.animation=UINT32_MAX;
@@ -165,6 +169,7 @@ void NativeSceneGameSnapshot_Begin(struct GameTracker *tracker,int enabled,uint6
 #endif
     sceneEpoch=NativeVisual_ResetEpoch();sceneTracker=tracker;
     sceneEffects=sceneEffectFallback=0;
+    sceneRetainedModels=sceneCanonicalReasons=0;
     sceneCapture=sceneReady=sceneTerrain=0;memset(&sceneStats,0,sizeof(sceneStats));
     /* Other viewport layouts retain canonical packets until their special
      * decals/reflections are migrated, rather than mixing camera poses. */
@@ -243,8 +248,12 @@ static int SceneGameCaptureEffects(void)
                     if(!(effect.flags&NATIVE_EFFECT_STAGED)) {
                         if(!NativeSceneSnapshot_Effect(sceneGame,&effect)) return 0;
                         sceneEffects++;if(kind<13) captured[kind]++;
+                        NativeVisual_MarkEffect(packet);
+                    } else {
+                        /* A staged source would already mark its live packet
+                         * covered. Failed staging must retain the primitive. */
+                        sceneEffectFallback++;if(kind<13) retained[kind]++;
                     }
-                    NativeVisual_MarkEffect(packet);
                 } else {
                     /* Keep the entire frame at the canonical pose if even one
                      * solid wheel lacks 3D provenance. Mixing its current-tick
@@ -253,6 +262,7 @@ static int SceneGameCaptureEffects(void)
                     sceneEffectFallback++;if(kind<13) retained[kind]++;
                 }
             }
+            if(inWorld && known && kind==1 && !NativeSceneSnapshot_CoversObject(sceneGame,owner) && !NativeVisual_EffectCovered(packet)) sceneRetainedModels++;
         }
         if(NativeGpuLinks_IsTerminator(tag)) break;
         packet=NativeGpuLinks_ToHostPointer(tag&0xffffffu);if(!packet) return 0;
@@ -276,6 +286,12 @@ void NativeSceneGameSnapshot_Seal(void)
         NativeSceneSnapshot_Material(sceneGame,packet.object,packet.primitive,packet.part,packet.local,&material);
     }
     if(NativeVisual_GetStats().overflow || !SceneGameCaptureEffects()) NativeSceneSnapshot_Invalidate(sceneGame);
+    if(sceneRetainedModels) sceneCanonicalReasons|=NATIVE_SCENE_CANONICAL_MODEL;
+    if(sceneEffectFallback) sceneCanonicalReasons|=NATIVE_SCENE_CANONICAL_EFFECT;
+    /* The screen-space glow is authored from current pitch/roll. Until it has
+     * a sampled source, keep its horizon and all world geometry on that pose. */
+    if(sceneTerrain && sceneTracker->level1 && (sceneTracker->level1->configFlags&1)) sceneCanonicalReasons|=NATIVE_SCENE_CANONICAL_GLOW;
+    if(sceneCanonicalReasons) NativeSceneSnapshot_UseCurrentPose(sceneGame);
     sceneReady=NativeSceneSnapshot_Seal(sceneGame);sceneCapture=0;
     if(!sceneReady) SceneGameCaptureError("frame",0);
 }
@@ -348,7 +364,8 @@ static int SceneGameGroupCompare(const void *left,const void *right)
 }
 uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float alpha)
 {
-    sceneStats=(struct NativeSceneGameSnapshotStats){.effects=sceneEffects,.effectFallback=sceneEffectFallback};
+    sceneStats=(struct NativeSceneGameSnapshotStats){.effects=sceneEffects,.effectFallback=sceneEffectFallback,
+        .retainedModelPackets=sceneRetainedModels,.canonicalPoseReasons=sceneCanonicalReasons};
     u32 *canonical=&tracker->pushBuffer[0].ptrOT[1023];
     if(!sceneReady || !sceneGame || sceneEpoch!=NativeVisual_ResetEpoch()) {sceneStats.fallback=sceneWanted;return canonical;}
     scenePacketCount=sceneVertexBudget=sceneGroupCount=0;memset(sceneHeads,0,sizeof(sceneHeads));memset(sceneTails,0,sizeof(sceneTails));
@@ -378,6 +395,7 @@ uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float
         if(NativeSceneSnapshot_Render(sceneGame,i,alpha,SceneGameEmit,&i,&stats)!=NATIVE_ASSET_OK) goto fallback;
         sceneStats.objects=stats.objects;sceneStats.sources=stats.sources;sceneStats.triangles+=stats.triangles;
         sceneStats.matched=stats.matched;sceneStats.unsupported=stats.unsupported;
+        sceneStats.currentPose=stats.currentPose;
     }
     qsort(sceneGroups,sceneGroupCount,sizeof(*sceneGroups),SceneGameGroupCompare);
     for(unsigned i=0;i<sceneGroupCount;i++) {
@@ -400,6 +418,9 @@ uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float
     }
     sceneStats.regenerated=1;return scenePackets[first-1].words;
 fallback:
+    /* Do not alternate canonical/current and delayed sampled poses within one
+     * prepared tick after a capacity/packet failure. Restart history next tick. */
+    sceneReady=0;NativeSceneSnapshot_Reset(sceneGame);
     sceneStats.fallback=1;return canonical;
 }
 struct NativeSceneGameSnapshotStats NativeSceneGameSnapshot_GetStats(void) {return sceneStats;}

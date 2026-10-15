@@ -16,6 +16,7 @@ static struct
 #include "../game/MATH/TRIG_AngleSinCos.c"
 #include "../game/RenderBucket/RenderBucket_QueueExecute.c"
 #include "../game/DrawTires.c"
+#include "../game/DrawSky.c"
 #include "../game/RenderWeather/RenderWeather.c"
 #include "../game/CTR/CTR_CycleTex.c"
 #define CHECK(c)                                                 \
@@ -147,9 +148,40 @@ static int WeatherCapture(void)
     while(NativeVisual_StagedEffect(count,&effect)) {CHECK(effect.kind==8 && effect.count==2 && effect.bucket==100);count++;}
     CHECK(count>0);NativeVisual_Reset();return 0;
 }
+static int SkyCapture(void)
+{
+    _Alignas(max_align_t) unsigned char arena[4096]={0},canonical[4096];
+    u32 ot[1024];struct ShortVertex vertices[3]={0};struct SkyboxFace faces[8]={0};
+    vertices[0].Position=(SVECTOR){-20,-20,256,0};vertices[1].Position=(SVECTOR){20,-20,256,0};vertices[2].Position=(SVECTOR){0,20,256,0};
+    for(unsigned k=0;k<3;k++) vertices[k].Color=(CVECTOR){40,80,120,0};
+    struct Skybox sky={.numVertex=3,.ptrVertex=vertices};
+    for(unsigned k=0;k<8;k++) {faces[k].B=sizeof(vertices[0]);faces[k].C=2*sizeof(vertices[0]);sky.numFaces[k]=1;sky.ptrFaces[k]=&faces[k];}
+    struct PushBuffer pb={.rect={.w=192,.h=128},.distanceToScreen_PREV=128,.ptrOT=ot};
+    for(unsigned k=0;k<3;k++) pb.matrix_ViewProj.m[k][k]=4096;
+    size_t canonicalBytes=0;
+    for(unsigned capture=0;capture<2;capture++) {
+        memset(arena,0,sizeof(arena));for(unsigned k=0;k<1024;k++) ot[k]=NATIVE_GPU_LINK_TERMINATOR;
+        NativeGpuLinks_Reset();CHECK(NativeGpuLinks_RegisterRange(arena,sizeof(arena),NULL));CHECK(NativeGpuLinks_RegisterRange(ot,sizeof(ot),NULL));
+        struct PrimMem memory={.cursor=arena};
+        NativeVisual_BeginCapture(capture,1000);gte_SetGeomScreen(128);gte_SetGeomOffset(96,64);
+        DrawSky_Full(&sky,&pb,&memory);NativeVisual_EndCapture();
+        size_t bytes=(unsigned char *)memory.cursor-arena;
+        CHECK(bytes==4*sizeof(POLY_G3));
+        if(!capture) {canonicalBytes=bytes;memcpy(canonical,arena,bytes);}
+        else {
+            CHECK(bytes==canonicalBytes && memcmp(arena,canonical,bytes)==0 && !NativeVisual_GetStats().overflow);
+            struct NativeSceneEffect effect;unsigned count=0;
+            while(NativeVisual_StagedEffect(count,&effect)) {CHECK(effect.kind==10 && effect.count==3 && effect.eye[0][2]==256);count++;}
+            CHECK(count==8);
+            for(unsigned k=0;k<4;k++) CHECK(NativeVisual_EffectCovered((POLY_G3 *)arena+k));
+        }
+    }
+    NativeVisual_Reset();return 0;
+}
 int main(void)
 {
     CHECK(WeatherCapture()==0);
+    CHECK(SkyCapture()==0);
 	if (PrimitivePackets() || WorkAndTextureCycles())
 		return 1;
 	puts("Production RenderBucket/tire packets, full-width OT ranges, 256 cached vertices and texture cycles OK");
