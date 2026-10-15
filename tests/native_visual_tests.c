@@ -62,8 +62,53 @@ static GrVertex Draw(float alpha)
     MakeColourTriangle(output,true,&p->r0,&p->r1,&p->r2);
     NativeVisual_EndPresentation();return output[0];
 }
+static void EffectBindings(void)
+{
+    NativeVisual_Reset();NativeVisual_BeginCapture(1,900);
+    NativeVisual_Push(8,&identity,0,1);NativeVisual_EffectScope(0,0.25f,NATIVE_EFFECT_STAGED,NULL);
+    POLY_G3 candidate={0};candidate.code=0x30;
+    VERTTYPE *fields[3]={&candidate.x0,&candidate.x1,&candidate.x2};
+    for(unsigned k=0;k<3;k++) {
+        struct NativeVisualProjection pose={.matrix={{1,0,0},{0,1,0},{0,0,1}},.translation={0,0,-256},.local={k*10.0f,0,0},.h=128};
+        fields[k][0]=fields[k][1]=0;
+        NativeVisual_BindProjection(fields[k],&pose);
+    }
+    CHECK(NativeVisual_StageEffect(&candidate,6,12,0xa40));
+    POLY_G3 *live=&triangles[0];*live=candidate;
+    NativeVisual_CopyProjection(&live->x0,&candidate.x0);NativeVisual_CopyProjection(&live->x1,&candidate.x1);NativeVisual_CopyProjection(&live->x2,&candidate.x2);
+    NativeVisual_RecordPacket(live,6);memset(&candidate,0,sizeof(candidate));
+    NativeVisual_EndCapture();
+    struct NativeSceneEffect copied;
+    CHECK(NativeVisual_StagedEffect(0,&copied) && copied.count==3 && copied.eye[0][2]==-64 && copied.eye[2][0]==5);
+    CHECK(NativeVisual_EffectCovered(live)); /* Even a currently invisible face has a source. */
+    CHECK(!NativeVisual_StagedEffect(1,&copied));NativeVisual_Reset();CHECK(!NativeVisual_StagedEffect(0,&copied));
+    /* A compound draw-mode + gradient line has six payload words. */
+    uint32_t line[7]={0,0xe1000a40,0,0x52010203,0,0x00040506,0};
+    CHECK(NativeGpuLinks_RegisterRange(line,sizeof(line),NULL));
+    NativeVisual_BeginCapture(1,901);NativeVisual_Push(2,&identity,0,1);NativeVisual_EffectScope(0,1,0,NULL);
+    for(unsigned k=0;k<2;k++) {
+        struct NativeVisualProjection pose={.matrix={{1,0,0},{0,1,0},{0,0,1}},.translation={0,0,256},.local={k*10.0f,0,0},.h=256};
+        line[4+k*2]=k*10;NativeVisual_BindProjection(&line[4+k*2],&pose);
+    }
+    NativeVisual_RecordPacket(line,6);NativeVisual_EndCapture();
+    CHECK(NativeVisual_PacketEffect(line,&copied) && copied.count==2 && copied.code==0x52 && copied.page==0xa40);
+    CHECK(copied.colors[0]==0x010203 && copied.colors[1]==0x040506);
+    NativeVisual_Reset();
+    NativeVisual_BeginCapture(1,902);NativeVisual_Push(5,&identity,0,1);NativeVisual_EffectScope(0,1,0,NULL);
+    POLY_G3 *p=&triangles[0];memset(p,0,sizeof(*p));p->code=0x30;
+    VERTTYPE *corners[3]={&p->x0,&p->x1,&p->x2};
+    for(unsigned k=0;k<3;k++) {
+        struct NativeVisualProjection pose={.matrix={{1,0,0},{0,1,0},{0,0,1}},.translation={0,0,256},.h=256};
+        NativeVisual_BindProjection(corners[k],&pose);
+    }
+    uint32_t unbound=0;NativeVisual_CopyProjection(&p->x0,&unbound);
+    NativeVisual_RecordPacket(p,6);NativeVisual_EndCapture();
+    CHECK(!NativeVisual_PacketEffect(p,&copied)); /* Equal XY cannot revive stale provenance. */
+    NativeVisual_Reset();
+}
 int main(void)
 {
+    Register();EffectBindings();
     Register();NativeVisual_NewObject(&identity);
     Capture(0,100,0,0,0,1);Capture(1,201,100,0,0,1);
     POLY_G3 original=triangles[1];TILE originalRect=rectangles[1];

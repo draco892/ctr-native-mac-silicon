@@ -68,10 +68,19 @@ static void DrawSky_EmitPrimitive(u32 **primCursor, u32 *ot)
 
 	CtrGpu_WriteColorCode(&poly->r0, MFC2(20));
 	CtrGpu_WritePackedXY(&poly->x0, MFC2(12));
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&poly->x0,0,MFC2(12));
+#endif
 	CtrGpu_WriteColorCode(&poly->r1, MFC2(21));
 	CtrGpu_WritePackedXY(&poly->x1, MFC2(13));
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&poly->x1,1,MFC2(13));
+#endif
 	CtrGpu_WriteColorCode(&poly->r2, MFC2(22));
 	CtrGpu_WritePackedXY(&poly->x2, MFC2(14));
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&poly->x2,2,MFC2(14));
+#endif
 	CtrGpu_LinkPacket24(ot, &poly->tag, poly, 0x06000000);
 
 	*primCursor = (u32 *)(poly + 1);
@@ -95,7 +104,10 @@ static u32 *DrawSky_Piece(struct Skybox *skybox, struct DrawSkyContext *ctx, int
 		u32 sxy2;
 		u32 gteFlag;
 
-		DrawSky_LoadFaceVertices(ctx, face);
+		#ifdef CTR_NATIVE
+        NativeVisual_Primitive(((uint64_t)(unsigned)faceIndex<<32)|i);
+#endif
+        DrawSky_LoadFaceVertices(ctx, face);
 		gte_rtpt_b();
 
 		sxy0 = MFC2(12);
@@ -103,6 +115,16 @@ static u32 *DrawSky_Piece(struct Skybox *skybox, struct DrawSkyContext *ctx, int
 		sxy1 = MFC2(13);
 		sxy2 = MFC2(14);
 
+#ifdef CTR_NATIVE
+        if(NativeVisual_IsCapturing()) {
+            POLY_G3 candidate={0};candidate.code=0x30;
+            CtrGpu_WriteColorCode(&candidate.r0,MFC2(20));CtrGpu_WriteColorCode(&candidate.r1,MFC2(21));CtrGpu_WriteColorCode(&candidate.r2,MFC2(22));
+            candidate.code=0x30;
+            CtrGpu_WritePackedXY(&candidate.x0,sxy0);CtrGpu_WritePackedXY(&candidate.x1,sxy1);CtrGpu_WritePackedXY(&candidate.x2,sxy2);
+            NativeVisual_GteStore(&candidate.x0,0,sxy0);NativeVisual_GteStore(&candidate.x1,1,sxy1);NativeVisual_GteStore(&candidate.x2,2,sxy2);
+            NativeVisual_StageEffect(&candidate,6,1023+(s16)face->D/4,0);
+        }
+#endif
 		if (DrawSky_IsVisible(gteFlag, sxy0, sxy1, sxy2, ctx->screenBounds))
 		{
 			DrawSky_EmitPrimitive(&prim, ot);
@@ -121,6 +143,10 @@ void DrawSky_Full(void *skybox, struct PushBuffer *pb, struct PrimMem *primMem)
 	// Native C relies on the host ABI because the only retail data temporaries live in 0x10 and 0x14 and are explicit below.
 	if (sky != NULL)
 	{
+#ifdef CTR_NATIVE
+        NativeVisual_Push(10,sky,(unsigned)pb->cameraID,1);
+        NativeVisual_EffectScope((unsigned)pb->cameraID,1,NATIVE_EFFECT_DIRECTIONAL|NATIVE_EFFECT_FIXED_BUCKET|NATIVE_EFFECT_STAGED,NULL);
+#endif
 		struct DrawSkyScratch *scratch = CTR_SCRATCHPAD_PTR(struct DrawSkyScratch, 0x10);
 		struct DrawSkyContext ctx;
 		u32 baseFaceOffset;
@@ -170,5 +196,8 @@ void DrawSky_Full(void *skybox, struct PushBuffer *pb, struct PrimMem *primMem)
 		prim = DrawSky_Piece(sky, &ctx, faceIndex, countIndex, prim);
 	}
 
+#ifdef CTR_NATIVE
+    if(sky) NativeVisual_Pop();
+#endif
 	primMem->cursor = prim;
 }

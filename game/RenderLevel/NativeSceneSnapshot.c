@@ -13,9 +13,14 @@
 struct SceneGamePacket { u32 words[33];unsigned next; };
 static struct NativeSceneSnapshot *sceneGame;
 static struct SceneGamePacket scenePackets[SCENE_GAME_PACKETS];
+struct SceneGameGroup {unsigned head,tail,view,bucket,depth,order;};
+static struct SceneGameGroup sceneGroups[SCENE_GAME_PACKETS];
+static unsigned sceneGroupCount;
 static unsigned sceneHeads[5][1024],sceneTails[5][1024],scenePacketCount,sceneVertexBudget;
 static int sceneCapture,sceneReady,sceneTerrain,sceneWanted;
 static uint64_t sceneEpoch;
+static struct GameTracker *sceneTracker;
+static unsigned sceneEffects,sceneEffectFallback;
 static struct NativeSceneGameSnapshotStats sceneStats;
 #ifdef CTR_INTERNAL
 static unsigned sceneCaptureErrors;
@@ -32,7 +37,7 @@ static void SceneGameCaptureInstance(const struct Instance *instance)
 {
     if(!instance) return;
     struct NativeSceneObjectSnapshot object={.id=NativeVisual_ObjectID(instance),.flags=instance->flags,
-        .animation=instance->animIndex,.frame=(u16)instance->animFrame};
+        .animation=instance->animIndex,.frame=(u16)instance->animFrame,.orderingBias=(s8)instance->depthBiasNormal};
     for(unsigned row=0;row<3;row++) {
         object.pose.position[row]=(float)instance->matrix.t[row];
         for(unsigned col=0;col<3;col++) object.pose.basis[row][col]=instance->matrix.m[row][col]/4096.0f;
@@ -154,7 +159,8 @@ void NativeSceneGameSnapshot_Begin(struct GameTracker *tracker,int enabled,uint6
 #ifdef CTR_INTERNAL
     if(sceneErrorSignature!=signature) {sceneCaptureErrors=0;sceneErrorSignature=signature;}
 #endif
-    sceneEpoch=NativeVisual_ResetEpoch();
+    sceneEpoch=NativeVisual_ResetEpoch();sceneTracker=tracker;
+    sceneEffects=sceneEffectFallback=0;
     sceneCapture=sceneReady=sceneTerrain=0;memset(&sceneStats,0,sizeof(sceneStats));
     /* Other viewport layouts retain canonical packets until their special
      * decals/reflections are migrated, rather than mixing camera poses. */
@@ -201,6 +207,53 @@ void NativeSceneGameSnapshot_Begin(struct GameTracker *tracker,int enabled,uint6
 #endif
 
 }
+/* Import verified special primitives after preparation has populated their
+ * exact fields. Only copied values enter history; this traversal is current OT. */
+static int SceneGameCaptureEffects(void)
+{
+    unsigned captured[13]={0},retained[13]={0};
+    struct NativeSceneEffect candidate;
+    for(unsigned i=0;NativeVisual_StagedEffect(i,&candidate);i++) {
+        if(!NativeSceneSnapshot_Effect(sceneGame,&candidate)) return 0;
+        sceneEffects++;if(candidate.kind<13) captured[candidate.kind]++;
+    }
+    const u32 *packet=&sceneTracker->pushBuffer[0].ptrOT[1023];
+    unsigned bucket=1023,walk=0;u16 page=0;int inWorld=1;
+    for(;;) {
+        if(++walk>131072 || !NativeGpuLinks_IsRegisteredHostRange(packet,4)) return 0;
+        uintptr_t address=(uintptr_t)packet,base=(uintptr_t)sceneTracker->pushBuffer[0].ptrOT;
+        if(address>=base && address<=base+1023*4) {bucket=(unsigned)((address-base)/4);inWorld=1;}
+        else if(address<base && address>=(uintptr_t)sceneTracker->pushBuffer_UI.ptrOT) inWorld=0;
+        u32 tag=*packet;unsigned length=tag>>24;
+        if(length) {
+            if(length>32 || !NativeGpuLinks_IsRegisteredHostRange(packet,(length+1)*4)) return 0;
+            if((packet[1]>>24)==0xe1) page=(u16)packet[1];
+            unsigned kind=0;uint64_t owner=0;
+            int known=NativeVisual_PacketIdentity(packet,&kind,&owner);
+            int special=inWorld && known && (kind==2 || (kind>=5 && kind<=10) || kind==12 || (kind==1 && !NativeSceneSnapshot_CoversObject(sceneGame,owner) && NativeVisual_IsEffectPacket(packet)));
+            if(special && !NativeVisual_EffectCovered(packet)) {
+                struct NativeSceneEffect effect;
+                if(NativeVisual_PacketEffect(packet,&effect)) {
+                    effect.bucket=(int)bucket;
+                    if(!(effect.code&4) && (packet[1]>>24)!=0xe1) effect.page=page;
+                    if(!(effect.flags&NATIVE_EFFECT_STAGED)) {
+                        if(!NativeSceneSnapshot_Effect(sceneGame,&effect)) return 0;
+                        sceneEffects++;if(kind<13) captured[kind]++;
+                    }
+                    NativeVisual_MarkEffect(packet);
+                } else {sceneEffectFallback++;if(kind<13) retained[kind]++;}
+            }
+        }
+        if(NativeGpuLinks_IsTerminator(tag)) break;
+        packet=NativeGpuLinks_ToHostPointer(tag&0xffffffu);if(!packet) return 0;
+    }
+#ifdef CTR_INTERNAL
+    static unsigned reports;
+    if(NativePerf_IsEnabled() && (++reports<=3 || (reports<=1800 && reports%300==0))) Platform_Log("[CTR Effects] captured/retained: tires %u/%u reflection %u/%u shadow %u/%u particles %u/%u sky %u/%u weather %u/%u confetti %u/%u models %u/%u\n",
+        captured[5],retained[5],captured[6],retained[6],captured[7],retained[7],captured[2],retained[2],captured[10],retained[10],captured[8]+captured[12],retained[8]+retained[12],captured[9],retained[9],captured[1],retained[1]);
+#endif
+    return 1;
+}
 void NativeSceneGameSnapshot_Seal(void)
 {
     if(!sceneCapture) return;
@@ -212,7 +265,7 @@ void NativeSceneGameSnapshot_Seal(void)
         for(unsigned k=0;k<3;k++) {material.colors[k]=packet.colors[k];material.texture.u[k]=packet.u[k];material.texture.v[k]=packet.v[k];}
         NativeSceneSnapshot_Material(sceneGame,packet.object,packet.primitive,packet.part,packet.local,&material);
     }
-    if(NativeVisual_GetStats().overflow) NativeSceneSnapshot_Invalidate(sceneGame);
+    if(NativeVisual_GetStats().overflow || !SceneGameCaptureEffects()) NativeSceneSnapshot_Invalidate(sceneGame);
     sceneReady=NativeSceneSnapshot_Seal(sceneGame);sceneCapture=0;
     if(!sceneReady) SceneGameCaptureError("frame",0);
 }
@@ -225,11 +278,24 @@ static int SceneGameAppend(unsigned view,unsigned bucket,const u32 *words,unsign
     if(sceneTails[view][bucket]) scenePackets[sceneTails[view][bucket]-1].next=record;else sceneHeads[view][bucket]=record;
     sceneTails[view][bucket]=record;return 1;
 }
-static enum NativeAssetResult SceneGameEmit(void *user,unsigned bucket,const struct NativeDrawTriangle *triangle)
+static enum NativeAssetResult SceneGameEmitPackets(void *user,unsigned bucket,const struct NativeDrawTriangle *triangle)
 {
     unsigned view=*(const unsigned *)user;u32 words[10]={0};
     if(sceneVertexBudget>MAX_VERTEX_BUFFER_SIZE-3) return NATIVE_ASSET_OUTPUT_TOO_SMALL;sceneVertexBudget+=3;
     unsigned textured=triangle->source.textured;
+    if(triangle->line || (!textured && triangle->source.textureBlend==NATIVE_TEXTURE_BLEND_SEMI)) {
+        u32 mode[2]={0,0xe1000000u|(triangle->source.texture.tpage&0x7ffu)};
+        if(!SceneGameAppend(view,bucket,mode,1)) return NATIVE_ASSET_OUTPUT_TOO_SMALL;
+    }
+    if(triangle->line) {
+        u32 line[5]={0,triangle->source.colors[0]|((triangle->source.textureBlend==NATIVE_TEXTURE_BLEND_SEMI?0x52u:0x50u)<<24),
+            (u16)triangle->screen[0][0]|((u32)(u16)triangle->screen[0][1]<<16),triangle->source.colors[1],
+            (u16)triangle->screen[1][0]|((u32)(u16)triangle->screen[1][1]<<16)};
+        unsigned index=scenePacketCount;
+        if(!SceneGameAppend(view,bucket,line,4)) return NATIVE_ASSET_OUTPUT_TOO_SMALL;
+        for(unsigned k=0;k<2;k++) if(!NativeVisual_PresentationXY(&scenePackets[index].words[2+k*2],triangle->visualXY[k][0],triangle->visualXY[k][1])) return NATIVE_ASSET_OUTPUT_TOO_SMALL;
+        return NATIVE_ASSET_OK;
+    }
     u32 code=NativeMaterial_TriangleCode(textured,triangle->source.texture.tpage,triangle->source.textureBlend);
     for(unsigned k=0;k<3;k++) {
         unsigned color=1+k*(textured?3:2);words[color]=(triangle->source.colors[k]&0xffffffu)|(k==0 ? code<<24 : 0);
@@ -245,12 +311,37 @@ static enum NativeAssetResult SceneGameEmit(void *user,unsigned bucket,const str
     }
     return NATIVE_ASSET_OK;
 }
+/* Retail instances use nested OTs with finer depth than the outer world OT.
+ * Keep generated primitive groups (including their draw mode) together and
+ * order them by eye depth inside each outer bucket, so front wheels stay
+ * behind the kart body even when both round to the same world bucket. */
+static enum NativeAssetResult SceneGameEmit(void *user,unsigned bucket,const struct NativeDrawTriangle *triangle)
+{
+    unsigned view=*(const unsigned *)user,before=scenePacketCount;
+    unsigned head=sceneHeads[view][bucket],tail=sceneTails[view][bucket];
+    enum NativeAssetResult result=SceneGameEmitPackets(user,bucket,triangle);
+    if(result!=NATIVE_ASSET_OK) return result;
+    sceneHeads[view][bucket]=head;sceneTails[view][bucket]=tail;
+    if(tail) scenePackets[tail-1].next=0;
+    if(sceneGroupCount==SCENE_GAME_PACKETS) return NATIVE_ASSET_OUTPUT_TOO_SMALL;
+    unsigned depth=0;for(unsigned k=0;k<(triangle->line?2u:3u);k++) if(triangle->depth[k]>depth) depth=triangle->depth[k];
+    sceneGroups[sceneGroupCount]=(struct SceneGameGroup){before+1,scenePacketCount,view,bucket,depth,sceneGroupCount};sceneGroupCount++;
+    return NATIVE_ASSET_OK;
+}
+static int SceneGameGroupCompare(const void *left,const void *right)
+{
+    const struct SceneGameGroup *a=left,*b=right;
+    if(a->view!=b->view) return a->view<b->view ? -1:1;
+    if(a->bucket!=b->bucket) return a->bucket>b->bucket ? -1:1;
+    if(a->depth!=b->depth) return a->depth>b->depth ? -1:1;
+    return a->order<b->order ? -1:a->order>b->order;
+}
 uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float alpha)
 {
-    sceneStats=(struct NativeSceneGameSnapshotStats){0};
+    sceneStats=(struct NativeSceneGameSnapshotStats){.effects=sceneEffects,.effectFallback=sceneEffectFallback};
     u32 *canonical=&tracker->pushBuffer[0].ptrOT[1023];
     if(!sceneReady || !sceneGame || sceneEpoch!=NativeVisual_ResetEpoch()) {sceneStats.fallback=sceneWanted;return canonical;}
-    scenePacketCount=sceneVertexBudget=0;memset(sceneHeads,0,sizeof(sceneHeads));memset(sceneTails,0,sizeof(sceneTails));
+    scenePacketCount=sceneVertexBudget=sceneGroupCount=0;memset(sceneHeads,0,sizeof(sceneHeads));memset(sceneTails,0,sizeof(sceneTails));
     unsigned view=0,bucket=1023,walk=0;const u32 *packet=canonical;
     for(;;) {
         if(++walk>131072 || !NativeGpuLinks_IsRegisteredHostRange(packet,4)) goto fallback;
@@ -262,7 +353,7 @@ uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float
         if(length) {
             if(length>32 || !NativeGpuLinks_IsRegisteredHostRange(packet,(length+1)*4)) goto fallback;
             int known=NativeVisual_PacketIdentity(packet,&kind,&owner);
-            int replace=view<4 && known && ((kind==3 && sceneTerrain) || (kind==1 && NativeSceneSnapshot_CoversObject(sceneGame,owner)));
+            int replace=view<4 && known && ((kind==3 && sceneTerrain) || (kind==1 && NativeSceneSnapshot_CoversObject(sceneGame,owner)) || NativeVisual_EffectCovered(packet));
             if(!replace) {
                 if(!SceneGameAppend(view,bucket,packet,length)) goto fallback;
                 /* Conservatively bound every retained GPU word as a vertex. */
@@ -277,6 +368,12 @@ uint32_t *NativeSceneGameSnapshot_Presentation(struct GameTracker *tracker,float
         if(NativeSceneSnapshot_Render(sceneGame,i,alpha,SceneGameEmit,&i,&stats)!=NATIVE_ASSET_OK) goto fallback;
         sceneStats.objects=stats.objects;sceneStats.sources=stats.sources;sceneStats.triangles+=stats.triangles;
         sceneStats.matched=stats.matched;sceneStats.unsupported=stats.unsupported;
+    }
+    qsort(sceneGroups,sceneGroupCount,sizeof(*sceneGroups),SceneGameGroupCompare);
+    for(unsigned i=0;i<sceneGroupCount;i++) {
+        const struct SceneGameGroup *group=&sceneGroups[i];unsigned *tail=&sceneTails[group->view][group->bucket];
+        if(*tail) scenePackets[*tail-1].next=group->head;else sceneHeads[group->view][group->bucket]=group->head;
+        *tail=group->tail;
     }
     if(!NativeGpuLinks_IsRegisteredHostRange(scenePackets,sizeof(scenePackets)) && !NativeGpuLinks_RegisterRange(scenePackets,sizeof(scenePackets),NULL)) goto fallback;
     unsigned first=0,last=0;

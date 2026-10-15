@@ -30,10 +30,83 @@ static int Render(struct NativeSceneSnapshot *scene,float alpha,struct Output *o
 {
     memset(out,0,sizeof(*out));return NativeSceneSnapshot_Render(scene,0,alpha,Save,out,stats)==NATIVE_ASSET_OK;
 }
+static int Effects(struct NativeSceneSnapshot *scene)
+{
+    struct Output out;struct NativeSceneSnapshotStats stats;
+    NativeSceneSnapshot_Reset(scene);
+    for(unsigned frame=0;frame<2;frame++) {
+        NativeSceneSnapshot_Begin(scene,1,20);
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+        float angle=frame*1.57079632679f,c=cosf(angle),v=sinf(angle);
+        struct NativeSceneObjectSnapshot kart={.id=1,.modelIdentity=9,.supported=1,.orderingBias=7,
+            .pose={.basis={{c,-v,0},{v,c,0},{0,0,1}},.position={frame*40.0f,0,256}}};
+        CHECK(NativeSceneSnapshot_Object(scene,&kart));
+        struct NativeSceneEffect wheel={.id=99,.anchor=1,.count=4,.bucket=4,.code=0x2e,.page=96,.clut=4};
+        const float local[4][3]={{15,-5,0},{25,-5,0},{15,5,0},{25,5,0}};
+        for(unsigned k=0;k<4;k++) {
+            wheel.colors[k]=frame ? 0xc8c8c8:0;
+            for(unsigned row=0;row<3;row++) {
+                wheel.eye[k][row]=kart.pose.position[row];
+                for(unsigned axis=0;axis<3;axis++) wheel.eye[k][row]+=kart.pose.basis[row][axis]*local[k][axis];
+            }
+        }
+        CHECK(NativeSceneSnapshot_Effect(scene,&wheel));memset(&wheel,0,sizeof(wheel));CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    CHECK(Render(scene,0.5f,&out,&stats) && out.count==2 && out.bucket[0]==11);
+    CHECK(fabsf(out.triangles[0].visualXY[0][0]-113.071f)<0.6f);
+    CHECK(out.triangles[0].source.colors[0]==0x646464 && out.triangles[0].source.texture.clut==4);
+    /* Sky directions have no parallax when the sampled camera translates. */
+    for(unsigned frame=0;frame<2;frame++) {
+        NativeSceneSnapshot_Begin(scene,1,21);
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}},.position={frame*400.0f,0,0}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+        struct NativeSceneEffect sky={.id=100,.count=3,.bucket=1023,.code=0x30,
+            .flags=NATIVE_EFFECT_DIRECTIONAL|NATIVE_EFFECT_FIXED_BUCKET,.eye={{-20,-20,256},{20,-20,256},{0,20,256}}};
+        CHECK(NativeSceneSnapshot_Effect(scene,&sky));CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    for(unsigned step=0;step<=120;step++) {
+        CHECK(Render(scene,step/120.0f,&out,&stats) && out.count==1 && out.bucket[0]==1023);
+        CHECK(fabsf(out.triangles[0].visualXY[0][0]-86)<0.01f);
+    }
+    /* A billboard keeps camera-facing axes while its centre is sampled in
+     * world space; camera rotation must not shear or rotate its quad. */
+    for(unsigned frame=0;frame<2;frame++) {
+        NativeSceneSnapshot_Begin(scene,1,24);float angle=(frame?10:-10)*0.01745329252f,c=cosf(angle),v=sinf(angle);
+        struct NativeSceneCameraSnapshot camera={.view={.basis={{c,0,v},{0,1,0},{-v,0,c}}},
+            .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+        CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+        struct NativeSceneEffect particle={.id=102,.count=4,.bucket=4,.code=0x2e,.flags=NATIVE_EFFECT_BILLBOARD};
+        for(unsigned k=0;k<4;k++) {particle.eye[k][0]=v*256+(k&1?10:-10);particle.eye[k][1]=k&2?10:-10;particle.eye[k][2]=c*256;}
+        CHECK(NativeSceneSnapshot_Effect(scene,&particle));CHECK(NativeSceneSnapshot_Seal(scene));
+    }
+    CHECK(Render(scene,0.5f,&out,&stats) && out.count==2);
+    CHECK(fabsf(out.triangles[0].visualXY[0][0]-91)<0.6f && fabsf(out.triangles[0].visualXY[1][0]-101)<0.6f);
+    CHECK(fabsf(out.triangles[0].visualXY[0][1]-59)<0.6f);
+    /* Rain/trail lines crossing the near plane retain a clipped gradient and
+     * endpoints; they cannot explode due to a behind-camera division. */
+    NativeSceneSnapshot_Begin(scene,1,22);
+    struct NativeSceneCameraSnapshot camera={.view={.basis={{1,0,0},{0,1,0},{0,0,1}}},
+        .width=192,.height=128,.h=128,.offset={96,64},.nearDepth=32,.farDepth=1024};
+    CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+    struct NativeSceneEffect rain={.id=101,.count=2,.bucket=4,.code=0x52,.page=0xa40,
+        .eye={{0,0,-16},{20,10,256}},.colors={0,0xffffff}};
+    CHECK(NativeSceneSnapshot_Effect(scene,&rain));CHECK(NativeSceneSnapshot_Seal(scene));
+    CHECK(Render(scene,1,&out,&stats) && out.count==1 && out.triangles[0].line && out.triangles[0].depth[0]==32);
+    CHECK(out.triangles[0].source.colors[0]>0 && out.triangles[0].source.texture.tpage==0xa40);
+    /* Invalid effects leave the frame usable, with their canonical packet. */
+    NativeSceneSnapshot_Begin(scene,1,23);CHECK(NativeSceneSnapshot_Camera(scene,0,&camera));
+    rain.eye[0][0]=NAN;CHECK(!NativeSceneSnapshot_Effect(scene,&rain));CHECK(NativeSceneSnapshot_Seal(scene));
+    CHECK(Render(scene,1,&out,&stats) && out.count==0);
+    return 0;
+}
 int main(void)
 {
     struct NativeSceneSnapshot *scene=NativeSceneSnapshot_Create();CHECK(scene);
     struct Output out;struct NativeSceneSnapshotStats stats;
+    CHECK(Effects(scene)==0);
     Capture(scene,1,1,-64,0,0);Capture(scene,1,1,64,0,0);
     for(unsigned i=0;i<=120;i++) {
         float alpha=(float)i/120;CHECK(Render(scene,alpha,&out,&stats) && out.count==1);

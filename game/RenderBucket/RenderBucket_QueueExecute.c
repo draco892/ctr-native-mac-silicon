@@ -2673,6 +2673,9 @@ static int RenderBucket_TriangleInScreenWindow(struct RenderBucketDrawContext *c
 {
 	u32 screen = RenderBucket_PackXY(ctx->pb->rect.w, ctx->pb->rect.h);
 	u32 sxy0 = MFC2(12);
+#ifdef CTR_NATIVE
+        NativeVisual_GteStore(&sxy0,0,sxy0);
+#endif
 	u32 sxy1 = MFC2(13);
 	u32 sxy2 = MFC2(14);
 	u32 allNegative = sxy0 & sxy1 & sxy2;
@@ -2711,12 +2714,18 @@ static void RenderBucket_LoadPrimRTPS(struct RenderBucketDrawContext *ctx, int r
 	if (reuseFirstVertex != 0)
 	{
 		u32 sxy0 = MFC2(12);
+#ifdef CTR_NATIVE
+        NativeVisual_GteStore(&sxy0,0,sxy0);
+#endif
 		u32 sz1 = MFC2(17);
 
 		// NOTE(aalhendi): Source-backs DrawFunc_Normal's bit30 continuation
 		// sequence at 0x8006a680-0x8006a690: copy SXY0/SZ1 into the RTPS FIFO
 		// before projecting the new vertex.
 		MTC2(sxy0, 13);
+#ifdef CTR_NATIVE
+        NativeVisual_GteLoad(1,&sxy0);
+#endif
 		MTC2(sz1, 18);
 	}
 
@@ -2729,20 +2738,38 @@ static void RenderBucket_LoadPrimRTPS(struct RenderBucketDrawContext *ctx, int r
 static void RenderBucket_StoreProjectedRegs(struct RenderBucketProjectedRegs *regs)
 {
 	regs->sxy0 = MFC2(12);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&regs->sxy0,0,regs->sxy0);
+#endif
 	regs->sz1 = MFC2(17);
 	regs->sxy1 = MFC2(13);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&regs->sxy1,1,regs->sxy1);
+#endif
 	regs->sz2 = MFC2(18);
 	regs->sxy2 = MFC2(14);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&regs->sxy2,2,regs->sxy2);
+#endif
 	regs->sz3 = MFC2(19);
 }
 
 static void RenderBucket_LoadProjectedRegs(const struct RenderBucketProjectedRegs *regs)
 {
 	MTC2(regs->sxy0, 12);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(0,&regs->sxy0);
+#endif
 	MTC2(regs->sz1, 17);
 	MTC2(regs->sxy1, 13);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(1,&regs->sxy1);
+#endif
 	MTC2(regs->sz2, 18);
 	MTC2(regs->sxy2, 14);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(2,&regs->sxy2);
+#endif
 	MTC2(regs->sz3, 19);
 }
 
@@ -2840,10 +2867,19 @@ static void RenderBucket_InitWaterSplitVertex(struct RenderBucketDrawContext *ct
 static void RenderBucket_StoreSplitProjectedRegs(struct RenderBucketDrawContext *ctx)
 {
 	ctx->tempSplit[1].sxy = MFC2(12);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&ctx->tempSplit[1].sxy,0,ctx->tempSplit[1].sxy);
+#endif
 	ctx->tempSplit[1].sz = MFC2(17);
 	ctx->tempSplit[2].sxy = MFC2(13);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&ctx->tempSplit[2].sxy,1,ctx->tempSplit[2].sxy);
+#endif
 	ctx->tempSplit[2].sz = MFC2(18);
 	ctx->tempSplit[3].sxy = MFC2(14);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&ctx->tempSplit[3].sxy,2,ctx->tempSplit[3].sxy);
+#endif
 	ctx->tempSplit[3].sz = MFC2(19);
 }
 
@@ -3594,10 +3630,19 @@ static void RenderBucket_LoadSplitProjectedRegs(const struct RenderBucketSplitVe
                                                 const struct RenderBucketSplitVertex *v2)
 {
 	MTC2(v0->sxy, 12);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(0,&v0->sxy);
+#endif
 	MTC2(v0->sz, 17);
 	MTC2(v1->sxy, 13);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(1,&v1->sxy);
+#endif
 	MTC2(v1->sz, 18);
 	MTC2(v2->sxy, 14);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(2,&v2->sxy);
+#endif
 	MTC2(v2->sz, 19);
 }
 
@@ -3996,6 +4041,9 @@ static void RenderBucket_ProjectSplitVertex(struct RenderBucketDrawContext *ctx,
 	MTC2(v->z, 1);
 	gte_rtps();
 	v->sxy = MFC2(14);
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&v->sxy,2,v->sxy);
+#endif
 	v->sz = MFC2(19);
 }
 
@@ -4273,6 +4321,9 @@ static int RenderBucket_DrawWaterSplitCandidate(struct RenderBucketDrawContext *
 	struct RenderBucketSplitVertex out0 = *v0;
 	struct RenderBucketSplitVertex out1 = *v1;
 	struct RenderBucketSplitVertex out2 = *v2;
+#ifdef CTR_NATIVE
+    NativeVisual_CopyProjection(&out0.sxy,&v0->sxy);NativeVisual_CopyProjection(&out1.sxy,&v1->sxy);NativeVisual_CopyProjection(&out2.sxy,&v2->sxy);
+#endif
 
 	if (RenderBucket_ApplyWaterSplitSideSelector(ctx, guardDist, &out0, &out1, &out2) == 0)
 	{
@@ -4570,14 +4621,23 @@ static void RenderBucket_LoadSpecialMirroredRTPS(struct RenderBucketDrawContext 
 		// mirrored SXY0/SZ1 scratch pair into the mirrored SXY1/SZ2 slot.
 		// Reflection repeats this at 0x8006ccf4-0x8006cd00.
 		ctx->specialMirrorRegs.sxy1 = ctx->specialMirrorRegs.sxy0;
+#ifdef CTR_NATIVE
+        NativeVisual_CopyProjection(&ctx->specialMirrorRegs.sxy1,&ctx->specialMirrorRegs.sxy0);
+#endif
 		ctx->specialMirrorRegs.sz2 = ctx->specialMirrorRegs.sz1;
 	}
 
 	MTC2(RenderBucket_MirrorSpecialPackedXY(ctx, ctx->tempPacked[3].xy), 0);
 	MTC2(ctx->tempPacked[3].z, 1);
 	MTC2(ctx->specialMirrorRegs.sxy1, 13);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(1,&ctx->specialMirrorRegs.sxy1);
+#endif
 	MTC2(ctx->specialMirrorRegs.sz2, 18);
 	MTC2(ctx->specialMirrorRegs.sxy2, 14);
+#ifdef CTR_NATIVE
+    NativeVisual_GteLoad(2,&ctx->specialMirrorRegs.sxy2);
+#endif
 	MTC2(ctx->specialMirrorRegs.sz3, 19);
 	gte_rtps();
 }
@@ -4630,6 +4690,9 @@ static int RenderBucket_DrawSpecialPrimitive(struct RenderBucketDrawContext *ctx
 		RenderBucket_LoadSpecialMirroredRTPT(ctx);
 	}
 	mirrorFlag = CFC2(31);
+#ifdef CTR_NATIVE
+    NativeVisual_EffectTopology(1);
+#endif
 	RenderBucket_StoreProjectedRegs(&ctx->specialMirrorRegs);
 
 	if (RenderBucket_CheckProjectedPrim(ctx, command, mirrorFlag, 0x8000, &depthMac0) != 0)
@@ -4641,6 +4704,9 @@ static int RenderBucket_DrawSpecialPrimitive(struct RenderBucketDrawContext *ctx
 	}
 
 	RenderBucket_LoadProjectedRegs(&originalRegs);
+#ifdef CTR_NATIVE
+    NativeVisual_EffectTopology(0);
+#endif
 	// NOTE(aalhendi): Retail reads CFC2(31) again after restoring the
 	// original FIFO at 0x8006bda8.
 	originalFlag = CFC2(31);
@@ -4691,6 +4757,9 @@ static int RenderBucket_DrawReflectionPrimitive(struct RenderBucketDrawContext *
 	}
 
 	mirrorFlag = CFC2(31);
+#ifdef CTR_NATIVE
+    NativeVisual_EffectTopology(1);
+#endif
 	RenderBucket_StoreProjectedRegs(&ctx->specialMirrorRegs);
 	RenderBucket_StoreSplitProjectedRegs(ctx);
 	RenderBucket_SwapActiveRanges(ctx);
@@ -4707,6 +4776,9 @@ static int RenderBucket_DrawReflectionPrimitive(struct RenderBucketDrawContext *
 	RenderBucket_SwapActiveRanges(ctx);
 
 	RenderBucket_LoadProjectedRegs(&originalRegs);
+#ifdef CTR_NATIVE
+    NativeVisual_EffectTopology(0);
+#endif
 	RenderBucket_StoreSplitProjectedRegs(ctx);
 	ctx->waterSplitSide = -1;
 	originalFlag = CFC2(31);
@@ -5318,6 +5390,7 @@ static int RenderBucket_PrepareDrawContext(struct RenderBucketDrawContext *ctx, 
 
 #ifdef CTR_NATIVE
     NativeVisual_Push(1, inst, (uint64_t)(uintptr_t)mh ^ ((uint64_t)inst->animIndex << 48) ^ (unsigned)pb->cameraID, 1);
+    if(idpp->instFlags&SPLIT_STATE_MASK) NativeVisual_EffectScope((unsigned)pb->cameraID,1,0,inst);
     RenderBucket_HostPointers()->inst=inst;
 #else
     scratch->instPtr32 = (u32)(u32)inst;

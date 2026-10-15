@@ -2,6 +2,7 @@
 #define NATIVE_VISUAL_H
 #include <stddef.h>
 #include <stdint.h>
+#include <platform/native_scene_effect.h>
 
 /* Host-owned, value-only display snapshots. No historical game pointer is
  * dereferenced and no visual state is serialized into retail checkpoints. */
@@ -23,6 +24,16 @@ uint64_t NativeVisual_ObjectID(const void *);
 int NativeVisual_PacketIdentity(const void *,unsigned *kind,uint64_t *object);
 int NativeVisual_ScenePacket(unsigned index,struct NativeVisualScenePacket *);
 void NativeVisual_EnableWorldSampling(int enabled);
+void NativeVisual_EffectScope(unsigned viewport,float viewScale,unsigned flags,const void *anchor);
+void NativeVisual_EffectTopology(unsigned topology);
+int NativeVisual_PacketEffect(const void *,struct NativeSceneEffect *);
+int NativeVisual_IsEffectPacket(const void *);
+void NativeVisual_MarkEffect(const void *);
+int NativeVisual_StageEffect(const void *,unsigned words,int bucket,unsigned page);
+int NativeVisual_StagedEffect(unsigned,struct NativeSceneEffect *);
+int NativeVisual_EffectCovered(const void *);
+void NativeVisual_CopyProjection(const void *destination,const void *source);
+void NativeVisual_GteLoad(unsigned,const void *);
 int NativeVisual_PresentationXY(const void *,float,float);
 void NativeVisual_NewObject(const void *object);
 void NativeVisual_BeginCapture(int enabled, uint64_t signature);
@@ -51,6 +62,16 @@ static inline uint64_t NativeVisual_ResetEpoch(void) { return 0; }
 static inline uint64_t NativeVisual_ObjectID(const void *p) {return (uint64_t)(uintptr_t)p;}
 static inline int NativeVisual_PacketIdentity(const void *p,unsigned *k,uint64_t *o) {(void)p;(void)k;(void)o;return 0;}
 static inline int NativeVisual_ScenePacket(unsigned i,struct NativeVisualScenePacket *p) {(void)i;(void)p;return 0;}
+static inline void NativeVisual_EffectScope(unsigned v,float s,unsigned f,const void *a) {(void)v;(void)s;(void)f;(void)a;}
+static inline void NativeVisual_EffectTopology(unsigned t) {(void)t;}
+static inline int NativeVisual_IsEffectPacket(const void *p) {(void)p;return 0;}
+static inline int NativeVisual_PacketEffect(const void *p,struct NativeSceneEffect *e) {(void)p;(void)e;return 0;}
+static inline int NativeVisual_StageEffect(const void *p,unsigned w,int b,unsigned g) {(void)p;(void)w;(void)b;(void)g;return 0;}
+static inline int NativeVisual_StagedEffect(unsigned i,struct NativeSceneEffect *e) {(void)i;(void)e;return 0;}
+static inline void NativeVisual_MarkEffect(const void *p) {(void)p;}
+static inline int NativeVisual_EffectCovered(const void *p) {(void)p;return 0;}
+static inline void NativeVisual_CopyProjection(const void *d,const void *s) {(void)d;(void)s;}
+static inline void NativeVisual_GteLoad(unsigned i,const void *p) {(void)i;(void)p;}
 static inline void NativeVisual_EnableWorldSampling(int e) {(void)e;}
 static inline int NativeVisual_PresentationXY(const void *p,float x,float y) {(void)p;(void)x;(void)y;return 1;}
 

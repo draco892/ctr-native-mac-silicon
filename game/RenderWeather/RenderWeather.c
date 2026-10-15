@@ -266,6 +266,7 @@ void RenderWeather(struct PushBuffer *pb, struct PrimMem *primMem, struct RainBu
 		particleCount--;
 #ifdef CTR_NATIVE
 		NativeVisual_Push(8,rainBuffer,((uint64_t)(unsigned)pb->cameraID<<32)|(unsigned)particleCount,1);
+        NativeVisual_EffectScope((unsigned)pb->cameraID,1,NATIVE_EFFECT_STAGED,NULL);
 #endif
 
 		xy0 = ((rngXY + startXY) & RENDER_WEATHER_WRAP_MASK) - scratch->packedCenterXY;
@@ -302,18 +303,36 @@ void RenderWeather(struct PushBuffer *pb, struct PrimMem *primMem, struct RainBu
 				gteFlag = CFC2(31);
 				sxy1 = MFC2(13);
 
+#ifdef CTR_NATIVE
+                if(NativeVisual_IsCapturing()) {
+                    LINE_G2 candidate={0};
+                    CtrGpu_WriteColorCode(&candidate.r0,scratch->colorTop);CtrGpu_WriteColorCode(&candidate.r1,scratch->colorBottom);
+                    CtrGpu_WritePackedXY(&candidate.x0,sxy0);CtrGpu_WritePackedXY(&candidate.x1,sxy1);
+                    NativeVisual_GteStore(&candidate.x0,0,sxy0);NativeVisual_GteStore(&candidate.x1,1,sxy1);
+                    NativeVisual_StageEffect(&candidate,4,(int)(ot-pb->ptrOT),fillMode);
+                }
+#endif
 				if (RenderWeather_IsVisible(gteFlag, sxy0, sxy1, screenBounds))
 				{
 					LINE_G2 *line = (LINE_G2 *)prim;
 
 					CtrGpu_WriteColorCode(&line->r0, scratch->colorTop);
 					CtrGpu_WritePackedXY(&line->x0, sxy0);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&line->x0,0,sxy0);
+#endif
 					CtrGpu_WriteColorCode(&line->r1, scratch->colorBottom);
 					CtrGpu_WritePackedXY(&line->x1, sxy1);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&line->x1,1,sxy1);
+#endif
 					CtrGpu_LinkPacket24(ot, &line->tag, line, 0x04000000);
 					prim = (u32 *)(line + 1);
 				}
 
+#ifdef CTR_NATIVE
+                NativeVisual_Pop();
+#endif
 				continue;
 			}
 		}

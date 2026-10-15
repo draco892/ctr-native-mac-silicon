@@ -12,7 +12,9 @@
 #define NV_CONTEXTS 32768u
 #define NV_FIELDS 131072u
 
+struct NvEffectScope {unsigned viewport,flags,topology;float scale;uint64_t anchor;};
 struct NvContext {
+    struct NvEffectScope effect;
     uint64_t key, baseKey,object,part,primitive; unsigned kind,ordinal,terrainViewport; int world;
 };
 struct NvVertex {
@@ -20,17 +22,18 @@ struct NvVertex {
     struct NativeVisualProjection projection;
 };
 struct NvPacket {
+    struct NvEffectScope effect;int effectCovered;
     uintptr_t address; uint64_t key, context, material,object,part,primitive; unsigned kind,ordinal;
     unsigned words, count, contextCount, terrainViewport; int previous,world;
     float width, height; struct NvVertex vertex[4];
 };
-struct NvFrame { unsigned count,cameraMask,terrainValidMask; struct NativeVisualProjection camera[4]; struct NvPacket packet[NV_PACKETS]; };
+struct NvFrame { unsigned count,effectCount,cameraMask,terrainValidMask; struct NativeSceneEffect effects[NV_PACKETS]; struct NativeVisualProjection camera[4]; struct NvPacket packet[NV_PACKETS]; };
 struct NvProjection { uintptr_t field; uint32_t xy; struct NativeVisualProjection value; int used; };
 struct NvObject { uintptr_t address; uint64_t serial; };
 struct NvCount { uint64_t key; unsigned count; int used; };
 static struct NvFrame nv_frames[2];
 static unsigned nv_current;
-static uint32_t nv_addresses[NV_TABLE], nv_history[NV_TABLE];
+static uint32_t nv_addresses[NV_TABLE], nv_history[NV_TABLE],nv_staged[NV_TABLE];
 static uint32_t nv_xyFields[NV_FIELDS], nv_rgbFields[NV_FIELDS],nv_uvFields[NV_FIELDS];
 static struct NvProjection nv_projections[NV_PROJECTIONS];
 static struct NvObject nv_objects[NV_OBJECTS];
@@ -62,6 +65,7 @@ void NativeVisual_Reset(void)
     nv_resetEpoch++;
     nv_presentationXYCount=0;
     nv_capturing = nv_presenting = nv_historyValid = 0;
+    nv_frames[0].effectCount=nv_frames[1].effectCount=0;
     nv_frames[0].count = nv_frames[1].count = nv_frames[0].cameraMask = nv_frames[1].cameraMask = 0;
     memset(nv_addresses,0,sizeof(nv_addresses));
     memset(nv_xyFields,0,sizeof(nv_xyFields));memset(nv_rgbFields,0,sizeof(nv_rgbFields));
@@ -97,9 +101,10 @@ void NativeVisual_BeginCapture(int enabled,uint64_t signature)
     if(signature!=nv_signature) NativeVisual_Reset();
     nv_signature=signature;
     if(nv_frames[nv_current].count) nv_historyValid=1;
-    nv_current^=1; nv_frames[nv_current].count=nv_frames[nv_current].cameraMask=0;
+    nv_current^=1; nv_frames[nv_current].count=nv_frames[nv_current].effectCount=nv_frames[nv_current].cameraMask=0;
     memset(nv_addresses,0,sizeof(nv_addresses));
     memset(nv_projections,0,sizeof(nv_projections));
+    memset(nv_staged,0,sizeof(nv_staged));
     memset(nv_gte,0,sizeof(nv_gte));
     memset(nv_counts,0,sizeof(nv_counts));
     memset(&nv_stats,0,sizeof(nv_stats));
@@ -157,9 +162,16 @@ void NativeVisual_RecordPacket(const void *packet,unsigned words)
     struct NvPacket *p=&frame->packet[frame->count]; memset(p,0,sizeof(*p));
     p->address=address; p->context=nv_context.key; p->words=words; p->previous=-1;
     p->world=nv_context.world;p->terrainViewport=nv_context.terrainViewport;
+    p->effect=nv_context.effect;
     p->kind=nv_context.kind;p->object=nv_context.object;p->part=nv_context.part;p->primitive=nv_context.primitive;
     p->ordinal=++nv_context.ordinal;
     p->key=NvHash(nv_context.key^NvHash(p->ordinal));
+    uint64_t effectID=NvHash(p->key^UINT64_C(0xf187ca9ef187ca9e));
+    unsigned effectSlot=(unsigned)NvHash(effectID)&(NV_TABLE-1);
+    while(nv_staged[effectSlot]) {
+        if(frame->effects[nv_staged[effectSlot]-1].id==effectID) {p->effectCovered=1;break;}
+        effectSlot=(effectSlot+1)&(NV_TABLE-1);
+    }
     unsigned countSlot=NvCountSlot(p->context);
     nv_counts[countSlot].key=p->context; nv_counts[countSlot].used=1; nv_counts[countSlot].count++;
     nv_addresses[slot]=++frame->count;
@@ -193,10 +205,23 @@ void NativeVisual_BindProjection(const void *field,const struct NativeVisualProj
     }
     nv_overflow=1;
 }
+static void NvForgetProjection(const void *field)
+{
+    if(!nv_capturing || !field) return;
+    unsigned slot=(unsigned)NvHash((uintptr_t)field)&(NV_PROJECTIONS-1);
+    for(unsigned n=0;n<NV_PROJECTIONS && nv_projections[slot].used;n++) {
+        if(nv_projections[slot].field==(uintptr_t)field) {
+            /* Keep the occupied hash slot so other probe chains remain valid. */
+            nv_projections[slot].value=(struct NativeVisualProjection){0};return;
+        }
+        slot=(slot+1)&(NV_PROJECTIONS-1);
+    }
+}
 void NativeVisual_GteStore(const void *field,unsigned index,uint32_t xy)
 {
     if(nv_capturing && index<3 && nv_gte[index].used && nv_gte[index].xy==xy)
         NativeVisual_BindProjection(field,&nv_gte[index].value);
+    else NvForgetProjection(field);
 }
 static const struct NativeVisualProjection *NvProjectionFor(const void *field,uint32_t xy)
 {
@@ -205,7 +230,7 @@ static const struct NativeVisualProjection *NvProjectionFor(const void *field,ui
     for(unsigned n=0;n<NV_PROJECTIONS;n++,slot=(slot+1)&(NV_PROJECTIONS-1)) {
         const struct NvProjection *entry=&nv_projections[slot];
         if(!entry->used) return NULL;
-        if(entry->field==address) return entry->xy==xy ? &entry->value : NULL;
+        if(entry->field==address) return entry->xy==xy && entry->value.h>0 ? &entry->value : NULL;
     }
     return NULL;
 }
@@ -232,11 +257,12 @@ void NativeVisual_TerrainProjection(const float view[3],struct NativeVisualProje
     *out=value;
 }
 static int NvProjectPoint(const struct NativeVisualProjection *p,float xy[2]);
-static void NvDecode(struct NvPacket *p)
+static void NvDecode(struct NvPacket *p,int registered)
 {
     const uint8_t *raw=(const uint8_t *)p->address;
-    if(!NativeGpuLinks_IsRegisteredHostRange(raw,(p->words+1)*4u)) return;
-    unsigned code=raw[7]&0xfcu, xy[4]={0}, rgb[4]={4,4,4,4}, uv[4]={0};
+    if(registered && !NativeGpuLinks_IsRegisteredHostRange(raw,(p->words+1)*4u)) return;
+    unsigned prefix=p->words==6 && raw[7]==0xe1 ? 8:0;
+    unsigned code=raw[7+prefix]&0xfcu, xy[4]={0}, rgb[4]={4,4,4,4}, uv[4]={0};
     switch(code) {
     case 0x20: p->count=3; xy[0]=8;xy[1]=12;xy[2]=16;break;
     case 0x24: p->count=3; for(unsigned i=0;i<3;i++){xy[i]=8+i*8;uv[i]=12+i*8;} break;
@@ -259,6 +285,7 @@ static void NvDecode(struct NvPacket *p)
         break;
     default: return;
     }
+    for(unsigned i=0;i<p->count;i++) {xy[i]+=prefix;rgb[i]+=prefix;if(uv[i]) uv[i]+=prefix;}
     p->material=code;
     for(unsigned i=0;i<p->count;i++) {
         if(xy[i]+4>(p->words+1)*4u || rgb[i]+3>(p->words+1)*4u || (uv[i] && uv[i]+4>(p->words+1)*4u)) {p->count=0;return;}
@@ -270,8 +297,8 @@ static void NvDecode(struct NvPacket *p)
             float expected[2];
             // Saturated GTE output and specialized depth paths may not match
             // the captured affine pose. Never amplify that discrepancy.
-            if(NvProjectPoint(projection,expected) &&
-                fabsf(expected[0]-v->xy[0])<=4 && fabsf(expected[1]-v->xy[1])<=4) {
+            if(!registered || (NvProjectPoint(projection,expected) &&
+                fabsf(expected[0]-v->xy[0])<=4 && fabsf(expected[1]-v->xy[1])<=4)) {
                 v->projection=*projection;v->projected=1;
             }
         }
@@ -301,7 +328,7 @@ void NativeVisual_EndCapture(void)
         nv_history[slot]=i+1;
     }
     for(unsigned i=0;i<frame->count;i++) {
-        struct NvPacket *p=&frame->packet[i];NvDecode(p);
+        struct NvPacket *p=&frame->packet[i];NvDecode(p,1);
         if(p->terrainViewport) for(unsigned k=0;k<p->count;k++)
             if(!p->vertex[k].projected) frame->terrainValidMask&=~(1u<<(p->terrainViewport-1));
         for(unsigned k=0;k<p->count;k++) for(unsigned color=0;color<3;color++) {
@@ -357,7 +384,7 @@ int NativeVisual_ScenePacket(unsigned index,struct NativeVisualScenePacket *out)
     const struct NvPacket *p=&nv_frames[nv_current].packet[index];
     *out=(struct NativeVisualScenePacket){.kind=p->kind,.object=p->object,.part=p->part,.primitive=p->primitive,.count=p->count,.ordinal=p->ordinal,.contextCount=p->contextCount};
     if(!p->count || !NativeGpuLinks_IsRegisteredHostRange((const void *)p->address,(p->words+1)*4)) return 1;
-    const uint8_t *raw=(const uint8_t *)p->address;out->code=raw[7];
+    const uint8_t *raw=(const uint8_t *)p->address;out->code=(unsigned)(NvWord(raw+p->vertex[0].rgbOffset)>>24);
     for(unsigned k=0;k<p->count;k++) {
         const struct NvVertex *v=&p->vertex[k];
         if(v->projected && !v->projection.terrainClipped) {out->projectedMask|=1u<<k;memcpy(out->local[k],v->projection.local,sizeof(out->local[k]));}
@@ -575,3 +602,87 @@ void NativeVisual_SampleRect(const void *source,float *w,float *h)
     *w=NvLerp(old->width,p->width,nv_stats.alpha);*h=NvLerp(old->height,p->height,nv_stats.alpha);
 }
 struct NativeVisualStats NativeVisual_GetStats(void) { return nv_stats; }
+
+void NativeVisual_CopyProjection(const void *destination,const void *source)
+{
+    if(!nv_capturing || !source || !destination) return;
+    const struct NativeVisualProjection *p=NvProjectionFor(source,NvWord(source));
+    if(p) {struct NativeVisualProjection copy=*p;NativeVisual_BindProjection(destination,&copy);}
+    else NvForgetProjection(destination);
+}
+void NativeVisual_GteLoad(unsigned index,const void *source)
+{
+    if(!nv_capturing || index>=3 || !source) return;
+    uint32_t xy=NvWord(source);const struct NativeVisualProjection *p=NvProjectionFor(source,xy);
+    nv_gte[index]=(struct NvProjection){.xy=xy,.used=p!=NULL};if(p) nv_gte[index].value=*p;
+}
+void NativeVisual_EffectScope(unsigned viewport,float scale,unsigned flags,const void *anchor)
+{
+    if(nv_capturing) nv_context.effect=(struct NvEffectScope){.viewport=viewport+1,.scale=scale,.flags=flags,.anchor=anchor?NativeVisual_ObjectID(anchor):0};
+}
+void NativeVisual_EffectTopology(unsigned topology) {if(nv_capturing) nv_context.effect.topology=topology;}
+static struct NvPacket *NvPacketForAddress(const void *address)
+{
+    unsigned slot=(unsigned)NvHash((uintptr_t)address)&(NV_TABLE-1);
+    while(nv_addresses[slot]) {
+        struct NvPacket *p=&nv_frames[nv_current].packet[nv_addresses[slot]-1];
+        if(p->address==(uintptr_t)address) return p;slot=(slot+1)&(NV_TABLE-1);
+    }
+    return NULL;
+}
+static int NvExportEffect(const struct NvPacket *p,struct NativeSceneEffect *out,int registered)
+{
+    if(!p || !out || !p->effect.viewport || p->effect.viewport>4 || p->count<2 || p->count>4) return 0;
+    if(!isfinite(p->effect.scale) || p->effect.scale<=0) return 0;
+    *out=(struct NativeSceneEffect){.id=NvHash(p->key^UINT64_C(0xf187ca9ef187ca9e)),.anchor=p->effect.anchor,
+        .kind=p->kind,.viewport=p->effect.viewport-1,.flags=p->effect.flags,.count=p->count,.topology=p->effect.topology};
+    const uint8_t *raw=(const uint8_t *)p->address;
+    if(registered && !NativeGpuLinks_IsRegisteredHostRange(raw,(p->words+1)*4)) return 0;
+    out->code=(unsigned)(NvWord(raw+p->vertex[0].rgbOffset)>>24);
+    for(unsigned k=0;k<p->count;k++) {
+        const struct NvVertex *v=&p->vertex[k];if(!v->projected) return 0;
+        const struct NativeVisualProjection *projection=&v->projection;
+        for(unsigned row=0;row<3;row++) {
+            float eye=projection->translation[row];
+            for(unsigned axis=0;axis<3;axis++) eye+=projection->matrix[row][axis]*projection->local[axis];
+            out->eye[k][row]=eye*p->effect.scale;
+        }
+        out->colors[k]=v->rgb[0]|((uint32_t)v->rgb[1]<<8)|((uint32_t)v->rgb[2]<<16);
+        out->u[k]=(uint8_t)v->uv[0];out->v[k]=(uint8_t)v->uv[1];
+    }
+    if(p->vertex[0].uvOffset) out->clut=(uint16_t)(NvWord(raw+p->vertex[0].uvOffset)>>16);
+    if(p->vertex[1].uvOffset) out->page=(uint16_t)(NvWord(raw+p->vertex[1].uvOffset)>>16);
+    if(p->words==6 && raw[7]==0xe1) out->page=(uint16_t)NvWord(raw+4);
+    return 1;
+}
+void NativeVisual_MarkEffect(const void *address) {struct NvPacket *p=NvPacketForAddress(address);if(p) p->effectCovered=1;}
+int NativeVisual_EffectCovered(const void *address) {const struct NvPacket *p=NvPacketForAddress(address);return p && p->effectCovered;}
+
+int NativeVisual_PacketEffect(const void *address,struct NativeSceneEffect *out)
+{ return NvExportEffect(NvPacketForAddress(address),out,1); }
+int NativeVisual_StageEffect(const void *packet,unsigned words,int bucket,unsigned page)
+{
+    if(!nv_capturing || nv_overflow || !packet || words<3 || words>12 || bucket<0 || bucket>1023 || !nv_context.effect.viewport) return 0;
+    struct NvFrame *frame=&nv_frames[nv_current];
+    if(frame->effectCount==NV_PACKETS) {nv_overflow=1;return 0;}
+    struct NvPacket p={.address=(uintptr_t)packet,.words=words,.kind=nv_context.kind,.effect=nv_context.effect,
+        .key=NvHash(nv_context.key^NvHash(nv_context.ordinal+1))};
+    NvDecode(&p,0);
+    struct NativeSceneEffect effect;
+    if(!NvExportEffect(&p,&effect,0)) return 0;
+    effect.bucket=bucket;if(!(effect.code&4)) effect.page=(uint16_t)page;
+    unsigned slot=(unsigned)NvHash(effect.id)&(NV_TABLE-1);
+    while(nv_staged[slot]) {
+        if(frame->effects[nv_staged[slot]-1].id==effect.id) {nv_overflow=1;return 0;}
+        slot=(slot+1)&(NV_TABLE-1);
+    }
+    frame->effects[frame->effectCount]=effect;nv_staged[slot]=++frame->effectCount;return 1;
+}
+int NativeVisual_StagedEffect(unsigned index,struct NativeSceneEffect *out)
+{
+    if(!out || nv_overflow || index>=nv_frames[nv_current].effectCount) return 0;
+    *out=nv_frames[nv_current].effects[index];return 1;
+}
+
+int NativeVisual_IsEffectPacket(const void *address)
+{const struct NvPacket *p=NvPacketForAddress(address);return p && p->effect.viewport!=0;}

@@ -299,6 +299,7 @@ void VehGroundShadow_Main(void)
 		{
 #ifdef CTR_NATIVE
 			NativeVisual_Push(7,driver,(unsigned)playerIndex,1);
+            NativeVisual_EffectScope((unsigned)playerIndex,0.25f,0,NULL);
 #endif
 			if (VEH_GROUND_SHADOW_SIGNED_BYTE(entryCursor, -2) == culledState)
 				goto next_driver;
@@ -574,34 +575,83 @@ void VehGroundShadow_Main(void)
 
 			quad_case_zero:
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x18) = VEH_GROUND_SHADOW_WORD(scratch, 0x20);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x18),scratch+0x20);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x10) = VEH_GROUND_SHADOW_WORD(scratch, 0x00);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x10),scratch+0x00);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x08) = VEH_GROUND_SHADOW_WORD(scratch, 0x04);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x08),scratch+0x04);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, 0x00) = VEH_GROUND_SHADOW_WORD(scratch, 0x08);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(0x00),scratch+0x08);
+#endif
 				goto quad_points_ready;
 
 			quad_case_one:
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x18) = VEH_GROUND_SHADOW_WORD(scratch, 0x20);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x18),scratch+0x20);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x10) = VEH_GROUND_SHADOW_WORD(scratch, 0x00);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x10),scratch+0x00);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x08) = VEH_GROUND_SHADOW_WORD(scratch, 0x1c);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x08),scratch+0x1c);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, 0x00) = VEH_GROUND_SHADOW_WORD(scratch, 0x18);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(0x00),scratch+0x18);
+#endif
 				goto quad_points_ready;
 
 			quad_case_two:
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x18) = VEH_GROUND_SHADOW_WORD(scratch, 0x10);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x18),scratch+0x10);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x10) = VEH_GROUND_SHADOW_WORD(scratch, 0x00);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x10),scratch+0x00);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x08) = VEH_GROUND_SHADOW_WORD(scratch, 0x0c);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x08),scratch+0x0c);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, 0x00) = VEH_GROUND_SHADOW_WORD(scratch, 0x08);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(0x00),scratch+0x08);
+#endif
 				goto quad_points_ready;
 
 			quad_case_three:
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x18) = VEH_GROUND_SHADOW_WORD(scratch, 0x10);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x18),scratch+0x10);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x10) = VEH_GROUND_SHADOW_WORD(scratch, 0x00);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x10),scratch+0x00);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, -0x08) = VEH_GROUND_SHADOW_WORD(scratch, 0x14);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(-0x08),scratch+0x14);
+#endif
 				VEH_GROUND_SHADOW_WORD((u8 *)y, 0x00) = VEH_GROUND_SHADOW_WORD(scratch, 0x18);
+#ifdef CTR_NATIVE
+                NativeVisual_CopyProjection((u8 *)y+(0x00),scratch+0x18);
+#endif
 
 			quad_points_ready:
 #ifdef CTR_NATIVE
 				NativeVisual_Primitive((unsigned)quadIndex);
+                NativeVisual_EffectTopology(quadIndex==readyState ? 4u:(unsigned)quadIndex);
 #endif
 				depthIndex = ((s32)VEH_GROUND_SHADOW_WORD(scratch, 0x24) >> 8) + VEH_GROUND_SHADOW_SIGNED_BYTE(entryCursor, -1);
 				if (depthIndex < 0)

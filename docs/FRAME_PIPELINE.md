@@ -42,8 +42,8 @@ belong to `MainFrame_BeginUpdate`. The PSX path retains the original sequence.
 
 The canonical preparation boundary still includes mixed update/draw helpers.
 The opt-in scene snapshot path copies unprojected sources independently and
-regenerates standard 3D geometry without calling those helpers again. Specialized
-effects still use the prepared packets and require a later migration.
+regenerates standard 3D geometry without calling those helpers again. Verified specialized effects also provide copied 3D sources; unsupported
+primitive variants still retain their prepared packets.
 
 ## Independent scheduler
 
@@ -118,7 +118,10 @@ triangles absent from the previous prepared draw list.
 
 Presentation builds a private host GPU chain: regenerated terrain/model packets
 replace their canonical counterparts, while retained commands and UI preserve
-ordering. The original GPU arena remains untouched. Bounded packet/link/vertex
+ordering. Generated primitive groups are sorted by eye depth within each outer
+bucket, preserving their draw-mode/geometry pairing. Attached wheel geometry
+shares its kart's ordering bias, instead of reusing a nested retail OT index as
+a world depth offset. The original GPU arena remains untouched. Bounded packet/link/vertex
 budgets or capture errors select the entire canonical chain; partially generated
 frames are never published. Reset epochs invalidate scene history immediately
 on loads/checkpoint restore/toggles. Scene/menu/mode changes, camera cuts, respawn
@@ -137,9 +140,10 @@ Retail packet bytes, game structures and checkpoint layouts are unchanged.
 Current integration covers standard 3D terrain, kart bodies and ordinary model
 instances in one-player gameplay. Menus, cutscenes, loading, adventure arenas and
 split-screen use canonical packets. Pixel LOD, billboard, custom-matrix, huge and
-split-state instances also retain canonical geometry. Wheels, shadows,
-reflections, particles, weather, sky and other specialized primitives still use
-the simulation pose, so they can misalign during motion. Water/material animation
+split-state instances also retain canonical geometry. Verified wheels, shadows, reflections, particles, weather, confetti and sky now
+enter the scene source path described below. Primitives without complete source
+provenance keep their entire canonical geometry and can still misalign during
+motion. Water/material animation
 and texture/light transitions are not fully smoothed. Migrating those effects,
 expanding layouts, tuning LOD/performance and whole-game validation remain
 unfinished; this is not complete interpolation for the entire game.
@@ -149,6 +153,50 @@ and regeneration/fallback flags. Unit tests cover copied source lifetime,
 ID/signature resets, intermediate visibility, reflected rotation and winding,
 handedness cuts, material corner validation, clipping, fresh depth ordering and
 presentation-local float-field lifetime, alongside the earlier prototype tests.
+
+### Specialized effects
+
+`native_scene_effect.h` describes copied line/triangle/quad sources without game,
+asset or GPU pointers. The adapter converts captured GTE eye coordinates into
+world units using the effect's explicit scale (wheel/shadow/particle coordinates
+use quarter units), then imports them into the same scene history as the camera
+and kart. Wheels copy the kart pose and ordering bias; their local corners and
+sprite topology remain distinct across changes of corner order. Shadow patches
+sample ground-space geometry. Ordinary particles sample their world centre and
+colours; camera-facing particles retain eye-space axes instead of inheriting the
+camera's previous orientation. Sky sources use camera rotation without parallax.
+
+Exact projection bindings follow wheel corner permutations, shadow scratch
+copies, particle COP2 stores and saved/restored reflection registers. Missing
+provenance explicitly invalidates the destination even when its XY happens to
+match a previous vertex. There is no screen-coordinate source matching.
+
+Sky and weather candidates are copied before screen bounds rejection; confetti
+is staged after its valid four-corner projection and before bounds rejection.
+Beaker rain stages separate gradient passes with stable RNG-slot/pass identities.
+These candidates can become visible under the sampled camera. Wheel, shadow,
+particle and reflected-model sources currently come from emitted preparation
+primitives, so their broader spawn/cull/LOD decisions still follow the canonical
+tick. Complete source visibility for every special variant remains part of the
+remaining case coverage and validation work.
+
+Lines are clipped against all six eye-space planes with endpoint colour
+interpolation and emitted as GPU lines, including their own draw mode. Quads are
+split using the original corner/UV ordering and clipped as triangles. Blend mode,
+page, CLUT and raw-texture semantics are preserved; atlas/frame selection remains
+discrete. Unsupported primitives remain whole canonical packets; capture or
+capacity failure falls back to the complete canonical frame. No effect generator,
+RNG, emitter, sound, gameplay update or event is rerun during presentation.
+
+`presentations.csv` additionally reports `scene_effects` and
+`scene_effect_fallback`. Tests cover attached-wheel rotation and inherited depth
+bias, subpixel quads, sky parallax, billboard camera changes, clipped gradient
+lines, compound draw-mode/line packets, staged invisible geometry, stale binding
+invalidation and a real weather-generator capture. The normal and sanitizer
+suites retain 45 test executables. Short manual comparisons exercised Crash Cove
+and Cortex Castle with motion, steering, jump, pause, level change and the
+interpolation toggle; they do not establish whole-game parity or a 120 FPS
+performance guarantee. Logs are under ignored `debug/effects`.
 
 ### Verification scope after the graphical regression
 

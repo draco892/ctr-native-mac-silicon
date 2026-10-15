@@ -84,8 +84,14 @@ static void RedBeaker_EmitLine(u32 **primCursor, u32 *ot, u32 color)
 
 	CtrGpu_WriteColorCode(&line->r0, 0x52000000);
 	CtrGpu_WritePackedXY(&line->x0, MFC2(12));
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&line->x0,0,MFC2(12));
+#endif
 	CtrGpu_WriteColorCode(&line->r1, color);
 	CtrGpu_WritePackedXY(&line->x1, MFC2(13));
+#ifdef CTR_NATIVE
+    NativeVisual_GteStore(&line->x1,1,MFC2(13));
+#endif
 	CtrGpu_LinkPacket24(ot, &line->tag, line, 0x04000000);
 	*primCursor = (u32 *)(line + 1);
 }
@@ -101,7 +107,7 @@ static void RedBeaker_EmitDrawMode(u32 **primCursor, u32 *ot, u32 drawMode)
 }
 
 static void RedBeaker_RenderPass(u32 **primCursor, u32 *ot, u32 color, u32 drawMode, s32 frameCount, u32 scrollXY, u32 nextScrollXY, s32 scrollZ,
-                                 s32 nextScrollZ, u32 spanXY, s32 spanZ, u32 screenBounds)
+                                 s32 nextScrollZ, u32 spanXY, s32 spanZ, u32 screenBounds,int bucket)
 {
 	u32 state0 = 0x30125400;
 	u32 state1 = 0x493583fe;
@@ -116,6 +122,9 @@ static void RedBeaker_RenderPass(u32 **primCursor, u32 *ot, u32 color, u32 drawM
 		u32 z1;
 
 		remaining--;
+#ifdef CTR_NATIVE
+        NativeVisual_Primitive(((uint64_t)drawMode<<32)|(unsigned)remaining);
+#endif
 
 		xy0 = ((rng.xy + scrollXY) & RED_BEAKER_WRAP_MASK) - RED_BEAKER_CENTER_XY;
 		xy1 = ((rng.xy + nextScrollXY) & RED_BEAKER_WRAP_MASK) - RED_BEAKER_CENTER_XY;
@@ -152,6 +161,17 @@ static void RedBeaker_RenderPass(u32 **primCursor, u32 *ot, u32 color, u32 drawM
 				gteFlag = CFC2(31);
 				sxy1 = MFC2(13);
 
+#ifdef CTR_NATIVE
+                if(NativeVisual_IsCapturing()) {
+                    LINE_G2 candidate={0};
+                    CtrGpu_WriteColorCode(&candidate.r0,0x52000000);CtrGpu_WriteColorCode(&candidate.r1,color);
+                    CtrGpu_WritePackedXY(&candidate.x0,sxy0);CtrGpu_WritePackedXY(&candidate.x1,sxy1);
+                    NativeVisual_GteStore(&candidate.x0,0,sxy0);NativeVisual_GteStore(&candidate.x1,1,sxy1);
+                    NativeVisual_StageEffect(&candidate,4,bucket,drawMode);
+                }
+#else
+                (void)bucket;
+#endif
 				if (RedBeaker_IsVisible(gteFlag, sxy0, sxy1, screenBounds))
 				{
 					RedBeaker_EmitLine(primCursor, ot, color);
@@ -290,10 +310,17 @@ void RedBeaker_RenderRain(struct PushBuffer *pb, struct PrimMem *primMem, struct
 
 			ot = (u32 *)(void *)((char *)otBase + otOffset);
 
+#ifdef CTR_NATIVE
+            NativeVisual_Push(12,rainLocal,(unsigned)playerIndex,1);
+            NativeVisual_EffectScope((unsigned)playerIndex,1,NATIVE_EFFECT_STAGED,NULL);
+#endif
 			RedBeaker_RenderPass(&prim, ot, scratch->colorTop, 0xe1000a20, rainLocal->frameCount, scrollXY, nextScrollXY, scrollZ, nextScrollZ, velocityXY,
-			                     velocityZ, screenBounds);
+			                     velocityZ, screenBounds,(int)(ot-pb->ptrOT));
 			RedBeaker_RenderPass(&prim, ot, scratch->colorBottom, 0xe1000a40, rainLocal->frameCount, scrollXY, nextScrollXY, scrollZ, nextScrollZ, velocityXY,
-			                     velocityZ, screenBounds);
+			                     velocityZ, screenBounds,(int)(ot-pb->ptrOT));
+#ifdef CTR_NATIVE
+            NativeVisual_Pop();
+#endif
 		}
 	}
 

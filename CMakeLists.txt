@@ -491,7 +491,8 @@ if(BUILD_TESTING)
         platform/native_asset_readers.c platform/native_model_animation.c
         platform/native_model_vertices.c platform/native_model_commands.c platform/native_ptrmap.c)
     add_executable(ctr_native_render_bucket_tests tests/native_render_bucket_tests.c
-        platform/native_host_scratch.c platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)
+        platform/native_host_scratch.c platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c platform/native_visual.c)
+    target_compile_definitions(ctr_native_render_bucket_tests PRIVATE CTR_NATIVE_VISUAL_INTERPOLATION)
     add_executable(ctr_native_terrain_renderer_tests tests/native_terrain_renderer_tests.c
         ${CTR_RESIDENT_TEST_SOURCES} platform/native_terrain_work.c platform/native_host_scratch.c
         platform/native_gte_core.c platform/native_inline_c.c platform/native_gpu_links.c)

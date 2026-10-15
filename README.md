@@ -46,8 +46,9 @@ scheduler emits VBlank callbacks for input, audio and timers, and runs simulatio
 even when `video.max_fps` is below 30. The renderer presents prepared GPU packets
 at the configured ceiling (1–240, default 30), repeating the latest pose between
 updates at higher rates. Experimental scene interpolation regenerates standard
-one-player 3D geometry from copied camera/object/animation snapshots; specialized
-effects and other layouts still use prepared packets. It is opt-in and remains
+one-player 3D geometry from copied camera/object/animation snapshots, including
+verified wheel, shadow, reflection, particle, weather and sky sources. Unsupported
+primitives and other layouts still use prepared packets. It is opt-in and remains
 disabled by default following graphical regressions. Loading,
 scrapbook and internal recording/replay retain their synchronous retail timing.
 

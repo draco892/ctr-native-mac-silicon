@@ -272,6 +272,7 @@ void DrawConfetti(struct PushBuffer *pb, struct PrimMem *primMem, struct GameTra
 		particleCount--;
 #ifdef CTR_NATIVE
 		NativeVisual_Push(9,confetti,((uint64_t)(unsigned)pb->cameraID<<32)|particleCount,1);
+        NativeVisual_EffectScope((unsigned)pb->cameraID,1,NATIVE_EFFECT_STAGED,NULL);
 #endif
 		scratch->remainingParticles = particleCount;
 
@@ -324,6 +325,9 @@ void DrawConfetti(struct PushBuffer *pb, struct PrimMem *primMem, struct GameTra
 		sxy1 = MFC2(13);
 		sxy2 = MFC2(14);
 		CtrGpu_WritePackedXY(&prim->x0, sxy0);
+#ifdef CTR_NATIVE
+        NativeVisual_GteStore(&prim->x0,0,sxy0);
+#endif
 
 		MTC2(xy3, 0);
 		MTC2((u32)z3, 1);
@@ -337,14 +341,33 @@ void DrawConfetti(struct PushBuffer *pb, struct PrimMem *primMem, struct GameTra
 			if ((s32)(flag1 << 14) >= 0)
 			{
 				gte_avsz4_b();
+#ifdef CTR_NATIVE
+                if(NativeVisual_IsCapturing()) {
+                    POLY_F4 candidate={0};CtrGpu_WriteColorCode(&candidate.r0,scratch->color);
+                    CtrGpu_WritePackedXY(&candidate.x0,sxy0);CtrGpu_WritePackedXY(&candidate.x1,MFC2(12));
+                    CtrGpu_WritePackedXY(&candidate.x2,MFC2(13));CtrGpu_WritePackedXY(&candidate.x3,MFC2(14));
+                    NativeVisual_CopyProjection(&candidate.x0,&prim->x0);
+                    NativeVisual_GteStore(&candidate.x1,0,MFC2(12));NativeVisual_GteStore(&candidate.x2,1,MFC2(13));NativeVisual_GteStore(&candidate.x3,2,MFC2(14));
+                    NativeVisual_StageEffect(&candidate,5,(int)(MFC2(24)>>18),0);
+                }
+#endif
 				if (DrawConfetti_BoundsVisible(sxy0, sxy1, sxy2, sxy3, screenBounds))
 				{
 					u32 depth;
 					u32 *ot;
 
 					CtrGpu_WritePackedXY(&prim->x1, MFC2(12));
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&prim->x1,0,MFC2(12));
+#endif
 					CtrGpu_WritePackedXY(&prim->x2, MFC2(13));
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&prim->x2,1,MFC2(13));
+#endif
 					CtrGpu_WritePackedXY(&prim->x3, MFC2(14));
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&prim->x3,2,MFC2(14));
+#endif
 					depth = MFC2(24);
 					CtrGpu_WriteColorCode(&prim->r0, scratch->color);
 					ot = (u32 *)(void *)((char *)otBase + ((depth >> 18) << 2));

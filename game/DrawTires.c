@@ -20,6 +20,20 @@ struct DrawTiresSolidProjectedWheel
 	int jumpIndex;
 };
 
+#ifdef CTR_NATIVE
+/* Explicit corner permutations preserve source identity even when several
+ * corners project to the same pixel. */
+static void DrawTires_BindCorners(POLY_FT4 *p,const struct DrawTiresScratch *scratch,int order)
+{
+    static const u8 corners[8][4]={{3,1,2,0},{2,0,3,1},{3,1,2,0},{2,0,3,1},
+        {1,3,0,2},{0,2,1,3},{1,3,0,2},{0,2,1,3}};
+    if((unsigned)order>=8) return;
+    void *fields[4]={&p->x0,&p->x1,&p->x2,&p->x3};
+    for(unsigned k=0;k<4;k++) NativeVisual_CopyProjection(fields[k],&scratch->projectedSxy[corners[order][k]]);
+    NativeVisual_EffectTopology((unsigned)order);
+}
+#endif
+
 static int DrawTiresSolid_CountLeadingSignBits(int value)
 {
 	u32 bits = value;
@@ -531,6 +545,9 @@ static int DrawTiresSolid_EmitProjectedWheel(struct DrawTiresScratch *scratch, s
 	}
 
 	DrawTiresSolid_WritePrimitiveCorners(p, sxy);
+#ifdef CTR_NATIVE
+	DrawTires_BindCorners(p,scratch,selected->jumpIndex);
+#endif
 	DrawTiresSolid_LinkPrimitive(scratch, p, selectedOTSlot);
 	primMem->cursor = (char *)primMem->cursor + sizeof(POLY_FT4);
 	(*primCount)++;
@@ -555,12 +572,24 @@ static int DrawTiresSolid_ProjectWheelQuads(struct DrawTiresScratch *scratch, st
 
 		gte_rtpt_b();
 		scratch->projectedSxy[0] = MFC2(12);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[0],0,scratch->projectedSxy[0]);
+#endif
 		scratch->projectedSxy[1] = MFC2(13);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[1],1,scratch->projectedSxy[1]);
+#endif
 		scratch->projectedSxy[2] = MFC2(14);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[2],2,scratch->projectedSxy[2]);
+#endif
 
 		DrawTiresSolid_LoadCorner(scratch, 0, wheelIndex, 1, 1);
 		gte_rtps_b();
 		scratch->projectedSxy[3] = MFC2(14);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[3],2,scratch->projectedSxy[3]);
+#endif
 
 		struct DrawTiresSolidProjectedWheel projectedWheel = DrawTiresSolid_SelectProjectedWheel(scratch, wheelIndex);
 
@@ -654,6 +683,7 @@ void DrawTires_Solid(struct Thread *thread, struct PrimMem *primMem, u8 numPlyr)
 		{
 #ifdef CTR_NATIVE
 			NativeVisual_Push(5,inst,(unsigned)playerIndex,1);
+            NativeVisual_EffectScope((unsigned)playerIndex,0.25f,0,inst);
 #endif
 			int ready=DrawTiresSolid_StagePlayer(&scratch, driver, inst, playerIndex, primMem, &primCount);
 #ifdef CTR_NATIVE
@@ -1119,6 +1149,9 @@ static void DrawTiresReflection_EmitProjectedWheel(struct DrawTiresScratch *scra
 	}
 
 	DrawTiresReflection_WritePrimitiveCorners(p, sxy);
+#ifdef CTR_NATIVE
+	DrawTires_BindCorners(p,scratch,selected->jumpIndex);
+#endif
 	DrawTiresReflection_LinkPrimitive(scratch, p, selectedOTSlot);
 	primMem->cursor = (char *)primMem->cursor + sizeof(POLY_FT4);
 	(*primCount)++;
@@ -1141,12 +1174,24 @@ static int DrawTiresReflection_ProjectWheelQuads(struct DrawTiresScratch *scratc
 
 		gte_rtpt_b();
 		scratch->projectedSxy[1] = MFC2(12);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[1],0,scratch->projectedSxy[1]);
+#endif
 		scratch->projectedSxy[0] = MFC2(13);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[0],1,scratch->projectedSxy[0]);
+#endif
 		scratch->projectedSxy[3] = MFC2(14);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[3],2,scratch->projectedSxy[3]);
+#endif
 
 		DrawTiresReflection_LoadCorner(scratch, 0, wheelIndex, 1, 1);
 		gte_rtps_b();
 		scratch->projectedSxy[2] = MFC2(14);
+#ifdef CTR_NATIVE
+		NativeVisual_GteStore(&scratch->projectedSxy[2],2,scratch->projectedSxy[2]);
+#endif
 
 		struct DrawTiresReflectionProjectedWheel projectedWheel = DrawTiresReflection_SelectProjectedWheel(scratch, wheelIndex);
 		DrawTiresReflection_EmitProjectedWheel(scratch, &projectedWheel, primMem, primCount, wheelIndex);
@@ -1231,6 +1276,7 @@ void DrawTires_Reflection(struct Thread *thread, struct PrimMem *primMem, u8 num
 		{
 #ifdef CTR_NATIVE
 			NativeVisual_Push(6,inst,(unsigned)playerIndex,1);
+            NativeVisual_EffectScope((unsigned)playerIndex,0.25f,0,inst);
 #endif
 			int ready=DrawTiresReflection_StagePlayer(&scratch, driver, inst, playerIndex, primMem, &primCount);
 #ifdef CTR_NATIVE

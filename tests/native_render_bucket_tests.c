@@ -16,6 +16,7 @@ static struct
 #include "../game/MATH/TRIG_AngleSinCos.c"
 #include "../game/RenderBucket/RenderBucket_QueueExecute.c"
 #include "../game/DrawTires.c"
+#include "../game/RenderWeather/RenderWeather.c"
 #include "../game/CTR/CTR_CycleTex.c"
 #define CHECK(c)                                                 \
 	do                                                           \
@@ -130,8 +131,25 @@ static int WorkAndTextureCycles(void)
 	free(storage);
 	return 0;
 }
+static int WeatherCapture(void)
+{
+    static u8 scratch[1024];static u32 primitives[4096],ot[1024];
+    gCTRNativeScratchpadBase=scratch;
+    struct PushBuffer camera={0};camera.rect.w=192;camera.rect.h=128;camera.distanceToScreen_PREV=128;camera.ptrOT=ot;
+    for(unsigned i=0;i<3;i++) camera.matrix_ViewProj.m[i][i]=4096;
+    struct RainBuffer rain={.numParticles_curr=32,.offsetOT=100,.colorRGBA_top=0x808080,.colorRGBA_bottom=0x404040};
+    CTR_WriteU32LE((u8 *)&rain+16,0xfff00000u);
+    struct PrimMem memory={.cursor=primitives};
+    NativeGpuLinks_Reset();CHECK(NativeGpuLinks_RegisterRange(primitives,sizeof(primitives),NULL));CHECK(NativeGpuLinks_RegisterRange(ot,sizeof(ot),NULL));
+    NativeVisual_BeginCapture(1,999);RenderWeather(&camera,&memory,&rain,1,1);NativeVisual_EndCapture();
+    CHECK(!NativeVisual_GetStats().overflow);
+    struct NativeSceneEffect effect;unsigned count=0;
+    while(NativeVisual_StagedEffect(count,&effect)) {CHECK(effect.kind==8 && effect.count==2 && effect.bucket==100);count++;}
+    CHECK(count>0);NativeVisual_Reset();return 0;
+}
 int main(void)
 {
+    CHECK(WeatherCapture()==0);
 	if (PrimitivePackets() || WorkAndTextureCycles())
 		return 1;
 	puts("Production RenderBucket/tire packets, full-width OT ranges, 256 cached vertices and texture cycles OK");

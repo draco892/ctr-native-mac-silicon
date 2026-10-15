@@ -189,3 +189,34 @@ enum NativeAssetResult NativeSceneGeometry_Subdivide(const struct NativeSceneCam
     if(status==NATIVE_ASSET_OK) *count=emitted;
     return status;
 }
+
+/* Clip a line in eye space before division, including its endpoint colours.
+ * Lines remain GPU lines rather than camera-dependent thin world triangles. */
+enum NativeAssetResult NativeSceneGeometry_ClipLine(const struct NativeSceneCamera *c,
+    const struct NativeModelTriangle *m,const struct NativeSceneClipVertex input[3],s16 bias,
+    struct NativeDrawTriangle *out,size_t *count)
+{
+    if(count) *count=0;
+    if(out) memset(out,0,sizeof(*out));
+    if(!c || !m || !input || !out || !count || !NativeSceneCamera_IsValid(c)) return NATIVE_ASSET_INVALID_ARGUMENT;
+    struct NativeSceneClipVertex v[2]={input[0],input[1]};
+    for(unsigned k=0;k<2;k++) for(unsigned axis=0;axis<3;axis++)
+        if(v[k].view[axis]<-(1<<24) || v[k].view[axis]>(1<<24) || v[k].rgb[axis]<0 || v[k].rgb[axis]>255*65536) return NATIVE_ASSET_INVALID_DATA;
+    for(unsigned plane=0;plane<6;plane++) {
+        s64 a=SceneGeometry_Distance(c,&v[0],plane),b=SceneGeometry_Distance(c,&v[1],plane);
+        if(a<0 && b<0) return NATIVE_ASSET_OK;
+        if(a<0) v[0]=SceneGeometry_Intersection(c,&v[0],&v[1],a,b,plane);
+        else if(b<0) v[1]=SceneGeometry_Intersection(c,&v[0],&v[1],a,b,plane);
+    }
+    out->source=*m;out->orderingBias=bias;out->line=out->hasVisualXY=1;
+    for(unsigned k=0;k<2;k++) {
+        out->depth[k]=(u16)v[k].view[2];out->source.colors[k]=0;
+        for(unsigned axis=0;axis<2;axis++) {
+            float p=c->transform.offset[axis]/65536.0f+(float)v[k].view[axis]*c->transform.h/v[k].view[2];
+            float limit=(float)(axis ? c->height:c->width);if(p<0) p=0;if(p>limit) p=limit;
+            out->visualXY[k][axis]=p;out->screen[k][axis]=(s16)p;
+        }
+        for(unsigned channel=0;channel<3;channel++) out->source.colors[k]|=(u32)((v[k].rgb[channel]+32768)/65536)<<(8*channel);
+    }
+    out->depth[2]=out->depth[1];*count=1;return NATIVE_ASSET_OK;
+}

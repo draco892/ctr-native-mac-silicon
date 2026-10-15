@@ -18,6 +18,9 @@ enum NativeAssetResult NativeSceneGeometry_Subdivide(const struct NativeSceneCam
     const struct NativeModelTriangle *material,const struct NativeSceneClipVertex vertices[3],s16 orderingBias,
     u32 depth,NativeSceneGeometrySink sink,void *user,size_t *count);
 int NativeSceneGeometry_NeedsClip(const struct NativeSceneCamera *camera,const struct NativeSceneClipVertex vertices[3]);
+enum NativeAssetResult NativeSceneGeometry_ClipLine(const struct NativeSceneCamera *,
+    const struct NativeModelTriangle *,const struct NativeSceneClipVertex input[3],s16,
+    struct NativeDrawTriangle *,size_t *);
 enum NativeAssetResult NativeSceneGeometry_Clip(const struct NativeSceneCamera *camera,
     const struct NativeModelTriangle *material,const struct NativeSceneClipVertex vertices[3],s16 orderingBias,
     struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES],size_t *count);

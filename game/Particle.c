@@ -622,6 +622,7 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 			CTR_PSX_OBSERVE_VALUE(cameraID);
 #ifdef CTR_NATIVE
 			NativeVisual_Push(2,particle,(unsigned)cameraID,1);
+            NativeVisual_EffectScope((unsigned)cameraID,0.25f,0,NULL);
 #endif
 			if ((s8)particle->driverID != -1 && (s8)particle->driverID != cameraID)
 				goto nextParticle;
@@ -692,6 +693,10 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 				goto nextParticle;
 			if (CTR_MipsSll(particle->renderDepthLimit, 2) < r13r21)
 				goto nextParticle;
+#ifdef CTR_NATIVE
+            NativeVisual_EffectScope((unsigned)cameraID,0.25f,
+                !(flagsAxis&(PARTICLE_AXIS_FLAG_ROT_X|PARTICLE_AXIS_FLAG_ROT_Y)) && !(flagsSetColor&PARTICLE_SET_COLOR_FLAG_SPECIAL_LINE) ? NATIVE_EFFECT_BILLBOARD:0,NULL);
+#endif
 			color = Particle_SetColors(flagsAxis, flagsSetColor, particle);
 			if (flagsSetColor & PARTICLE_SET_COLOR_FLAG_SPECIAL_LINE)
 			{
@@ -750,7 +755,13 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 				packet->drawMode = PARTICLE_GPU_DRAWMODE_BASE | (flagsSetColor & PARTICLE_SET_COLOR_FLAG_DRAW_MODE_MASK);
 				packet->pad = 0;
 				CTR_PSX_STORE_COP2_WORD(&packet->line.xy0, 12);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&packet->line.xy0,0,MFC2(12));
+#endif
 				CTR_PSX_STORE_COP2_WORD(&packet->line.xy1, 13);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(&packet->line.xy1,1,MFC2(13));
+#endif
 				CTR_PSX_STORE_COP2_WORD(&scratch->depth, 17);
 				goto linkPrimitive;
 			}
@@ -1127,6 +1138,9 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 				cornerZero:
 					r22r23 = (((u32)(halfWidth) & 0xffff) | ((u32)(-halfHeight) << 16));
 					CTR_PSX_STORE_COP2_WORD(prim + 2, 14);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(prim + 2,2,MFC2(14));
+#endif
 					{
 						u32 *depthAddress;
 						// NOTE(aalhendi): Keep this address calculation beside the
@@ -1149,14 +1163,23 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 						__asm__ volatile("addiu %0,%1,16" : "=r"(caseOneAddress) : "r"(prim));
 #endif
 						CTR_PSX_STORE_COP2_WORD(caseOneAddress, 14);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(caseOneAddress,2,MFC2(14));
+#endif
 					}
 					goto cornerEnd;
 				cornerTwo:
 					r22r23 = (((u32)(halfWidth) & 0xffff) | ((u32)(halfHeight) << 16));
 					CTR_PSX_STORE_COP2_WORD(caseTwoAddress, 14);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(caseTwoAddress,2,MFC2(14));
+#endif
 					goto cornerEnd;
 				cornerThree:
 					CTR_PSX_STORE_COP2_WORD(payload, 14);
+#ifdef CTR_NATIVE
+                    NativeVisual_GteStore(payload,2,MFC2(14));
+#endif
 					goto cornerEnd;
 				cornerEnd:;
 				}
@@ -1189,7 +1212,7 @@ void Particle_RenderList(struct PushBuffer *pb, void *particleList)
 				payload += 7;
 				*prim = *ot | PARTICLE_GPU_TAG_LENGTH_SPECIAL_LINE;
 #ifdef CTR_NATIVE
-				NativeVisual_RecordPacket(prim,7);
+				NativeVisual_RecordPacket(prim,6);
 #endif
 				*ot = link;
 				prim += 7;

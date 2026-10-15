@@ -122,6 +122,79 @@ int NativeSceneSnapshot_Material(struct NativeSceneSnapshot *s,uint64_t object,u
     memcpy(updated.vertices,destination->material.vertices,sizeof(updated.vertices));updated.command=destination->material.command;
     destination->material=updated;return 1;
 }
+static int SnapshotInverse(const float matrix[3][3],const float input[3],float out[3])
+{
+    float det=matrix[0][0]*(matrix[1][1]*matrix[2][2]-matrix[1][2]*matrix[2][1])-
+        matrix[0][1]*(matrix[1][0]*matrix[2][2]-matrix[1][2]*matrix[2][0])+
+        matrix[0][2]*(matrix[1][0]*matrix[2][1]-matrix[1][1]*matrix[2][0]);
+    if(!isfinite(det) || fabsf(det)<0.000001f) return 0;
+    for(unsigned row=0;row<3;row++) {
+        out[row]=0;
+        for(unsigned col=0;col<3;col++) {
+            unsigned a=(col+1)%3,b=(col+2)%3,c=(row+1)%3,d=(row+2)%3;
+            out[row]+=(matrix[a][c]*matrix[b][d]-matrix[a][d]*matrix[b][c])*input[col]/det;
+        }
+        if(!isfinite(out[row]) || fabsf(out[row])>(1<<24)) return 0;
+    }
+    return 1;
+}
+int NativeSceneSnapshot_Effect(struct NativeSceneSnapshot *s,const struct NativeSceneEffect *effect)
+{
+    if(!s || !s->capturing || !effect || effect->viewport>=4 || effect->count<2 || effect->count>4 || effect->bucket<0 || effect->bucket>1023) return 0;
+    struct SnapshotFrame *f=&s->frames[s->current];
+    if(!f->valid || !(f->cameraMask&(1u<<effect->viewport))) return 0;
+    const struct NativeSceneCameraSnapshot *camera=&f->cameras[effect->viewport];
+    const struct NativeSceneObjectSnapshot *anchor=effect->anchor ? SnapshotObject(f,effect->anchor):NULL;
+    if(effect->anchor && !anchor) return 0;
+    struct NativeSceneObjectSnapshot object={.id=effect->id,.modelIdentity=effect->flags^((uint64_t)effect->topology<<32),.supported=1,.viewportMask=1u<<effect->viewport,.renderMode=effect->flags,
+        .pose={.basis={{1,0,0},{0,1,0},{0,0,1}}}};
+    float world[4][3]={{0}},local[4][3]={{0}},centre[3]={0},maxDepth=0;
+    for(unsigned k=0;k<effect->count;k++) {
+        for(unsigned axis=0;axis<3;axis++) if(!isfinite(effect->eye[k][axis]) || fabsf(effect->eye[k][axis])>(1<<24)) return 0;
+        if(!SnapshotInverse(camera->view.basis,effect->eye[k],world[k])) return 0;
+        for(unsigned axis=0;axis<3;axis++) {
+            if(!(effect->flags&NATIVE_EFFECT_DIRECTIONAL)) world[k][axis]+=camera->view.position[axis];
+            centre[axis]+=effect->eye[k][axis]/effect->count;
+        }
+        if(effect->eye[k][2]>maxDepth) maxDepth=effect->eye[k][2];
+    }
+    if(anchor) {
+        object.pose=anchor->pose;object.modelIdentity=anchor->modelIdentity;object.animation=anchor->animation;object.header=anchor->header;
+        for(unsigned k=0;k<effect->count;k++) {
+            float relative[3];for(unsigned axis=0;axis<3;axis++) relative[axis]=world[k][axis]-object.pose.position[axis];
+            if(!SnapshotInverse(object.pose.basis,relative,local[k])) return 0;
+        }
+    } else if(effect->flags&NATIVE_EFFECT_DIRECTIONAL) memcpy(local,world,sizeof(local));
+    else {
+        if(!SnapshotInverse(camera->view.basis,centre,object.pose.position)) return 0;
+        for(unsigned axis=0;axis<3;axis++) object.pose.position[axis]+=camera->view.position[axis];
+        for(unsigned k=0;k<effect->count;k++) for(unsigned axis=0;axis<3;axis++)
+            local[k][axis]=effect->flags&NATIVE_EFFECT_BILLBOARD ? effect->eye[k][axis]-centre[axis] : world[k][axis]-object.pose.position[axis];
+    }
+    /* Validate before mutating the frame, so unsupported effects can retain
+     * their complete canonical primitive without publishing half a quad. */
+    if(!SnapshotPoseValid(&object.pose)) return 0;
+    for(unsigned k=0;k<effect->count;k++) for(unsigned axis=0;axis<3;axis++)
+        if(!isfinite(local[k][axis]) || fabsf(local[k][axis])>(1<<24)) return 0;
+    if(!NativeSceneSnapshot_Object(s,&object)) return 0;
+    const unsigned corners[2][3]={{0,1,2},{1,3,2}};
+    unsigned triangles=effect->count==4 ? 2:1;
+    for(unsigned part=0;part<triangles;part++) {
+        struct NativeSceneSourceTriangle source={.object=object.id,.primitive=part+1,.effect=1,.line=effect->count==2,
+            .fixedBucket=effect->flags&NATIVE_EFFECT_FIXED_BUCKET ? (unsigned)effect->bucket+1:0,
+            .material={.textured=(effect->code&4)!=0 && effect->count!=2,
+                .textureBlend=effect->code&2 ? NATIVE_TEXTURE_BLEND_SEMI:NATIVE_TEXTURE_BLEND_OPAQUE,
+                .texture={.tpage=effect->page,.clut=effect->clut}}};
+        int bias=effect->bucket-((int)fmaxf(0,maxDepth)>>6);if(bias<-32768) bias=-32768;if(bias>32767) bias=32767;source.orderingBias=anchor ? anchor->orderingBias:(s16)bias;
+        for(unsigned k=0;k<3;k++) {
+            unsigned corner=source.line ? (k?1:0):corners[part][k];
+            memcpy(source.local[k],local[corner],sizeof(source.local[k]));source.material.vertices[k]=effect->topology*4+corner;
+            source.material.colors[k]=(effect->code&5)==5 ? 0x808080:effect->colors[corner];source.material.texture.u[k]=effect->u[corner];source.material.texture.v[k]=effect->v[corner];
+        }
+        if(!NativeSceneSnapshot_Triangle(s,&source)) return 0;
+    }
+    return 1;
+}
 int NativeSceneSnapshot_Seal(struct NativeSceneSnapshot *s)
 {
     if(!s || !s->capturing) return 0;
@@ -200,7 +273,7 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
     for(unsigned i=0;i<f->objectCount;i++) {
         const struct NativeSceneObjectSnapshot *o=&f->objects[i];poses[i]=o->pose;
         const struct NativeSceneObjectSnapshot *p=s->history && old->valid ? SnapshotObject(old,o->id):NULL;
-        if(p && p->supported==o->supported && p->modelIdentity==o->modelIdentity && p->animation==o->animation && p->header==o->header) {
+        if(p && p->supported==o->supported && p->renderMode==o->renderMode && p->viewportMask==o->viewportMask && p->modelIdentity==o->modelIdentity && p->animation==o->animation && p->header==o->header) {
             int continuous=1;for(unsigned axis=0;axis<3;axis++) if(fabsf(p->pose.position[axis]-o->pose.position[axis])>1024) continuous=0;
             if(continuous) {poses[i]=SnapshotBlendPose(&p->pose,&o->pose,t);previousObjects[i]=p;stats->matched++;}
         }
@@ -212,10 +285,11 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
         struct NativeScenePose world=poses[i];
         for(unsigned row=0;row<3;row++) {
             poses[i].position[row]=0;
-            for(unsigned axis=0;axis<3;axis++) poses[i].position[row]+=camera.view.basis[row][axis]*(world.position[axis]-camera.view.position[axis]);
+            for(unsigned axis=0;axis<3;axis++) poses[i].position[row]+=camera.view.basis[row][axis]*(world.position[axis]-((f->objects[i].renderMode&NATIVE_EFFECT_DIRECTIONAL)?0:camera.view.position[axis]));
             for(unsigned col=0;col<3;col++) {
                 poses[i].basis[row][col]=0;
                 for(unsigned axis=0;axis<3;axis++) poses[i].basis[row][col]+=camera.view.basis[row][axis]*world.basis[axis][col];
+                if(f->objects[i].renderMode&NATIVE_EFFECT_BILLBOARD) poses[i].basis[row][col]=row==col ? 1:0;
             }
         }
     }
@@ -229,12 +303,20 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
         const struct NativeSceneSourceTriangle *source=&f->sources[i];
         const struct NativeSceneObjectSnapshot *object=SnapshotObject(f,source->object);
         const struct NativeSceneSourceTriangle *previousSource=NULL;
-        if(!object || !object->supported) continue;
+        if(!object || !object->supported || (object->viewportMask && !(object->viewportMask&(1u<<view)))) continue;
         unsigned objectIndex=(unsigned)(object-f->objects);
         struct NativeScenePose pose=poses[objectIndex];
         if(previousObjects[objectIndex]) {
             previousSource=SnapshotSource(old,source->object,source->primitive);
             if(previousSource && memcmp(previousSource->material.vertices,source->material.vertices,sizeof(source->material.vertices))!=0) previousSource=NULL;
+        }
+        struct NativeModelTriangle material=source->material;
+        if(source->effect && previousSource) for(unsigned k=0;k<3;k++) {
+            material.colors[k]=0;
+            for(unsigned channel=0;channel<3;channel++) {
+                unsigned a=(previousSource->material.colors[k]>>(channel*8))&255,b=(source->material.colors[k]>>(channel*8))&255;
+                material.colors[k]|=(u32)lroundf(SnapshotLerp((float)a,(float)b,t))<<(channel*8);
+            }
         }
         struct NativeSceneClipVertex vertices[3];
         for(unsigned k=0;k<3;k++) {
@@ -244,7 +326,7 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
                 if(!isfinite(eye) || fabsf(eye)>(1<<24)) return NATIVE_ASSET_INVALID_DATA;
                 vertices[k].view[row]=(s32)floorf(eye);
             }
-            NativeSceneGeometry_Attributes(&source->material,k,&vertices[k]);
+            NativeSceneGeometry_Attributes(&material,k,&vertices[k]);
         }
         unsigned outside[6]={0};
         s64 ox=clipCamera.transform.offset[0]/65536,oy=clipCamera.transform.offset[1]/65536;
@@ -264,7 +346,8 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
         }
         struct NativeDrawTriangle output[NATIVE_SCENE_CLIP_MAX_TRIANGLES];size_t count;
         if(NativeSceneGeometry_NeedsClip(&clipCamera,vertices)) stats->clipped++;
-        enum NativeAssetResult status=NativeSceneGeometry_Clip(&clipCamera,&source->material,vertices,source->orderingBias,output,&count);
+        enum NativeAssetResult status=source->line ? NativeSceneGeometry_ClipLine(&clipCamera,&material,vertices,source->orderingBias,output,&count) :
+            NativeSceneGeometry_Clip(&clipCamera,&material,vertices,source->orderingBias,output,&count);
         if(status!=NATIVE_ASSET_OK) return status;
         if(!count) stats->culled++;
         for(size_t k=0;k<count;k++) {
@@ -272,6 +355,7 @@ enum NativeAssetResult NativeSceneSnapshot_Render(const struct NativeSceneSnapsh
             if((cull>0 && triangle->signedArea<=0) || (cull<0 && triangle->signedArea>=0)) {stats->culled++;continue;}
             unsigned depth=0;for(unsigned v=0;v<3;v++) if(triangle->depth[v]>depth) depth=triangle->depth[v];
             int bucket=(int)(depth>>6)+triangle->orderingBias;if(bucket<1) bucket=1;if(bucket>1022) bucket=1022;
+            if(source->fixedBucket) bucket=(int)source->fixedBucket-1;
             if(sink && (status=sink(user,(unsigned)bucket,triangle))!=NATIVE_ASSET_OK) return status;
             stats->triangles++;
         }
